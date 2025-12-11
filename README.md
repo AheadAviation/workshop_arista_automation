@@ -12,18 +12,18 @@ Everything runs in Docker containers - no special setup required.
 
 ## 📚 Documentation
 
-**📖 [Full Workshop Wiki](../../wiki)** - Detailed walkthroughs and reference
+**📖 [Full Workshop Wiki](https://github.com/AheadAviation/workshop_arista_automation/wiki)** - Detailed walkthroughs and reference
 
 | Page | Description |
 |------|-------------|
-| [Quick Start](../../wiki/Quick-Start) | Get the lab running in 30 minutes |
-| [Architecture](../../wiki/Architecture) | System design and data flow |
-| [Code Walkthrough: NetBox](../../wiki/Code-Walkthrough:-NetBox-Import) | How Python scripts populate NetBox |
-| [Code Walkthrough: Config Generation](../../wiki/Code-Walkthrough:-Config-Generation) | Ansible roles and Jinja2 templates |
-| [Code Walkthrough: ContainerLab](../../wiki/Code-Walkthrough:-ContainerLab) | Dynamic topology generation |
-| [Template Reference](../../wiki/Template-Reference) | All Jinja2 templates explained |
-| [Troubleshooting](../../wiki/Troubleshooting) | Common issues and solutions |
-| [Day 2 Operations](../../wiki/Day-2-Operations) | Making changes and re-pushing configs |
+| [Quick Start](https://github.com/AheadAviation/workshop_arista_automation/wiki/Quick-Start) | Get the lab running in 30 minutes |
+| [Architecture](https://github.com/AheadAviation/workshop_arista_automation/wiki/Architecture) | System design and data flow |
+| [Code Walkthrough: NetBox](https://github.com/AheadAviation/workshop_arista_automation/wiki/Code-Walkthrough-NetBox-Import) | How Python scripts populate NetBox |
+| [Code Walkthrough: Config Generation](https://github.com/AheadAviation/workshop_arista_automation/wiki/Code-Walkthrough-Config-Generation) | Ansible roles and Jinja2 templates |
+| [Code Walkthrough: ContainerLab](https://github.com/AheadAviation/workshop_arista_automation/wiki/Code-Walkthrough-ContainerLab) | Dynamic topology generation |
+| [Template Reference](https://github.com/AheadAviation/workshop_arista_automation/wiki/Template-Reference) | All Jinja2 templates explained |
+| [Troubleshooting](https://github.com/AheadAviation/workshop_arista_automation/wiki/Troubleshooting) | Common issues and solutions |
+| [Day 2 Operations](https://github.com/AheadAviation/workshop_arista_automation/wiki/Day-2-Operations) | Making changes and re-pushing configs |
 
 ---
 
@@ -206,7 +206,7 @@ docker compose down -v
 
 ## 📚 Resources
 
-- [Full Workshop Wiki](../../wiki)
+- [Full Workshop Wiki](https://github.com/AheadAviation/workshop_arista_automation/wiki)
 - [NetBox Documentation](https://docs.netbox.dev/)
 - [Arista EOS Documentation](https://www.arista.com/en/um-eos)
 - [ContainerLab Documentation](https://containerlab.dev/)
