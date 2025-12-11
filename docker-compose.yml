@@ -18,7 +18,9 @@ services:
   # NetBox Application
   # ==========================================================================
   netbox:
-    image: netboxcommunity/netbox:v4.1
+    build:
+      context: ./docker/netbox
+      dockerfile: Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,6 +62,8 @@ services:
       - netbox-media:/opt/netbox/netbox/media
       - netbox-reports:/opt/netbox/netbox/reports
       - netbox-scripts:/opt/netbox/netbox/scripts
+      # Plugin configuration
+      - ./docker/netbox/configuration/plugins.py:/etc/netbox/config/plugins.py:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/"]
       interval: 30s
@@ -72,7 +76,9 @@ services:
   # NetBox Background Worker
   # ==========================================================================
   netbox-worker:
-    image: netboxcommunity/netbox:v4.1
+    build:
+      context: ./docker/netbox
+      dockerfile: Dockerfile
     depends_on:
       netbox:
         condition: service_healthy

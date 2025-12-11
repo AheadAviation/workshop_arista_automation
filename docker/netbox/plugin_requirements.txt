@@ -1,0 +1,6 @@
+# NetBox Plugins
+# Add plugin packages here - they will be installed when the container starts
+# Version must match NetBox version - v4.1.x for NetBox 4.1
+
+netbox-topology-views==4.1.0
+
