@@ -187,7 +187,53 @@ This script reads device data from NetBox and creates the topology file:
 docker compose run --rm ansible python scripts/generate_clab_topology_docker.py
 ```
 
-### 4.2 Deploy the Switches
+### 4.2 Generate Device Configurations
+
+Before deploying switches, generate the configurations from NetBox data:
+
+```bash
+docker compose run --rm ansible ansible-playbook playbooks/generate_configs.yml
+```
+
+### 4.3 Review Generated Configurations
+
+Take a moment to inspect the generated configs before deployment:
+
+**Windows PowerShell:**
+```powershell
+# List all generated configs
+dir output\configs\
+
+# View a spine config
+type output\configs\spine-01.cfg
+
+# View a leaf config (notice MLAG and VXLAN sections)
+type output\configs\leaf-01.cfg
+```
+
+**Linux/Mac:**
+```bash
+# List all generated configs
+ls -la output/configs/
+
+# View a spine config
+cat output/configs/spine-01.cfg
+
+# View a leaf config
+cat output/configs/leaf-01.cfg
+```
+
+You'll see complete Arista EOS configurations with:
+- Hostname and management settings
+- Loopback interfaces (Router ID, VTEP IP)
+- Fabric link IP addresses
+- BGP underlay configuration
+- EVPN/VXLAN overlay settings (for leaves)
+- MLAG configuration (for leaf pairs)
+
+✅ **Checkpoint:** Configs generated in `output/configs/` - review them before proceeding.
+
+### 4.4 Deploy the Switches
 
 ```bash
 docker compose run --rm clab containerlab deploy --topo /clab/topology/topology-docker.clab.yml
@@ -195,7 +241,7 @@ docker compose run --rm clab containerlab deploy --topo /clab/topology/topology-
 
 This will take 2-3 minutes as each cEOS container boots.
 
-### 4.3 Verify Containers are Running
+### 4.5 Verify Containers are Running
 
 ```bash
 docker ps --filter "name=clab-netbox" --format "table {{.Names}}\t{{.Status}}"
@@ -216,39 +262,11 @@ clab-netbox-arista-lab-leaf-04    Up 2 minutes
 
 ---
 
-## Step 5: Generate and Push Configurations (10 minutes)
+## Step 5: Push Configurations to Devices (5 minutes)
 
-Now the key part - we'll pull data from NetBox and generate device configurations.
+Now we'll push the configurations we generated in Step 4 to the running cEOS switches.
 
-### 5.1 Generate Configurations from NetBox
-
-This Ansible playbook queries NetBox and renders Jinja2 templates:
-
-```bash
-docker compose run --rm ansible ansible-playbook playbooks/generate_configs.yml
-```
-
-### 5.2 Review Generated Configs
-
-**Windows PowerShell:**
-```powershell
-type output\configs\spine-01.cfg
-```
-
-**Linux/Mac:**
-```bash
-cat output/configs/spine-01.cfg
-```
-
-You'll see a complete Arista EOS config with:
-- Hostname and management settings
-- Loopback interfaces
-- Fabric link IP addresses  
-- BGP configuration
-- EVPN/VXLAN settings (for leaves)
-- MLAG configuration (for leaves)
-
-### 5.3 Push Configs to the Switches
+### 5.1 Push Configs to the Switches
 
 **Windows PowerShell:**
 ```powershell
