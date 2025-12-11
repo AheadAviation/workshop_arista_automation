@@ -1,0 +1,25 @@
+# =============================================================================
+# Hadolint Configuration - Dockerfile Linting
+# =============================================================================
+# Some rules are relaxed for lab/demo environments
+
+ignored:
+  # Don't require pinned versions in apt-get (lab environment)
+  - DL3008
+  # Don't require pinned versions in pip (lab environment)  
+  - DL3013
+  # Allow using 'cd' in RUN
+  - DL3003
+  # Allow using cache mounts
+  - DL3042
+
+# Treat these as warnings, not errors
+warning:
+  - DL3009  # Delete apt-get lists
+  - DL3015  # Avoid additional packages
+  - DL3059  # Multiple consecutive RUN
+
+trustedRegistries:
+  - docker.io
+  - ghcr.io
+
