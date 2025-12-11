@@ -15,18 +15,18 @@ Usage:
     python scripts/bootstrap_netbox.py [--dry-run]
 """
 
+import argparse
 import os
 import sys
-import argparse
 from pathlib import Path
 from typing import Any
 
 try:
     import pynetbox
-    from rich.console import Console
-    from rich.table import Table
-    from rich.panel import Panel
     from dotenv import load_dotenv
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
 except ImportError:
     print("Required packages not installed. Run: pip install -r requirements.txt")
     sys.exit(1)

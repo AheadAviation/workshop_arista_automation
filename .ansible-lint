@@ -53,8 +53,6 @@ parseable: true
 # Show progress
 quiet: false
 
-# Colored output
-colored: true
 
 # Loop variable prefix
 loop_var_prefix: ''
