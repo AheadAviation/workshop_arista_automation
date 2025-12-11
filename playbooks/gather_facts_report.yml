@@ -17,14 +17,14 @@
   hosts: network
   gather_facts: false
   connection: network_cli
-  
+
   vars:
     ansible_network_os: arista.eos.eos
     ansible_user: admin
     ansible_password: admin
     ansible_become: true
     ansible_become_method: enable
-  
+
   vars_files:
     - ../group_vars/all.yml
 
@@ -45,7 +45,7 @@
           - show ip route summary | json
           - show lldp neighbors | json
       register: system_info
-      ignore_errors: true
+      failed_when: false
 
     - name: Build device report
       ansible.builtin.set_fact:
@@ -57,7 +57,9 @@
           interfaces: "{{ eos_facts.ansible_facts.ansible_net_interfaces | dict2items | length }}"
           bgp:
             neighbors: "{{ system_info.stdout[1].vrfs.default.peers | default({}) | dict2items | length }}"
-            established: "{{ system_info.stdout[1].vrfs.default.peers | default({}) | dict2items | selectattr('value.peerState', 'equalto', 'Established') | list | length }}"
+            established: >-
+              {{ system_info.stdout[1].vrfs.default.peers | default({}) | dict2items |
+                 selectattr('value.peerState', 'equalto', 'Established') | list | length }}
           mlag:
             state: "{{ system_info.stdout[2].state | default('N/A') }}"
             peer_link: "{{ system_info.stdout[2].peerLink | default('N/A') }}"
@@ -88,7 +90,7 @@
   hosts: localhost
   gather_facts: false
   connection: local
-  
+
   vars_files:
     - ../group_vars/all.yml
 
@@ -97,7 +99,7 @@
       ansible.builtin.setup:
         gather_subset:
           - date_time
-      
+
     - name: Collect all device reports
       ansible.builtin.set_fact:
         all_reports: "{{ groups['network'] | map('extract', hostvars, 'device_report') | list }}"
@@ -118,7 +120,7 @@
         src: "{{ playbook_dir }}/../roles/arista_config/templates/fabric_report.html.j2"
         dest: "{{ playbook_dir }}/../output/reports/fabric_report.html"
         mode: '0644'
-      ignore_errors: true
+      failed_when: false
 
     - name: Display summary
       ansible.builtin.debug:
@@ -131,4 +133,3 @@
           ║  Total Devices: {{ all_reports | length }}
           ║  Report Time: {{ ansible_date_time.iso8601 }}
           ╚════════════════════════════════════════════════════════════════╝
-

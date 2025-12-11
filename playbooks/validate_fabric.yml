@@ -25,7 +25,7 @@
   hosts: network
   gather_facts: false
   connection: network_cli
-  
+
   vars:
     validation_results: []
     failed_tests: []
@@ -34,7 +34,7 @@
     ansible_password: admin
     ansible_become: true
     ansible_become_method: enable
-    
+
   vars_files:
     - ../group_vars/all.yml
 
@@ -134,7 +134,9 @@
 
         - name: Count established BGP sessions
           ansible.builtin.set_fact:
-            established_count: "{{ bgp_neighbor_data.vrfs.default.peers | dict2items | selectattr('value.peerState', 'equalto', 'Established') | list | length }}"
+            established_count: >-
+              {{ bgp_neighbor_data.vrfs.default.peers | dict2items |
+                 selectattr('value.peerState', 'equalto', 'Established') | list | length }}
             total_peers: "{{ bgp_neighbor_data.vrfs.default.peers | dict2items | list | length }}"
 
         - name: Validate BGP underlay sessions
@@ -178,7 +180,7 @@
               - "'Estab' in evpn_summary.stdout[0] or evpn_summary.stdout[0] | length > 0"
             fail_msg: "No EVPN peers found"
             success_msg: "✓ EVPN overlay configured"
-          ignore_errors: true
+          failed_when: false
 
     # =========================================================================
     # Phase 5: MLAG Status (Leaf only)
@@ -215,7 +217,7 @@
               - mlag_state == 'active'
             fail_msg: "MLAG not active: state={{ mlag_state }}"
             success_msg: "✓ MLAG active - peer negotiation: {{ mlag_peer_state }}"
-          ignore_errors: true
+          failed_when: false
 
     # =========================================================================
     # Phase 6: VXLAN Status (Leaf only)
@@ -240,14 +242,14 @@
             commands:
               - show vxlan vtep
           register: vtep_info
-          ignore_errors: true
+          failed_when: false
 
         - name: Get VNI mappings
           arista.eos.eos_command:
             commands:
               - show vxlan vni
           register: vni_info
-          ignore_errors: true
+          failed_when: false
 
         - name: Display VNI mappings
           ansible.builtin.debug:
@@ -259,7 +261,7 @@
               - "'Vxlan1' in vxlan_intf.stdout[0]"
             fail_msg: "VXLAN interface not configured"
             success_msg: "✓ VXLAN interface configured"
-          ignore_errors: true
+          failed_when: false
 
     # =========================================================================
     # Phase 7: Routing Table Verification
@@ -325,7 +327,7 @@
 - name: Fabric Validation Summary
   hosts: localhost
   gather_facts: false
-  
+
   tasks:
     - name: Display validation complete message
       ansible.builtin.debug:
@@ -339,4 +341,3 @@
           ║  ⚠ = Warning (non-critical)                                   ║
           ║  ✗ = Test failed                                               ║
           ╚════════════════════════════════════════════════════════════════╝
-

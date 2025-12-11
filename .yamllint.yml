@@ -2,6 +2,8 @@
 # =============================================================================
 # YAML Lint Configuration
 # =============================================================================
+# Configuration file required by ansible-lint for yamllint integration
+# See: https://docs.ansible.com/projects/lint/rules/yaml/
 
 extends: default
 
@@ -22,11 +24,19 @@ rules:
     indent-sequences: true
     check-multi-line-strings: false
 
-  # Comments
+  # Comments - ansible-lint requires this to be false
   comments:
     require-starting-space: true
     ignore-shebangs: true
     min-spaces-from-content: 1
+
+  # Required by ansible-lint: must be false
+  comments-indentation: false
+
+  # Required by ansible-lint: octal-values settings
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
 
   # Document markers
   document-start:
@@ -81,4 +91,3 @@ ignore: |
   venv/
   .venv/
   node_modules/
-

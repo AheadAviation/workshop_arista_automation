@@ -150,8 +150,12 @@ services:
       - ./inventory:/ansible/inventory:ro
       - ./group_vars:/ansible/group_vars:ro
       - ./netbox_data:/ansible/netbox_data:ro
+      - ./filter_plugins:/ansible/filter_plugins:ro
       - ./clab:/ansible/clab:rw
       - ./output:/ansible/output:rw
+      - ./.ansible-lint:/ansible/.ansible-lint:ro
+      - ./.yamllint.yml:/ansible/.yamllint.yml:ro
+      - ./ansible.cfg:/ansible/ansible.cfg:ro
     working_dir: /ansible
     stdin_open: true
     tty: true

@@ -16,7 +16,7 @@
   hosts: localhost
   gather_facts: false
   connection: local
-  
+
   tasks:
     - name: Display pipeline info
       ansible.builtin.debug:
@@ -47,7 +47,7 @@
   hosts: localhost
   gather_facts: false
   connection: local
-  
+
   tasks:
     - name: Display completion message
       ansible.builtin.debug:
@@ -55,9 +55,9 @@
           ============================================
           Pipeline Execution Complete
           ============================================
-          
+
           Your lab is now deployed!
-          
+
           Device Access:
           - spine-01: ssh admin@172.20.20.11
           - spine-02: ssh admin@172.20.20.12
@@ -65,15 +65,14 @@
           - leaf-02:  ssh admin@172.20.20.22
           - leaf-03:  ssh admin@172.20.20.23
           - leaf-04:  ssh admin@172.20.20.24
-          
+
           Password: admin
-          
+
           NetBox UI: http://localhost:8000
-          
+
           To push changes after modifying NetBox:
             ansible-playbook playbooks/push_configs.yml
-          
+
           To destroy the lab:
             ansible-playbook playbooks/destroy_lab.yml
           ============================================
-

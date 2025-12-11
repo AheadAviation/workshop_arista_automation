@@ -8,6 +8,9 @@
 # - Post-deployment backup
 # - Archive of previous configs
 #
+# NOTE: Requires napalm and napalm-eos to be installed
+# This playbook is skipped in CI linting due to optional collection dependency
+#
 # Usage:
 #   # Dry-run (default - show diff only)
 #   ansible-playbook playbooks/push_configs_napalm.yml
@@ -23,14 +26,14 @@
   hosts: all
   gather_facts: false
   connection: local
-  
+
   vars:
     commit: "{{ napalm.commit_changes | default(false) }}"
     force_backup: false
     replace_config: "{{ napalm.replace_config | default(true) }}"
     get_diffs: "{{ napalm.get_diffs | default(true) }}"
     napalm_timeout: "{{ napalm.timeout | default(120) }}"
-    
+
   vars_files:
     - ../group_vars/all.yml
 
@@ -45,6 +48,7 @@
           Commit Mode: {{ 'LIVE COMMIT' if commit | bool else 'DRY-RUN (diff only)' }}
           Replace Config: {{ replace_config }}
           ============================================
+      delegate_to: localhost
       run_once: true
 
     - name: Ensure output directories exist
@@ -71,6 +75,8 @@
 
     - name: Push configuration using NAPALM
       block:
+        # Note: This task requires community.general collection with napalm support
+        # If napalm is not available, use the standard push_configs.yml playbook instead
         - name: NAPALM - Install configuration
           community.general.napalm_install_config:
             hostname: "{{ ansible_host }}"
@@ -116,6 +122,7 @@
             msg: "NAPALM config push failed for {{ inventory_hostname }}"
 
     - name: Backup running config after commit
+      when: (commit | bool and napalm_result.changed) or force_backup | bool
       block:
         - name: Get running config
           arista.eos.eos_command:
@@ -137,8 +144,6 @@
             save_when: always
           when: (commit | bool and napalm_result.changed)
 
-      when: (commit | bool and napalm_result.changed) or force_backup | bool
-
     - name: Summary
       ansible.builtin.debug:
         msg: |
@@ -149,4 +154,3 @@
           Committed: {{ commit | bool }}
           Config Saved: {{ ((commit | bool and napalm_result.changed) or force_backup | bool) }}
           ============================================
-

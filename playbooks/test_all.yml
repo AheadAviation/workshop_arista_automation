@@ -18,7 +18,7 @@
 - name: Test Suite - Pre-flight Check
   hosts: localhost
   gather_facts: true
-  
+
   tasks:
     - name: Display test suite header
       ansible.builtin.debug:
@@ -38,14 +38,14 @@
   gather_facts: false
   connection: network_cli
   tags: [quick, reachability]
-  
+
   vars:
     ansible_network_os: arista.eos.eos
     ansible_user: admin
     ansible_password: admin
     ansible_become: true
     ansible_become_method: enable
-  
+
   tasks:
     - name: Verify device is reachable
       arista.eos.eos_command:
@@ -65,14 +65,14 @@
   gather_facts: false
   connection: network_cli
   tags: [quick, bgp]
-  
+
   vars:
     ansible_network_os: arista.eos.eos
     ansible_user: admin
     ansible_password: admin
     ansible_become: true
     ansible_become_method: enable
-  
+
   tasks:
     - name: Get BGP summary
       arista.eos.eos_command:
@@ -100,14 +100,14 @@
   gather_facts: false
   connection: network_cli
   tags: [quick, mlag]
-  
+
   vars:
     ansible_network_os: arista.eos.eos
     ansible_user: admin
     ansible_password: admin
     ansible_become: true
     ansible_become_method: enable
-  
+
   tasks:
     - name: Get MLAG status
       arista.eos.eos_command:
@@ -121,7 +121,7 @@
           - mlag_status.stdout[0].state == 'active'
         fail_msg: "✗ MLAG: state={{ mlag_status.stdout[0].state }}"
         success_msg: "✓ MLAG: active"
-      ignore_errors: true
+      failed_when: false
 
 # =============================================================================
 # Test 4: Routing Table
@@ -131,14 +131,14 @@
   gather_facts: false
   connection: network_cli
   tags: [routing]
-  
+
   vars:
     ansible_network_os: arista.eos.eos
     ansible_user: admin
     ansible_password: admin
     ansible_become: true
     ansible_become_method: enable
-  
+
   tasks:
     - name: Get route count
       arista.eos.eos_command:
@@ -158,7 +158,7 @@
   gather_facts: false
   connection: network_cli
   tags: [connectivity]
-  
+
   vars:
     ansible_network_os: arista.eos.eos
     ansible_user: admin
@@ -166,9 +166,9 @@
     ansible_become: true
     ansible_become_method: enable
     test_destinations:
-      - "10.255.0.1"   # spine-01
-      - "10.255.0.2"   # spine-02
-  
+      - "10.255.0.1"
+      - "10.255.0.2"
+
   tasks:
     - name: Get source loopback
       arista.eos.eos_command:
@@ -202,25 +202,27 @@
   gather_facts: false
   connection: network_cli
   tags: [vxlan]
-  
+
   vars:
     ansible_network_os: arista.eos.eos
     ansible_user: admin
     ansible_password: admin
     ansible_become: true
     ansible_become_method: enable
-  
+
   tasks:
     - name: Check VXLAN interface
       arista.eos.eos_command:
         commands:
           - show interfaces Vxlan1 | json
       register: vxlan_intf
-      ignore_errors: true
+      failed_when: false
 
     - name: Report VXLAN status
       ansible.builtin.debug:
-        msg: "{{ '✓' if vxlan_intf.stdout[0].interfaces is defined else '⚠' }} VXLAN interface {{ 'configured' if vxlan_intf.stdout[0].interfaces is defined else 'not found' }}"
+        msg: >-
+          {{ '✓' if vxlan_intf.stdout[0].interfaces is defined else '⚠' }}
+          VXLAN interface {{ 'configured' if vxlan_intf.stdout[0].interfaces is defined else 'not found' }}
 
 # =============================================================================
 # Final Summary
@@ -228,7 +230,7 @@
 - name: Test Suite Summary
   hosts: localhost
   gather_facts: true
-  
+
   tasks:
     - name: Display final summary
       ansible.builtin.debug:
@@ -247,10 +249,9 @@
           ║  ✓ = Pass  ✗ = Fail  ⚠ = Warning (ignored)                    ║
           ║  Completed: {{ ansible_date_time.iso8601 }}
           ╚════════════════════════════════════════════════════════════════╝
-          
+
           For detailed validation, run individual playbooks:
             ansible-playbook -i inventory/hosts.yml playbooks/validate_fabric.yml
             ansible-playbook -i inventory/hosts.yml playbooks/test_connectivity.yml
             ansible-playbook -i inventory/hosts.yml playbooks/validate_config_compliance.yml
             ansible-playbook -i inventory/hosts.yml playbooks/gather_facts_report.yml
-

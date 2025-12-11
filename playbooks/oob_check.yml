@@ -22,10 +22,10 @@
   hosts: all
   gather_facts: false
   connection: network_cli
-  
+
   vars:
     fail_on_oob: true
-    
+
   vars_files:
     - ../group_vars/all.yml
 
@@ -39,6 +39,7 @@
           Device: {{ inventory_hostname }}
           Fail on OOB: {{ fail_on_oob }}
           ============================================
+      delegate_to: localhost
       run_once: true
 
     - name: Ensure network state directory exists
@@ -60,6 +61,7 @@
       when: not baseline_file.stat.exists
 
     - name: Perform OOB check
+      when: baseline_file.stat.exists
       block:
         - name: Grab current running config
           arista.eos.eos_config:
@@ -93,7 +95,7 @@
             content: |
               OOB Change Report for {{ inventory_hostname }}
               Generated: {{ ansible_date_time.iso8601 | default('unknown') }}
-              
+
               {{ diff_result.stdout }}
             dest: "{{ network_state_dir }}/{{ inventory_hostname }}/oob_changes.log"
             mode: '0644'
@@ -108,11 +110,9 @@
         - name: Fail on OOB change if configured
           ansible.builtin.fail:
             msg: "OOB change detected on {{ inventory_hostname }} - review diff above"
-          when: 
+          when:
             - diff_result.rc != 0
             - fail_on_oob | bool
-
-      when: baseline_file.stat.exists
 
     - name: Summary
       ansible.builtin.debug:
@@ -124,4 +124,3 @@
           Baseline Exists: {{ baseline_file.stat.exists }}
           Changes Detected: {{ diff_result.rc | default(0) != 0 if baseline_file.stat.exists else 'N/A' }}
           ============================================
-

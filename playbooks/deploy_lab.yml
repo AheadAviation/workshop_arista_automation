@@ -20,13 +20,13 @@
 - name: Prepare configurations from NetBox
   hosts: all
   gather_facts: false
-  
+
   vars_files:
     - "../group_vars/all.yml"
-  
+
   vars:
     config_output_dir: "{{ playbook_dir }}/../output/configs"
-  
+
   tasks:
     - name: Include arista_config role to generate configs
       ansible.builtin.include_role:
@@ -37,7 +37,7 @@
   hosts: localhost
   gather_facts: true
   connection: local
-  
+
   vars:
     clab_output_dir: "{{ playbook_dir }}/../clab"
     config_output_dir: "{{ playbook_dir }}/../output/configs"
@@ -47,7 +47,7 @@
     clab_mgmt_subnet: "172.20.20.0/24"
     netbox_url: "{{ lookup('env', 'NETBOX_URL') | default('http://netbox:8080', true) }}"
     netbox_token: "{{ lookup('env', 'NETBOX_TOKEN') }}"
-  
+
   tasks:
     - name: Display deployment info
       ansible.builtin.debug:
@@ -100,6 +100,7 @@
       register: clab_deploy
       when: clab_check.rc == 0
       become: true
+      changed_when: clab_deploy.rc == 0
 
     - name: Display ContainerLab deployment result
       ansible.builtin.debug:
@@ -118,7 +119,7 @@
           Manual Deployment Instructions (Windows)
           ============================================
           ContainerLab must be run in WSL2. Execute:
-          
+
           1. Open WSL2 terminal
           2. Navigate to project:
              cd /mnt/c/Users/BrianNelson/PycharmProjects/netbox-arista-lab
@@ -126,7 +127,7 @@
              sudo containerlab deploy --topo clab/topology.clab.yml
           4. Check status:
              sudo containerlab inspect --topo clab/topology.clab.yml
-          
+
           Device Access (after deployment):
           - spine-01: ssh admin@172.20.20.11
           - spine-02: ssh admin@172.20.20.12
@@ -134,7 +135,7 @@
           - leaf-02:  ssh admin@172.20.20.22
           - leaf-03:  ssh admin@172.20.20.23
           - leaf-04:  ssh admin@172.20.20.24
-          
+
           Password: admin
           ============================================
       when: clab_check.rc != 0

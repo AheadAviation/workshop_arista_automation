@@ -11,6 +11,8 @@ exclude_paths:
   - clab/
   - venv/
   - .venv/
+  # Exclude NAPALM playbook as it requires optional collection not installed
+  - playbooks/push_configs_napalm.yml
 
 # Skip specific rules
 skip_list:
@@ -26,6 +28,10 @@ skip_list:
   - no-handler
   # Skip role name validation
   - role-name[path]
+  # Skip variable naming prefix rule (templates use these vars directly)
+  - var-naming[no-role-prefix]
+  # Skip run_once warnings (acceptable in our linear strategy context)
+  - run-once[task]
 
 # Warn but don't fail on these
 warn_list:
@@ -35,11 +41,8 @@ warn_list:
   - no-changed-when
   # Risky file permissions
   - risky-file-permissions
-  # YAML issues
+  # YAML line length (we use 200 in yamllint)
   - yaml[line-length]
-
-# Enable specific profiles
-# profile: production  # Uncomment for stricter checks
 
 # Offline mode - don't try to fetch galaxy roles
 offline: true
@@ -53,10 +56,8 @@ parseable: true
 # Show progress
 quiet: false
 
-
 # Loop variable prefix
 loop_var_prefix: ''
 
 # Variables naming pattern
 var_naming_pattern: "^[a-z_][a-z0-9_]*$"
-

@@ -14,13 +14,13 @@
 - name: Generate Arista EOS Configurations from NetBox
   hosts: all
   gather_facts: false
-  
+
   vars_files:
     - "../group_vars/all.yml"
-  
+
   vars:
     config_output_dir: "{{ playbook_dir }}/../output/configs"
-  
+
   tasks:
     - name: Display playbook info
       ansible.builtin.debug:
@@ -31,6 +31,7 @@
           Target hosts: {{ ansible_play_hosts | length }}
           Output directory: {{ config_output_dir }}
           ============================================
+      delegate_to: localhost
       run_once: true
 
     - name: Include arista_config role
@@ -56,5 +57,5 @@
           - {{ f.path | basename }}
           {% endfor %}
           ============================================
+      delegate_to: localhost
       run_once: true
-

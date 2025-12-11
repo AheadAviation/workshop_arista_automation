@@ -44,7 +44,7 @@
     mode: '0777'
   delegate_to: localhost
   run_once: true
-  ignore_errors: true
+  failed_when: false
   loop:
     - "{{ config_output_dir }}"
     - "{{ output_dir }}/network_state"
@@ -116,7 +116,7 @@
         })
       }}
   loop: "{{ device_interfaces }}"
-  when: 
+  when:
     - item.ip_addresses is defined
     - item.ip_addresses | length > 0
   loop_control:

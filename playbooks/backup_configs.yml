@@ -17,7 +17,7 @@
   hosts: all
   gather_facts: false
   connection: network_cli
-  
+
   vars_files:
     - ../group_vars/all.yml
 
@@ -31,6 +31,7 @@
           Device: {{ inventory_hostname }}
           Backup Path: {{ network_state_dir }}/{{ inventory_hostname }}/
           ============================================
+      delegate_to: localhost
       run_once: true
 
     - name: Ensure backup directories exist
@@ -84,10 +85,10 @@
 - name: Backup Summary
   hosts: localhost
   gather_facts: false
-  
+
   vars_files:
     - ../group_vars/all.yml
-    
+
   tasks:
     - name: List all backups
       ansible.builtin.find:
@@ -105,4 +106,3 @@
           Total Backups: {{ backup_files.files | length }}
           Backup Location: {{ network_state_dir }}
           ============================================
-

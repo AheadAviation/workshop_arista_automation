@@ -14,12 +14,12 @@
   hosts: localhost
   gather_facts: false
   connection: local
-  
+
   vars:
     clab_output_dir: "{{ playbook_dir }}/../clab"
     clab_topology_file: "{{ clab_output_dir }}/topology.clab.yml"
     cleanup: false
-  
+
   tasks:
     - name: Display destroy info
       ansible.builtin.debug:
@@ -51,6 +51,7 @@
         - clab_check.rc == 0
         - topo_file.stat.exists
       become: true
+      changed_when: clab_destroy.rc == 0
 
     - name: Display ContainerLab destroy result
       ansible.builtin.debug:
@@ -69,7 +70,7 @@
           Manual Destroy Instructions (Windows)
           ============================================
           ContainerLab must be run in WSL2. Execute:
-          
+
           1. Open WSL2 terminal
           2. Navigate to project:
              cd /mnt/c/Users/BrianNelson/PycharmProjects/netbox-arista-lab
@@ -79,4 +80,3 @@
              sudo containerlab destroy --topo clab/topology.clab.yml --cleanup
           ============================================
       when: clab_check.rc != 0
-

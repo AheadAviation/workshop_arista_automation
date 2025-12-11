@@ -20,7 +20,7 @@
   hosts: network
   gather_facts: false
   connection: network_cli
-  
+
   vars:
     ansible_network_os: arista.eos.eos
     ansible_user: admin
@@ -31,15 +31,15 @@
     spine_loopbacks:
       - {name: spine-01, ip: "10.255.0.1"}
       - {name: spine-02, ip: "10.255.0.2"}
-    
+
     leaf_loopbacks:
       - {name: leaf-01, ip: "10.255.0.11"}
       - {name: leaf-02, ip: "10.255.0.12"}
       - {name: leaf-03, ip: "10.255.0.13"}
       - {name: leaf-04, ip: "10.255.0.14"}
-    
+
     all_loopbacks: "{{ spine_loopbacks + leaf_loopbacks }}"
-    
+
   vars_files:
     - ../group_vars/all.yml
 
@@ -106,7 +106,9 @@
 
         - name: Report spine ping results
           ansible.builtin.debug:
-            msg: "{{ '✓' if '3 received' in item.stdout[0] or '2 received' in item.stdout[0] else '✗' }} Ping to {{ item.item.name }} ({{ item.item.ip }}): {{ '100%' if '3 received' in item.stdout[0] else 'partial/failed' }}"
+            msg: >-
+              {{ '✓' if '3 received' in item.stdout[0] or '2 received' in item.stdout[0] else '✗' }}
+              Ping to {{ item.item.name }}: {{ '100%' if '3 received' in item.stdout[0] else 'partial/failed' }}
           loop: "{{ ping_spines.results }}"
           loop_control:
             label: "{{ item.item.name }}"
@@ -130,7 +132,9 @@
 
         - name: Report leaf ping results
           ansible.builtin.debug:
-            msg: "{{ '✓' if '3 received' in item.stdout[0] or '2 received' in item.stdout[0] else '✗' }} Ping to {{ item.item.name }} ({{ item.item.ip }}): {{ '100%' if '3 received' in item.stdout[0] else 'partial/failed' }}"
+            msg: >-
+              {{ '✓' if '3 received' in item.stdout[0] or '2 received' in item.stdout[0] else '✗' }}
+              Ping to {{ item.item.name }}: {{ '100%' if '3 received' in item.stdout[0] else 'partial/failed' }}
           loop: "{{ ping_leaves.results }}"
           loop_control:
             label: "{{ item.item.name }}"
@@ -165,7 +169,7 @@
 - name: Connectivity Test Summary
   hosts: localhost
   gather_facts: false
-  
+
   tasks:
     - name: Display connectivity summary
       ansible.builtin.debug:
@@ -179,4 +183,3 @@
           ║  • Traceroutes should show 2 hops (via spine)                  ║
           ║  • LLDP should show 2+ neighbors per device                    ║
           ╚════════════════════════════════════════════════════════════════╝
-
