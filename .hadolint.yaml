@@ -6,12 +6,15 @@
 ignored:
   # Don't require pinned versions in apt-get (lab environment)
   - DL3008
-  # Don't require pinned versions in pip (lab environment)  
+  # Don't require pinned versions in pip (lab environment)
   - DL3013
   # Allow using 'cd' in RUN
   - DL3003
   # Allow using cache mounts
   - DL3042
+  # Allow shell form redirections (lab environment uses these safely)
+  - SC2261
+  - SC2174
 
 # Treat these as warnings, not errors
 warning:
@@ -22,4 +25,3 @@ warning:
 trustedRegistries:
   - docker.io
   - ghcr.io
-

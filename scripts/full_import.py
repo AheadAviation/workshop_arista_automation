@@ -31,10 +31,7 @@ def run_script(script_name: str, description: str) -> bool:
     console.print(f"\n[bold blue]▶[/bold blue] {description}")
 
     script_path = SCRIPTS_DIR / script_name
-    result = subprocess.run(
-        [sys.executable, str(script_path)],
-        capture_output=False
-    )
+    result = subprocess.run([sys.executable, str(script_path)], capture_output=False)
 
     if result.returncode != 0:
         console.print(f"[red]✗ {script_name} failed![/red]")
@@ -44,11 +41,12 @@ def run_script(script_name: str, description: str) -> bool:
 
 
 def main():
-    console.print(Panel.fit(
-        "[bold blue]NetBox Full Import Pipeline[/bold blue]\n"
-        "Bootstrap + Topology Import",
-        border_style="blue"
-    ))
+    console.print(
+        Panel.fit(
+            "[bold blue]NetBox Full Import Pipeline[/bold blue]\n" "Bootstrap + Topology Import",
+            border_style="blue",
+        )
+    )
 
     # Step 1: Bootstrap NetBox
     if not run_script("bootstrap_netbox.py", "Bootstrapping NetBox data model..."):
@@ -69,4 +67,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

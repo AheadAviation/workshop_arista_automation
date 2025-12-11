@@ -13,19 +13,19 @@ Usage:
     python scripts/import_topology.py --file netbox_data/fabric_topology.yml
 """
 
+import argparse
 import os
 import sys
-import argparse
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any, Optional
 
 try:
     import pynetbox
     import yaml
+    from dotenv import load_dotenv
     from rich.console import Console
     from rich.panel import Panel
     from rich.progress import Progress, SpinnerColumn, TextColumn
-    from dotenv import load_dotenv
 except ImportError:
     print("Required packages not installed. Run: pip install -r requirements.txt")
     sys.exit(1)
@@ -44,16 +44,15 @@ class TopologyImporter:
 
     def import_all(self):
         """Run the full import process."""
-        console.print(Panel.fit(
-            "[bold blue]NetBox Topology Import[/bold blue]\n"
-            "Importing fabric topology",
-            border_style="blue"
-        ))
+        console.print(
+            Panel.fit(
+                "[bold blue]NetBox Topology Import[/bold blue]\n" "Importing fabric topology",
+                border_style="blue",
+            )
+        )
 
         with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console
+            SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
         ) as progress:
             # Import in dependency order
             task = progress.add_task("Importing devices...", total=None)
@@ -81,22 +80,28 @@ class TopologyImporter:
         # Build comprehensive custom fields (including mceos-style fields)
         mlag_data = device_data.get("mlag", {})
         cf_source = device_data.get("custom_fields", {})
-        
+
         cf = {
             "bgp_asn": cf_source.get("bgp_asn") or device_data.get("asn"),
             "router_id": cf_source.get("router_id") or device_data.get("router_id"),
             "vtep_ip": cf_source.get("vtep_ip") or device_data.get("vtep_ip"),
             "switch_id": cf_source.get("switch_id") or device_data.get("switch_id"),
             "mlag_index": cf_source.get("mlag_index") or mlag_data.get("index"),
-            "mlag_name": cf_source.get("mlag_name") or mlag_data.get("name", f"MLAG-{mlag_data.get('domain_id', '')}"),
+            "mlag_name": cf_source.get("mlag_name")
+            or mlag_data.get("name", f"MLAG-{mlag_data.get('domain_id', '')}"),
             "mlag_domain_id": cf_source.get("mlag_domain_id") or mlag_data.get("domain_id"),
             "mlag_peer": cf_source.get("mlag_peer") or mlag_data.get("peer"),
-            "fabric_name": cf_source.get("fabric_name") or self.data.get("fabric", {}).get("name", "dc1-fabric"),
+            "fabric_name": cf_source.get("fabric_name")
+            or self.data.get("fabric", {}).get("name", "dc1-fabric"),
             "device_type_model": cf_source.get("device_type_model", "cEOS-lab"),
         }
-        
+
         # Build tags list including MLAG pair tags
-        base_tags = [{"slug": "containerlab"}, {"slug": "evpn-fabric"}, {"slug": device_data["role"]}]
+        base_tags = [
+            {"slug": "containerlab"},
+            {"slug": "evpn-fabric"},
+            {"slug": device_data["role"]},
+        ]
         for tag in device_data.get("tags", []):
             if isinstance(tag, str) and tag not in [t.get("slug") for t in base_tags]:
                 base_tags.append({"slug": tag})
@@ -266,7 +271,9 @@ class TopologyImporter:
                 self.created_interfaces[(device.name, normalized_name)] = interface
 
         if not interface:
-            console.print(f"  [yellow]![/yellow] Interface {normalized_name} not found on {device.name}")
+            console.print(
+                f"  [yellow]![/yellow] Interface {normalized_name} not found on {device.name}"
+            )
             return
 
         # Check if IP already exists
@@ -314,10 +321,7 @@ class TopologyImporter:
                 peer_intf = intf_data.get("peer_intf", "")
 
                 # Create a unique key for this link (sorted to avoid duplicates)
-                link_key = tuple(sorted([
-                    (device_name, intf_name),
-                    (peer_device, peer_intf)
-                ]))
+                link_key = tuple(sorted([(device_name, intf_name), (peer_device, peer_intf)]))
 
                 if link_key in processed_links:
                     continue
@@ -334,18 +338,14 @@ class TopologyImporter:
         interface_b = self.created_interfaces.get((device_b, norm_intf_b))
 
         if not interface_a:
-            interface_a = self.nb.dcim.interfaces.get(
-                device=device_a,
-                name=norm_intf_a
-            )
+            interface_a = self.nb.dcim.interfaces.get(device=device_a, name=norm_intf_a)
         if not interface_b:
-            interface_b = self.nb.dcim.interfaces.get(
-                device=device_b,
-                name=norm_intf_b
-            )
+            interface_b = self.nb.dcim.interfaces.get(device=device_b, name=norm_intf_b)
 
         if not interface_a or not interface_b:
-            console.print(f"  [yellow]![/yellow] Cannot cable {device_a}:{intf_a} to {device_b}:{intf_b} - interface not found")
+            console.print(
+                f"  [yellow]![/yellow] Cannot cable {device_a}:{intf_a} to {device_b}:{intf_b} - interface not found"
+            )
             return
 
         # Check if cable already exists
@@ -358,10 +358,14 @@ class TopologyImporter:
                 b_terminations=[{"object_type": "dcim.interface", "object_id": interface_b.id}],
                 status="connected",
             )
-            console.print(f"  [green]✓[/green] Cable: {device_a}:{norm_intf_a} <-> {device_b}:{norm_intf_b}")
+            console.print(
+                f"  [green]✓[/green] Cable: {device_a}:{norm_intf_a} <-> {device_b}:{norm_intf_b}"
+            )
         except Exception as e:
             if "already" not in str(e).lower():
-                console.print(f"  [yellow]![/yellow] Cable {device_a}:{norm_intf_a} <-> {device_b}:{norm_intf_b}: {e}")
+                console.print(
+                    f"  [yellow]![/yellow] Cable {device_a}:{norm_intf_a} <-> {device_b}:{norm_intf_b}: {e}"
+                )
 
 
 def main():
@@ -369,20 +373,10 @@ def main():
 
     parser = argparse.ArgumentParser(description="Import fabric topology to NetBox")
     parser.add_argument(
-        "--file", "-f",
-        default="netbox_data/fabric_topology.yml",
-        help="Path to topology YAML file"
+        "--file", "-f", default="netbox_data/fabric_topology.yml", help="Path to topology YAML file"
     )
-    parser.add_argument(
-        "--url",
-        default=os.environ.get("NETBOX_URL"),
-        help="NetBox URL"
-    )
-    parser.add_argument(
-        "--token",
-        default=os.environ.get("NETBOX_TOKEN"),
-        help="NetBox API token"
-    )
+    parser.add_argument("--url", default=os.environ.get("NETBOX_URL"), help="NetBox URL")
+    parser.add_argument("--token", default=os.environ.get("NETBOX_TOKEN"), help="NetBox API token")
 
     args = parser.parse_args()
 
@@ -410,4 +404,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

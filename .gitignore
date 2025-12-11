@@ -37,11 +37,13 @@ output/reports/*.html
 output/network_state/*.cfg
 output/clab/
 
-# ContainerLab
-clab-*/
+# ContainerLab output (generated labs)
+/clab-*/
 *.clab.yml
 !clab/topology.clab.yml.j2
 topology-docker.clab.yml
+# Explicitly include docker/clab-runner
+!docker/clab-runner/
 
 # Ansible
 *.retry

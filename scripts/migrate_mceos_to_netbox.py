@@ -31,21 +31,18 @@ Examples:
     python scripts/migrate_mceos_to_netbox.py --mceos-path ../mceos/ansible
 """
 
+import argparse
 import os
 import sys
-import argparse
-import json
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Dict, Any, List, Optional
-from dataclasses import dataclass, field, asdict
 
 try:
     import yaml
+    from dotenv import load_dotenv
     from rich.console import Console
-    from rich.table import Table
     from rich.panel import Panel
     from rich.progress import Progress, SpinnerColumn, TextColumn
-    from dotenv import load_dotenv
 except ImportError:
     print("Required packages not installed. Run: pip install pyyaml rich python-dotenv")
     sys.exit(1)
@@ -56,6 +53,7 @@ console = Console()
 @dataclass
 class MceosDevice:
     """Represents a device extracted from mceos."""
+
     name: str
     hostname: str = ""
     serial_number: str = ""
@@ -70,29 +68,31 @@ class MceosDevice:
     mlag_name: str = ""
     mlag_peer: str = ""
     management_ip: str = ""
-    interfaces: List[Dict] = field(default_factory=list)
-    local_interfaces: Dict = field(default_factory=dict)
-    tags: List[str] = field(default_factory=list)
+    interfaces: list[dict] = field(default_factory=list)
+    local_interfaces: dict = field(default_factory=dict)
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass
 class MceosMLAG:
     """Represents MLAG configuration from mceos."""
+
     name: str
     peerlink_vlan: int = 4094
     peerlink_channel: int = 2000
     peerlink_network: str = ""
     underlay_peering_network: str = ""
-    interfaces: List[str] = field(default_factory=list)
-    members: List[str] = field(default_factory=list)
+    interfaces: list[str] = field(default_factory=list)
+    members: list[str] = field(default_factory=list)
 
 
 @dataclass
 class MceosTenant:
     """Represents a tenant/VRF from mceos."""
+
     name: str
     id: int
-    l2_segments: List[Dict] = field(default_factory=list)
+    l2_segments: list[dict] = field(default_factory=list)
 
 
 class MceosParser:
@@ -103,21 +103,21 @@ class MceosParser:
         self.inventory = {}
         self.host_vars = {}
         self.group_vars = {}
-        self.devices: List[MceosDevice] = []
-        self.mlag_configs: List[MceosMLAG] = []
-        self.tenants: List[MceosTenant] = []
+        self.devices: list[MceosDevice] = []
+        self.mlag_configs: list[MceosMLAG] = []
+        self.tenants: list[MceosTenant] = []
 
     def parse_all(self):
         """Parse all mceos data."""
         console.print("\n[bold]Parsing mceos project...[/bold]")
-        
+
         self._parse_inventory()
         self._parse_group_vars()
         self._parse_host_vars()
         self._extract_devices()
         self._extract_mlag_configs()
         self._extract_tenants()
-        
+
         console.print(f"  [green]✓[/green] Found {len(self.devices)} devices")
         console.print(f"  [green]✓[/green] Found {len(self.mlag_configs)} MLAG pairs")
         console.print(f"  [green]✓[/green] Found {len(self.tenants)} tenants")
@@ -128,15 +128,15 @@ class MceosParser:
         if inventory_file.exists():
             with open(inventory_file) as f:
                 self.inventory = yaml.safe_load(f)
-            console.print(f"  [green]✓[/green] Parsed inventory.yml")
+            console.print("  [green]✓[/green] Parsed inventory.yml")
         else:
-            console.print(f"  [yellow]![/yellow] inventory.yml not found")
+            console.print("  [yellow]![/yellow] inventory.yml not found")
 
     def _parse_group_vars(self):
         """Parse all group_vars directories."""
         group_vars_path = self.mceos_path / "group_vars"
         if not group_vars_path.exists():
-            console.print(f"  [yellow]![/yellow] group_vars/ not found")
+            console.print("  [yellow]![/yellow] group_vars/ not found")
             return
 
         for group_dir in group_vars_path.iterdir():
@@ -158,7 +158,7 @@ class MceosParser:
         """Parse all host_vars files."""
         host_vars_path = self.mceos_path / "host_vars"
         if not host_vars_path.exists():
-            console.print(f"  [yellow]![/yellow] host_vars/ not found")
+            console.print("  [yellow]![/yellow] host_vars/ not found")
             return
 
         for host_file in host_vars_path.glob("*.yml"):
@@ -176,15 +176,15 @@ class MceosParser:
         # Get global settings
         all_vars = self.group_vars.get("all", {})
         bgp_asn_data = all_vars.get("bgp_asn", {}).get("bgp_asn", {})
-        
+
         # Get site-specific setup data
-        for site_name, site_vars in self.group_vars.items():
+        for _site_name, site_vars in self.group_vars.items():
             if "setup" in site_vars:
                 setup = site_vars["setup"]
-                switch_ids = setup.get("switch_ids", {})
-                vteps = setup.get("vteps", {})
-                mgmt_ips = setup.get("mgmt_ips", {})
-                mgmt_mask = setup.get("mgmt_mask", 24)
+                setup.get("switch_ids", {})
+                setup.get("vteps", {})
+                setup.get("mgmt_ips", {})
+                setup.get("mgmt_mask", 24)
 
         # Process each host
         for hostname, host_data in self.host_vars.items():
@@ -197,13 +197,13 @@ class MceosParser:
             # Get ASN from bgp_asn mapping
             dc_asn = bgp_asn_data.get("da11", {})
             asn = dc_asn.get(hostname, dc_asn.get("spine" if role == "spine" else "base", 0))
-            
+
             # Get switch_id and vtep from setup
             switch_id = 0
             vtep_id = 0
             mgmt_ip = ""
-            
-            for site_name, site_vars in self.group_vars.items():
+
+            for _site_name, site_vars in self.group_vars.items():
                 if "setup" in site_vars:
                     setup = site_vars["setup"]
                     switch_id = setup.get("switch_ids", {}).get(hostname, 0)
@@ -214,11 +214,10 @@ class MceosParser:
 
             # Extract MLAG info
             mlag_index = host_data.get("mlag_index", 0)
-            
+
             # Find MLAG name from group membership
             mlag_name = ""
-            mlag_peer = ""
-            for group_name, group_data in self.group_vars.items():
+            for _group_name, group_data in self.group_vars.items():
                 if "mlag" in group_data:
                     mlag_data = group_data["mlag"]
                     if "mlag_name" in mlag_data:
@@ -241,7 +240,7 @@ class MceosParser:
             )
 
             # Calculate router_id and vtep_ip from vrf_net
-            for site_name, site_vars in self.group_vars.items():
+            for _site_name, site_vars in self.group_vars.items():
                 if "setup" in site_vars:
                     setup = site_vars["setup"]
                     vrf_net = setup.get("vrf_net", {})
@@ -250,7 +249,9 @@ class MceosParser:
                         base = vrf_net["default"]
                         device.router_id = self._calculate_ip(base, switch_id)
                     if vtep_id:
-                        device.vtep_ip = self._calculate_ip(vrf_net.get("default", "10.255.0.0"), vtep_id)
+                        device.vtep_ip = self._calculate_ip(
+                            vrf_net.get("default", "10.255.0.0"), vtep_id
+                        )
 
             # Extract interfaces from local_interfaces
             device.interfaces = self._extract_interfaces(device.local_interfaces)
@@ -274,26 +275,29 @@ class MceosParser:
         """Calculate IP address from base network and offset."""
         try:
             import ipaddress
+
             base = ipaddress.ip_address(base_network)
             return str(base + offset)
         except Exception:
             return ""
 
-    def _extract_interfaces(self, local_interfaces: Dict) -> List[Dict]:
+    def _extract_interfaces(self, local_interfaces: dict) -> list[dict]:
         """Extract interface list from local_interfaces structure."""
         interfaces = []
         for vrf, intf_list in local_interfaces.items():
             if isinstance(intf_list, list):
                 for intf in intf_list:
                     if isinstance(intf, dict):
-                        interfaces.append({
-                            "vrf": vrf,
-                            "name": intf.get("name"),
-                            "description": intf.get("description"),
-                            "ip": intf.get("ip"),
-                            "speed": intf.get("speed"),
-                            "bgp_peers": intf.get("bgp", []),
-                        })
+                        interfaces.append(
+                            {
+                                "vrf": vrf,
+                                "name": intf.get("name"),
+                                "description": intf.get("description"),
+                                "ip": intf.get("ip"),
+                                "speed": intf.get("speed"),
+                                "bgp_peers": intf.get("bgp", []),
+                            }
+                        )
         return interfaces
 
     def _extract_mlag_configs(self):
@@ -315,7 +319,7 @@ class MceosParser:
 
     def _extract_tenants(self):
         """Extract tenant configurations from group_vars."""
-        for group_name, group_data in self.group_vars.items():
+        for _group_name, group_data in self.group_vars.items():
             if "tenants" in group_data:
                 tenants_data = group_data["tenants"]
                 fabric_tenants = tenants_data.get("fabric_tenants", [])
@@ -349,7 +353,9 @@ class NetBoxExporter:
         mlag_data = [asdict(m) for m in self.parser.mlag_configs]
         with open(output_path / "mlag_configs.yml", "w") as f:
             yaml.dump(mlag_data, f, default_flow_style=False)
-        console.print(f"  [green]✓[/green] Exported {len(mlag_data)} MLAG configs to mlag_configs.yml")
+        console.print(
+            f"  [green]✓[/green] Exported {len(mlag_data)} MLAG configs to mlag_configs.yml"
+        )
 
         # Export tenants
         tenant_data = [asdict(t) for t in self.parser.tenants]
@@ -413,7 +419,7 @@ class NetBoxExporter:
 
         with open(output_path / "fabric_topology_migrated.yml", "w") as f:
             yaml.dump(topology, f, default_flow_style=False)
-        console.print(f"  [green]✓[/green] Generated fabric_topology_migrated.yml")
+        console.print("  [green]✓[/green] Generated fabric_topology_migrated.yml")
 
 
 class NetBoxImporter:
@@ -430,6 +436,7 @@ class NetBoxImporter:
         """Connect to NetBox."""
         try:
             import pynetbox
+
             self.nb = pynetbox.api(self.url, token=self.token)
             self.nb.http_session.verify = False
             self.nb.status()
@@ -450,9 +457,7 @@ class NetBoxImporter:
         console.print("\n[bold]Importing to NetBox...[/bold]")
 
         with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console
+            SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
         ) as progress:
             task = progress.add_task("Importing devices...", total=None)
             self._import_devices()
@@ -533,7 +538,7 @@ class NetBoxImporter:
                         "underlay_peering_network": mlag.underlay_peering_network,
                         "interfaces": mlag.interfaces,
                     }
-                }
+                },
             }
 
             try:
@@ -564,46 +569,32 @@ Examples:
 
   # Full migration to NetBox
   python scripts/migrate_mceos_to_netbox.py --mceos-path ../mceos/ansible
-        """
+        """,
     )
+    parser.add_argument("--mceos-path", required=True, help="Path to mceos ansible directory")
     parser.add_argument(
-        "--mceos-path",
-        required=True,
-        help="Path to mceos ansible directory"
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be done without making changes"
+        "--dry-run", action="store_true", help="Show what would be done without making changes"
     )
     parser.add_argument(
         "--export-only",
         action="store_true",
-        help="Export to local YAML files only (no NetBox import)"
+        help="Export to local YAML files only (no NetBox import)",
     )
     parser.add_argument(
-        "--output",
-        default="output/migration",
-        help="Output directory for exported files"
+        "--output", default="output/migration", help="Output directory for exported files"
     )
-    parser.add_argument(
-        "--url",
-        default=os.environ.get("NETBOX_URL"),
-        help="NetBox URL"
-    )
-    parser.add_argument(
-        "--token",
-        default=os.environ.get("NETBOX_TOKEN"),
-        help="NetBox API token"
-    )
+    parser.add_argument("--url", default=os.environ.get("NETBOX_URL"), help="NetBox URL")
+    parser.add_argument("--token", default=os.environ.get("NETBOX_TOKEN"), help="NetBox API token")
 
     args = parser.parse_args()
 
-    console.print(Panel.fit(
-        "[bold blue]mceos to NetBox Migration Tool[/bold blue]\n"
-        "Convert mceos YAML to NetBox Source of Truth",
-        border_style="blue"
-    ))
+    console.print(
+        Panel.fit(
+            "[bold blue]mceos to NetBox Migration Tool[/bold blue]\n"
+            "Convert mceos YAML to NetBox Source of Truth",
+            border_style="blue",
+        )
+    )
 
     # Parse mceos data
     mceos_path = Path(args.mceos_path)
@@ -634,4 +625,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-

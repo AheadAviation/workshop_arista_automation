@@ -41,12 +41,14 @@ def get_devices(nb: pynetbox.api) -> list[dict[str, Any]]:
         if device.primary_ip4:
             mgmt_ip = str(device.primary_ip4.address).split("/")[0]
 
-        device_list.append({
-            "name": device.name,
-            "id": device.id,
-            "role": device.role.slug if device.role else "unknown",
-            "mgmt_ip": mgmt_ip,
-        })
+        device_list.append(
+            {
+                "name": device.name,
+                "id": device.id,
+                "role": device.role.slug if device.role else "unknown",
+                "mgmt_ip": mgmt_ip,
+            }
+        )
 
     return device_list
 
@@ -88,12 +90,14 @@ def get_cables(nb: pynetbox.api, devices: list[dict[str, Any]]) -> list[dict[str
 
             seen_cables.add(cable.id)
 
-            cables_list.append({
-                "a_device": a_device,
-                "a_interface": normalize_interface(a_intf_name),
-                "b_device": b_device,
-                "b_interface": normalize_interface(b_intf_name),
-            })
+            cables_list.append(
+                {
+                    "a_device": a_device,
+                    "a_interface": normalize_interface(a_intf_name),
+                    "b_device": b_device,
+                    "b_interface": normalize_interface(b_intf_name),
+                }
+            )
 
         except Exception as e:
             console.print(f"  [yellow]Warning: Error processing cable {cable.id}: {e}[/yellow]")

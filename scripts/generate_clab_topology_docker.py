@@ -30,11 +30,13 @@ def get_devices(nb) -> list[dict[str, Any]]:
         if device.primary_ip4:
             mgmt_ip = str(device.primary_ip4.address).split("/")[0]
 
-        result.append({
-            "name": device.name,
-            "role": device.role.slug if device.role else "unknown",
-            "mgmt_ip": mgmt_ip,
-        })
+        result.append(
+            {
+                "name": device.name,
+                "role": device.role.slug if device.role else "unknown",
+                "mgmt_ip": mgmt_ip,
+            }
+        )
 
     return sorted(result, key=lambda x: x["name"])
 
@@ -71,12 +73,14 @@ def get_cables(nb, devices: list[dict[str, Any]]) -> list[dict[str, str]]:
 
             seen_cables.add(cable.id)
 
-            cables_list.append({
-                "a_device": a_device,
-                "a_interface": normalize_interface(a_intf_name),
-                "b_device": b_device,
-                "b_interface": normalize_interface(b_intf_name),
-            })
+            cables_list.append(
+                {
+                    "a_device": a_device,
+                    "a_interface": normalize_interface(a_intf_name),
+                    "b_device": b_device,
+                    "b_interface": normalize_interface(b_intf_name),
+                }
+            )
 
         except Exception as e:
             console.print(f"  [yellow]Warning: Error processing cable {cable.id}: {e}[/yellow]")
@@ -243,7 +247,8 @@ def main():
     console.print(f"\n[green]✓[/green] Topology written to: {output_path}")
 
     # Print summary
-    console.print(f"""
+    console.print(
+        f"""
 {'='*60}
 Topology Generation Complete!
 {'='*60}
@@ -254,7 +259,8 @@ Links: {len(cables)}
 To deploy on Windows:
   docker compose build clab
   docker compose run --rm clab containerlab deploy --topo /clab/topology/topology-docker.clab.yml
-""")
+"""
+    )
 
 
 if __name__ == "__main__":

@@ -166,16 +166,20 @@ DEVICE_TYPES = [
         "u_height": 0,
         "is_full_depth": False,
         "comments": "Containerized EOS for ContainerLab",
-        "interfaces": [
-            {"name": f"eth{i}", "type": "10gbase-x-sfpp"} for i in range(1, 9)
-        ] + [
+        "interfaces": [{"name": f"eth{i}", "type": "10gbase-x-sfpp"} for i in range(1, 9)]
+        + [
             {"name": "Management0", "type": "1000base-t", "mgmt_only": True},
         ],
     },
 ]
 
 PLATFORMS = [
-    {"name": "Arista cEOS", "slug": "arista-ceos", "manufacturer": "arista", "napalm_driver": "eos"},
+    {
+        "name": "Arista cEOS",
+        "slug": "arista-ceos",
+        "manufacturer": "arista",
+        "napalm_driver": "eos",
+    },
 ]
 
 SITES = [
@@ -188,8 +192,18 @@ SITES = [
 ]
 
 TAGS = [
-    {"name": "containerlab", "slug": "containerlab", "color": "2196f3", "description": "ContainerLab managed device"},
-    {"name": "evpn-fabric", "slug": "evpn-fabric", "color": "9c27b0", "description": "Part of EVPN/VXLAN fabric"},
+    {
+        "name": "containerlab",
+        "slug": "containerlab",
+        "color": "2196f3",
+        "description": "ContainerLab managed device",
+    },
+    {
+        "name": "evpn-fabric",
+        "slug": "evpn-fabric",
+        "color": "9c27b0",
+        "description": "Part of EVPN/VXLAN fabric",
+    },
     {"name": "spine", "slug": "spine", "color": "3f51b5", "description": "Spine switch"},
     {"name": "leaf", "slug": "leaf", "color": "4caf50", "description": "Leaf switch"},
     {"name": "border", "slug": "border", "color": "ff9800", "description": "Border leaf switch"},
@@ -520,8 +534,7 @@ class NetBoxBootstrap:
 
             try:
                 existing = self.nb.dcim.interface_templates.get(
-                    device_type_id=device_type.id,
-                    name=intf["name"]
+                    device_type_id=device_type.id, name=intf["name"]
                 )
                 if not existing:
                     self.nb.dcim.interface_templates.create(intf_data)
@@ -594,11 +607,13 @@ class NetBoxBootstrap:
 
     def run(self):
         """Execute the bootstrap process."""
-        console.print(Panel.fit(
-            "[bold blue]NetBox Arista ContainerLab Demo[/bold blue]\n"
-            "Bootstrap Script (Enhanced with mceos-style fields)",
-            border_style="blue"
-        ))
+        console.print(
+            Panel.fit(
+                "[bold blue]NetBox Arista ContainerLab Demo[/bold blue]\n"
+                "Bootstrap Script (Enhanced with mceos-style fields)",
+                border_style="blue",
+            )
+        )
 
         if self.dry_run:
             console.print("[yellow]Running in DRY-RUN mode - no changes will be made[/yellow]\n")
@@ -634,36 +649,32 @@ def main():
         description="Bootstrap NetBox with Arista ContainerLab data model"
     )
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be done without making changes"
+        "--dry-run", action="store_true", help="Show what would be done without making changes"
     )
     parser.add_argument(
-        "--url",
-        default=os.environ.get("NETBOX_URL"),
-        help="NetBox URL (or set NETBOX_URL env var)"
+        "--url", default=os.environ.get("NETBOX_URL"), help="NetBox URL (or set NETBOX_URL env var)"
     )
     parser.add_argument(
         "--token",
         default=os.environ.get("NETBOX_TOKEN"),
-        help="NetBox API token (or set NETBOX_TOKEN env var)"
+        help="NetBox API token (or set NETBOX_TOKEN env var)",
     )
 
     args = parser.parse_args()
 
     if not args.url:
-        console.print("[red]Error: NETBOX_URL not set. Use --url or set NETBOX_URL environment variable.[/red]")
+        console.print(
+            "[red]Error: NETBOX_URL not set. Use --url or set NETBOX_URL environment variable.[/red]"
+        )
         sys.exit(1)
 
     if not args.token:
-        console.print("[red]Error: NETBOX_TOKEN not set. Use --token or set NETBOX_TOKEN environment variable.[/red]")
+        console.print(
+            "[red]Error: NETBOX_TOKEN not set. Use --token or set NETBOX_TOKEN environment variable.[/red]"
+        )
         sys.exit(1)
 
-    bootstrap = NetBoxBootstrap(
-        url=args.url,
-        token=args.token,
-        dry_run=args.dry_run
-    )
+    bootstrap = NetBoxBootstrap(url=args.url, token=args.token, dry_run=args.dry_run)
 
     success = bootstrap.run()
     sys.exit(0 if success else 1)
