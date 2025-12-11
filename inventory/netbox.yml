@@ -1,0 +1,67 @@
+# =============================================================================
+# NetBox Dynamic Inventory Plugin Configuration
+# =============================================================================
+plugin: netbox.netbox.nb_inventory
+
+# =============================================================================
+# NetBox Connection Settings
+# =============================================================================
+# These are set via environment variables NETBOX_API and NETBOX_TOKEN
+# Or directly here for testing
+api_endpoint: http://netbox:8080
+token: 0123456789abcdef0123456789abcdef01234567
+validate_certs: false
+
+# =============================================================================
+# Query Configuration
+# =============================================================================
+query_filters:
+  - status: active
+  - tag: containerlab
+
+# =============================================================================
+# Grouping Configuration
+# =============================================================================
+group_by:
+  - device_roles
+  - sites
+  - tags
+
+# =============================================================================
+# Host Variables
+# =============================================================================
+config_context: true
+flatten_config_context: false
+flatten_custom_fields: true
+
+# =============================================================================
+# Interface and IP Configuration
+# =============================================================================
+interfaces: true
+ip_addresses: true
+
+# =============================================================================
+# Compose Variables
+# =============================================================================
+compose:
+  ansible_host: "primary_ip4.address | default('') | regex_replace('/.*', '')"
+  device_name: "name"
+  device_role: "device_role.slug"
+  device_site: "site.slug"
+  bgp_asn: "custom_fields.bgp_asn | default(omit)"
+  router_id: "custom_fields.router_id | default(omit)"
+  vtep_ip: "custom_fields.vtep_ip | default(omit)"
+  mlag_domain_id: "custom_fields.mlag_domain_id | default(omit)"
+  mlag_peer: "custom_fields.mlag_peer | default(omit)"
+  fabric_name: "custom_fields.fabric_name | default('dc1-fabric')"
+
+# =============================================================================
+# Keyed Groups
+# =============================================================================
+keyed_groups:
+  - key: device_role.slug
+    prefix: role
+    separator: "_"
+  - key: site.slug
+    prefix: site
+    separator: "_"

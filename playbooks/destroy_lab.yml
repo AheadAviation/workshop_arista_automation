@@ -1,0 +1,82 @@
+---
+# =============================================================================
+# Destroy ContainerLab Topology
+# =============================================================================
+# This playbook tears down the ContainerLab topology.
+#
+# Usage:
+#   ansible-playbook playbooks/destroy_lab.yml
+#   ansible-playbook playbooks/destroy_lab.yml -e cleanup=true
+#
+# =============================================================================
+
+- name: Destroy ContainerLab Topology
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  
+  vars:
+    clab_output_dir: "{{ playbook_dir }}/../clab"
+    clab_topology_file: "{{ clab_output_dir }}/topology.clab.yml"
+    cleanup: false
+  
+  tasks:
+    - name: Display destroy info
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          ContainerLab Destroy
+          ============================================
+          Topology file: {{ clab_topology_file }}
+          Cleanup volumes: {{ cleanup }}
+          ============================================
+
+    - name: Check if ContainerLab is available
+      ansible.builtin.command: which containerlab
+      register: clab_check
+      changed_when: false
+      failed_when: false
+
+    - name: Check if topology file exists
+      ansible.builtin.stat:
+        path: "{{ clab_topology_file }}"
+      register: topo_file
+
+    - name: Destroy ContainerLab topology
+      ansible.builtin.command:
+        cmd: "containerlab destroy --topo {{ clab_topology_file }}{% if cleanup %} --cleanup{% endif %}"
+        chdir: "{{ clab_output_dir }}"
+      register: clab_destroy
+      when:
+        - clab_check.rc == 0
+        - topo_file.stat.exists
+      become: true
+
+    - name: Display ContainerLab destroy result
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          ContainerLab Destroy Result
+          ============================================
+          {{ clab_destroy.stdout | default('Topology destroyed or not running') }}
+          ============================================
+      when: clab_destroy is defined
+
+    - name: Display manual destroy instructions (Windows)
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          Manual Destroy Instructions (Windows)
+          ============================================
+          ContainerLab must be run in WSL2. Execute:
+          
+          1. Open WSL2 terminal
+          2. Navigate to project:
+             cd /mnt/c/Users/BrianNelson/PycharmProjects/netbox-arista-lab
+          3. Destroy topology:
+             sudo containerlab destroy --topo clab/topology.clab.yml
+          4. To also cleanup volumes:
+             sudo containerlab destroy --topo clab/topology.clab.yml --cleanup
+          ============================================
+      when: clab_check.rc != 0
+

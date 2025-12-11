@@ -1,0 +1,152 @@
+---
+# =============================================================================
+# Push Configurations to Devices using NAPALM
+# =============================================================================
+# This playbook provides safe config deployment with:
+# - Pre-deployment diff display
+# - Commit/dry-run mode toggle
+# - Post-deployment backup
+# - Archive of previous configs
+#
+# Usage:
+#   # Dry-run (default - show diff only)
+#   ansible-playbook playbooks/push_configs_napalm.yml
+#
+#   # Actually commit changes
+#   ansible-playbook playbooks/push_configs_napalm.yml -e "commit=true"
+#
+#   # Force backup without commit
+#   ansible-playbook playbooks/push_configs_napalm.yml -e "force_backup=true"
+# =============================================================================
+
+- name: Push Configurations via NAPALM
+  hosts: all
+  gather_facts: false
+  connection: local
+  
+  vars:
+    commit: "{{ napalm.commit_changes | default(false) }}"
+    force_backup: false
+    replace_config: "{{ napalm.replace_config | default(true) }}"
+    get_diffs: "{{ napalm.get_diffs | default(true) }}"
+    napalm_timeout: "{{ napalm.timeout | default(120) }}"
+    
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Display deployment mode
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          NAPALM Config Push
+          ============================================
+          Device: {{ inventory_hostname }}
+          Commit Mode: {{ 'LIVE COMMIT' if commit | bool else 'DRY-RUN (diff only)' }}
+          Replace Config: {{ replace_config }}
+          ============================================
+      run_once: true
+
+    - name: Ensure output directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ config_output_dir }}"
+        - "{{ network_state_dir }}"
+        - "{{ network_state_dir }}/{{ inventory_hostname }}"
+      delegate_to: localhost
+
+    - name: Check if config file exists
+      ansible.builtin.stat:
+        path: "{{ config_output_dir }}/{{ inventory_hostname }}.cfg"
+      register: config_file
+      delegate_to: localhost
+
+    - name: Fail if config file not found
+      ansible.builtin.fail:
+        msg: "Config file not found: {{ config_output_dir }}/{{ inventory_hostname }}.cfg - Run generate_configs.yml first"
+      when: not config_file.stat.exists
+
+    - name: Push configuration using NAPALM
+      block:
+        - name: NAPALM - Install configuration
+          community.general.napalm_install_config:
+            hostname: "{{ ansible_host }}"
+            username: "{{ ansible_user }}"
+            password: "{{ ansible_password }}"
+            dev_os: eos
+            config_file: "{{ config_output_dir }}/{{ inventory_hostname }}.cfg"
+            diff_file: "{{ network_state_dir }}/{{ inventory_hostname }}/latest.diff"
+            archive_file: "{{ network_state_dir }}/{{ inventory_hostname }}/archive.cfg"
+            replace_config: "{{ replace_config }}"
+            commit_changes: "{{ commit | bool }}"
+            get_diffs: "{{ get_diffs }}"
+            timeout: "{{ napalm_timeout }}"
+          register: napalm_result
+
+        - name: Display configuration diff
+          ansible.builtin.debug:
+            msg: |
+              ============================================
+              Configuration Diff for {{ inventory_hostname }}
+              ============================================
+              {{ napalm_result.msg | default('No changes detected') }}
+              ============================================
+          when: napalm_result.changed
+
+        - name: Display no changes message
+          ansible.builtin.debug:
+            msg: "No configuration changes for {{ inventory_hostname }}"
+          when: not napalm_result.changed
+
+      rescue:
+        - name: Display NAPALM error
+          ansible.builtin.debug:
+            msg: |
+              ============================================
+              ERROR: NAPALM config push failed
+              Device: {{ inventory_hostname }}
+              Error: {{ ansible_failed_result.msg | default('Unknown error') }}
+              ============================================
+
+        - name: Fail with error
+          ansible.builtin.fail:
+            msg: "NAPALM config push failed for {{ inventory_hostname }}"
+
+    - name: Backup running config after commit
+      block:
+        - name: Get running config
+          arista.eos.eos_command:
+            commands:
+              - show running-config
+          register: running_config
+          when: (commit | bool and napalm_result.changed) or force_backup | bool
+
+        - name: Save running config backup
+          ansible.builtin.copy:
+            content: "{{ running_config.stdout[0] }}"
+            dest: "{{ network_state_dir }}/{{ inventory_hostname }}/running.cfg"
+            mode: '0644'
+          delegate_to: localhost
+          when: running_config is defined and running_config.stdout is defined
+
+        - name: Save to device flash
+          arista.eos.eos_config:
+            save_when: always
+          when: (commit | bool and napalm_result.changed)
+
+      when: (commit | bool and napalm_result.changed) or force_backup | bool
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          Push Summary for {{ inventory_hostname }}
+          ============================================
+          Changes Detected: {{ napalm_result.changed | default(false) }}
+          Committed: {{ commit | bool }}
+          Config Saved: {{ ((commit | bool and napalm_result.changed) or force_backup | bool) }}
+          ============================================
+

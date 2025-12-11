@@ -1,0 +1,9 @@
+! # START logging.j2
+{% for host in log_hosts %}
+logging vrf {{ mgmt_vrf | default('MGMT') }} host {{ host.ip }}{% if host.port is defined %} {{ host.port }}{% endif %}
+
+{% endfor %}
+logging vrf {{ mgmt_vrf | default('MGMT') }} source-interface Management0
+!
+! # END logging.j2
+

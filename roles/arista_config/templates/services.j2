@@ -1,0 +1,32 @@
+!
+! ============================================================================
+! Services Configuration
+! ============================================================================
+!
+{% set mgmt = netbox_config_context.management | default(fabric_defaults) %}
+{% set mgmt_vrf = mgmt.vrf | default(fabric_defaults.management_vrf) %}
+!
+! Local user for lab access
+username admin privilege 15 role network-admin secret admin
+!
+! AAA Configuration
+aaa authorization exec default local
+!
+! SSH Configuration
+management ssh
+   idle-timeout 60
+   no shutdown
+   vrf {{ mgmt_vrf }}
+      no shutdown
+!
+! eAPI Configuration
+management api http-commands
+   no shutdown
+   vrf {{ mgmt_vrf }}
+      no shutdown
+!
+! Logging
+logging buffered 10000
+logging console informational
+logging vrf {{ mgmt_vrf }} host {{ clab_mgmt_gateway }}
+

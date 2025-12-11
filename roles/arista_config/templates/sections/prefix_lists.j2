@@ -1,0 +1,18 @@
+! # START prefix_lists.j2
+{% for list_name, list_rules in prefix_lists.items() %}
+ip prefix-list {{ list_name }}
+{% for rule in list_rules %}
+   seq {{ loop.index * 10 }} {{ rule }}
+{% endfor %}
+{% endfor %}
+!
+{% if dynamic_prefix_lists is defined %}
+{% for list_name, list_rules in dynamic_prefix_lists.items() %}
+dynamic prefix-list {{ list_name }}
+   match-map {{ list_rules.match_map }}
+   prefix-list ipv4 {{ list_rules.ipv4_advertise_list }}
+{% endfor %}
+!
+{% endif %}
+! # END prefix_lists.j2
+

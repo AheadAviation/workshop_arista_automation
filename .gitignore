@@ -1,0 +1,76 @@
+# =============================================================================
+# NetBox Arista ContainerLab Demo - Git Ignore
+# =============================================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.eggs/
+*.egg-info/
+*.egg
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment files (keep .env.example, ignore actual .env)
+.env
+*.env.local
+
+# Output files (keep .gitkeep)
+output/configs/*.cfg
+output/reports/*.json
+output/reports/*.html
+output/network_state/*.cfg
+output/clab/
+
+# ContainerLab
+clab-*/
+*.clab.yml
+!clab/topology.clab.yml.j2
+topology-docker.clab.yml
+
+# Ansible
+*.retry
+.ansible/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Docker cEOS image (too large for git)
+docker/*.tar
+docker/*.tar.xz
+docker/*.tar.gz
+
+# Secrets
+secrets/
+*.pem
+*.key
+
+# Backup files
+*.bak
+*.backup
+

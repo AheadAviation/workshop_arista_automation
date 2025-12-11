@@ -1,0 +1,5 @@
+! # START varp.j2
+ip virtual-router mac-address {{ varp_mac | default(fabric_defaults.anycast_gateway_mac | default('00:1c:73:00:00:99')) }}
+!
+! # END varp.j2
+

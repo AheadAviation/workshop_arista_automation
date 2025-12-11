@@ -1,0 +1,30 @@
+! # START stp.j2
+{% if stp_mode is defined %}
+{% if stp_mode == 'mstp' %}
+spanning-tree mode mstp
+spanning-tree priority {{ stp_priority | default('24576') }}
+{% elif stp_mode == 'none' %}
+spanning-tree mode none
+{% elif stp_mode == 'rapid-pvst' %}
+spanning-tree mode rapid-pvst
+spanning-tree vlan-id 1-4094 priority {{ stp_priority | default('24576') }}
+{% else %}
+! stp_mode: {{ stp_mode }} invalid - Only rapid-pvst, mstp, or none supported
+! defaulting to 'rapid-pvst'
+spanning-tree mode rapid-pvst
+spanning-tree vlan-id 1-4094 priority {{ stp_priority | default('24576') }}
+{% endif %}
+{% else %}
+! Default STP settings for EVPN fabric
+spanning-tree mode mstp
+{% if device_role == 'spine' %}
+spanning-tree priority 4096
+{% elif device_role == 'leaf' %}
+spanning-tree priority {{ stp_priority | default('24576') }}
+{% else %}
+spanning-tree priority 32768
+{% endif %}
+{% endif %}
+!
+! # END stp.j2
+

@@ -1,0 +1,79 @@
+---
+# =============================================================================
+# Full Pipeline: NetBox to ContainerLab
+# =============================================================================
+# This playbook orchestrates the complete workflow:
+# 1. Generate configurations from NetBox
+# 2. Create ContainerLab topology
+# 3. Deploy the lab
+#
+# Usage:
+#   ansible-playbook playbooks/full_pipeline.yml
+#
+# =============================================================================
+
+- name: Full Pipeline Execution
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  
+  tasks:
+    - name: Display pipeline info
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          Full Pipeline: NetBox -> Arista -> ContainerLab
+          ============================================
+          This playbook will:
+          1. Pull device data from NetBox
+          2. Generate Arista EOS configurations
+          3. Create ContainerLab topology file
+          4. Deploy the ContainerLab environment
+          ============================================
+
+
+# Step 1: Generate configurations
+- name: Generate Configurations
+  ansible.builtin.import_playbook: generate_configs.yml
+
+
+# Step 2 & 3: Deploy ContainerLab
+- name: Deploy ContainerLab
+  ansible.builtin.import_playbook: deploy_lab.yml
+
+
+# Final summary
+- name: Pipeline Complete
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  
+  tasks:
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          Pipeline Execution Complete
+          ============================================
+          
+          Your lab is now deployed!
+          
+          Device Access:
+          - spine-01: ssh admin@172.20.20.11
+          - spine-02: ssh admin@172.20.20.12
+          - leaf-01:  ssh admin@172.20.20.21
+          - leaf-02:  ssh admin@172.20.20.22
+          - leaf-03:  ssh admin@172.20.20.23
+          - leaf-04:  ssh admin@172.20.20.24
+          
+          Password: admin
+          
+          NetBox UI: http://localhost:8000
+          
+          To push changes after modifying NetBox:
+            ansible-playbook playbooks/push_configs.yml
+          
+          To destroy the lab:
+            ansible-playbook playbooks/destroy_lab.yml
+          ============================================
+

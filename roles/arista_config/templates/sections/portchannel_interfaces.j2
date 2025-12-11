@@ -1,0 +1,42 @@
+! # START portchannel_interfaces.j2
+{% set channel_id = interface.name | lower | replace('port-channel', '') %}
+interface {{ interface.name }}
+   description {{ interface.description | default('') }}
+{% if interface.ip is defined %}
+   no switchport
+   mtu {{ interface.mtu | default(fabric_defaults.underlay_mtu | default(9214)) }}
+{% if vrf is defined and vrf != 'default' %}
+   vrf {{ vrf }}
+{% endif %}
+   ip address {{ interface.ip }}
+{% else %}
+   switchport
+{% if interface.switchport_mode == 'trunk' %}
+   switchport mode trunk
+   switchport trunk allowed vlan {{ interface.allowed_vlans }}
+{% if interface.native_vlan is defined %}
+   switchport trunk native vlan {{ interface.native_vlan }}
+{% endif %}
+{% if interface.trunk_group is defined %}
+   switchport trunk group {{ interface.trunk_group }}
+{% endif %}
+{% else %}
+   switchport access vlan {{ interface.allowed_vlans | default(1) }}
+{% endif %}
+{% endif %}
+{% if interface.mlag_id is defined %}
+   mlag {{ interface.mlag_id }}
+{% endif %}
+   no shutdown
+!
+{% if interface.member_interfaces is defined %}
+{% for member in interface.member_interfaces %}
+interface {{ member.name | arista_interface_name }}
+   description {{ interface.description | default('') }}
+   channel-group {{ channel_id }} mode {{ member.channel_mode | default('active') }}
+   no shutdown
+!
+{% endfor %}
+{% endif %}
+! # END portchannel_interfaces.j2
+

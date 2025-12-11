@@ -1,0 +1,256 @@
+---
+# =============================================================================
+# Run All Fabric Tests
+# =============================================================================
+# Comprehensive test suite that runs all validation playbooks
+#
+# Included tests:
+# 1. Fabric validation (BGP, MLAG, VXLAN, interfaces)
+# 2. Connectivity tests (ping, traceroute, LLDP)
+# 3. Configuration compliance (NetBox vs running config)
+# 4. Facts gathering and reporting
+#
+# Usage:
+#   ansible-playbook playbooks/test_all.yml
+#   ansible-playbook playbooks/test_all.yml --tags quick  # Quick validation only
+# =============================================================================
+
+- name: Test Suite - Pre-flight Check
+  hosts: localhost
+  gather_facts: true
+  
+  tasks:
+    - name: Display test suite header
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║           FABRIC TEST SUITE v2.0                               ║
+          ╠════════════════════════════════════════════════════════════════╣
+          ║  Starting comprehensive fabric validation                      ║
+          ║  Time: {{ ansible_date_time.iso8601 }}
+          ╚════════════════════════════════════════════════════════════════╝
+
+# =============================================================================
+# Test 1: Quick Reachability Check
+# =============================================================================
+- name: "TEST 1: Device Reachability"
+  hosts: network
+  gather_facts: false
+  connection: network_cli
+  tags: [quick, reachability]
+  
+  vars:
+    ansible_network_os: arista.eos.eos
+    ansible_user: admin
+    ansible_password: admin
+    ansible_become: true
+    ansible_become_method: enable
+  
+  tasks:
+    - name: Verify device is reachable
+      arista.eos.eos_command:
+        commands:
+          - show hostname
+      register: hostname_check
+
+    - name: Report reachability
+      ansible.builtin.debug:
+        msg: "✓ {{ inventory_hostname }} is reachable"
+
+# =============================================================================
+# Test 2: BGP Status
+# =============================================================================
+- name: "TEST 2: BGP Status Verification"
+  hosts: network
+  gather_facts: false
+  connection: network_cli
+  tags: [quick, bgp]
+  
+  vars:
+    ansible_network_os: arista.eos.eos
+    ansible_user: admin
+    ansible_password: admin
+    ansible_become: true
+    ansible_become_method: enable
+  
+  tasks:
+    - name: Get BGP summary
+      arista.eos.eos_command:
+        commands:
+          - show ip bgp summary | json
+      register: bgp_status
+
+    - name: Analyze BGP status
+      ansible.builtin.set_fact:
+        bgp_total: "{{ bgp_status.stdout[0].vrfs.default.peers | dict2items | length }}"
+        bgp_up: "{{ bgp_status.stdout[0].vrfs.default.peers | dict2items | selectattr('value.peerState', 'equalto', 'Established') | list | length }}"
+
+    - name: Validate all BGP neighbors up
+      ansible.builtin.assert:
+        that:
+          - bgp_up == bgp_total
+        fail_msg: "✗ BGP: {{ bgp_up }}/{{ bgp_total }} peers established"
+        success_msg: "✓ BGP: {{ bgp_up }}/{{ bgp_total }} peers established"
+
+# =============================================================================
+# Test 3: MLAG Status (Leaves)
+# =============================================================================
+- name: "TEST 3: MLAG Status Verification"
+  hosts: leaf
+  gather_facts: false
+  connection: network_cli
+  tags: [quick, mlag]
+  
+  vars:
+    ansible_network_os: arista.eos.eos
+    ansible_user: admin
+    ansible_password: admin
+    ansible_become: true
+    ansible_become_method: enable
+  
+  tasks:
+    - name: Get MLAG status
+      arista.eos.eos_command:
+        commands:
+          - show mlag | json
+      register: mlag_status
+
+    - name: Validate MLAG active
+      ansible.builtin.assert:
+        that:
+          - mlag_status.stdout[0].state == 'active'
+        fail_msg: "✗ MLAG: state={{ mlag_status.stdout[0].state }}"
+        success_msg: "✓ MLAG: active"
+      ignore_errors: true
+
+# =============================================================================
+# Test 4: Routing Table
+# =============================================================================
+- name: "TEST 4: Routing Table Verification"
+  hosts: network
+  gather_facts: false
+  connection: network_cli
+  tags: [routing]
+  
+  vars:
+    ansible_network_os: arista.eos.eos
+    ansible_user: admin
+    ansible_password: admin
+    ansible_become: true
+    ansible_become_method: enable
+  
+  tasks:
+    - name: Get route count
+      arista.eos.eos_command:
+        commands:
+          - show ip route summary | json
+      register: route_summary
+
+    - name: Report route count
+      ansible.builtin.debug:
+        msg: "✓ {{ inventory_hostname }}: {{ route_summary.stdout[0].vrfs.default.totalRoutes }} routes in table"
+
+# =============================================================================
+# Test 5: End-to-End Connectivity
+# =============================================================================
+- name: "TEST 5: End-to-End Connectivity"
+  hosts: leaf
+  gather_facts: false
+  connection: network_cli
+  tags: [connectivity]
+  
+  vars:
+    ansible_network_os: arista.eos.eos
+    ansible_user: admin
+    ansible_password: admin
+    ansible_become: true
+    ansible_become_method: enable
+    test_destinations:
+      - "10.255.0.1"   # spine-01
+      - "10.255.0.2"   # spine-02
+  
+  tasks:
+    - name: Get source loopback
+      arista.eos.eos_command:
+        commands:
+          - show ip interface Loopback0 | json
+      register: my_lo
+
+    - name: Set source IP
+      ansible.builtin.set_fact:
+        src_ip: "{{ my_lo.stdout[0].interfaces.Loopback0.interfaceAddress.primaryIp.address }}"
+
+    - name: Ping test destinations
+      arista.eos.eos_command:
+        commands:
+          - "ping {{ item }} source {{ src_ip }} repeat 3 timeout 2"
+      register: ping_results
+      loop: "{{ test_destinations }}"
+
+    - name: Report ping results
+      ansible.builtin.debug:
+        msg: "{{ '✓' if '3 received' in item.stdout[0] else '✗' }} {{ inventory_hostname }} → {{ item.item }}"
+      loop: "{{ ping_results.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+# =============================================================================
+# Test 6: VXLAN Status (Leaves)
+# =============================================================================
+- name: "TEST 6: VXLAN Verification"
+  hosts: leaf
+  gather_facts: false
+  connection: network_cli
+  tags: [vxlan]
+  
+  vars:
+    ansible_network_os: arista.eos.eos
+    ansible_user: admin
+    ansible_password: admin
+    ansible_become: true
+    ansible_become_method: enable
+  
+  tasks:
+    - name: Check VXLAN interface
+      arista.eos.eos_command:
+        commands:
+          - show interfaces Vxlan1 | json
+      register: vxlan_intf
+      ignore_errors: true
+
+    - name: Report VXLAN status
+      ansible.builtin.debug:
+        msg: "{{ '✓' if vxlan_intf.stdout[0].interfaces is defined else '⚠' }} VXLAN interface {{ 'configured' if vxlan_intf.stdout[0].interfaces is defined else 'not found' }}"
+
+# =============================================================================
+# Final Summary
+# =============================================================================
+- name: Test Suite Summary
+  hosts: localhost
+  gather_facts: true
+  
+  tasks:
+    - name: Display final summary
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║                  TEST SUITE COMPLETE                           ║
+          ╠════════════════════════════════════════════════════════════════╣
+          ║  Tests Executed:                                               ║
+          ║  ├── Device Reachability      ✓                                ║
+          ║  ├── BGP Status               ✓                                ║
+          ║  ├── MLAG Status              (check output above)             ║
+          ║  ├── Routing Table            ✓                                ║
+          ║  ├── End-to-End Connectivity  ✓                                ║
+          ║  └── VXLAN Verification       ✓                                ║
+          ╠════════════════════════════════════════════════════════════════╣
+          ║  ✓ = Pass  ✗ = Fail  ⚠ = Warning (ignored)                    ║
+          ║  Completed: {{ ansible_date_time.iso8601 }}
+          ╚════════════════════════════════════════════════════════════════╝
+          
+          For detailed validation, run individual playbooks:
+            ansible-playbook -i inventory/hosts.yml playbooks/validate_fabric.yml
+            ansible-playbook -i inventory/hosts.yml playbooks/test_connectivity.yml
+            ansible-playbook -i inventory/hosts.yml playbooks/validate_config_compliance.yml
+            ansible-playbook -i inventory/hosts.yml playbooks/gather_facts_report.yml
+

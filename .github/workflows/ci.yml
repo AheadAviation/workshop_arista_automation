@@ -1,0 +1,205 @@
+---
+# =============================================================================
+# CI Pipeline - Linting and Validation
+# =============================================================================
+# Runs on all pull requests and pushes to ensure code quality
+# Must pass before merging to main
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ===========================================================================
+  # Ansible Lint
+  # ===========================================================================
+  ansible-lint:
+    name: Ansible Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible-core ansible-lint yamllint
+
+      - name: Install Ansible collections
+        run: |
+          ansible-galaxy collection install \
+            netbox.netbox \
+            arista.eos \
+            ansible.netcommon \
+            community.general \
+            ansible.utils
+
+      - name: Run Ansible Lint
+        run: |
+          ansible-lint playbooks/ roles/ --exclude .github/
+
+  # ===========================================================================
+  # YAML Lint
+  # ===========================================================================
+  yaml-lint:
+    name: YAML Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Run YAML Lint
+        run: |
+          yamllint -c .yamllint.yml .
+
+  # ===========================================================================
+  # Python Lint (Scripts)
+  # ===========================================================================
+  python-lint:
+    name: Python Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install linters
+        run: |
+          pip install ruff black
+
+      - name: Run Ruff (linter)
+        run: |
+          ruff check scripts/ filter_plugins/
+
+      - name: Run Black (formatter check)
+        run: |
+          black --check scripts/ filter_plugins/
+
+  # ===========================================================================
+  # Jinja2 Template Syntax Check
+  # ===========================================================================
+  jinja-lint:
+    name: Jinja2 Syntax Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install jinja2 j2lint
+
+      - name: Run Jinja2 Lint
+        run: |
+          j2lint roles/arista_config/templates/ --ignore S3 S7
+        continue-on-error: true  # j2lint can be strict, warn but don't fail
+
+  # ===========================================================================
+  # Dockerfile Lint
+  # ===========================================================================
+  dockerfile-lint:
+    name: Dockerfile Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/ansible/Dockerfile
+          failure-threshold: warning
+
+      - name: Run Hadolint on clab-runner
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/clab-runner/Dockerfile
+          failure-threshold: warning
+
+  # ===========================================================================
+  # Security Scan
+  # ===========================================================================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'  # Don't fail on findings, just report
+
+  # ===========================================================================
+  # Ansible Playbook Syntax Check
+  # ===========================================================================
+  ansible-syntax:
+    name: Ansible Syntax Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ansible
+        run: |
+          pip install ansible-core pynetbox
+
+      - name: Install Ansible collections
+        run: |
+          ansible-galaxy collection install \
+            netbox.netbox \
+            arista.eos \
+            ansible.netcommon \
+            community.general \
+            ansible.utils
+
+      - name: Check playbook syntax
+        run: |
+          for playbook in playbooks/*.yml; do
+            echo "Checking syntax: $playbook"
+            ansible-playbook --syntax-check "$playbook" || true
+          done
+

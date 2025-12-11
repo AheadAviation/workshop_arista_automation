@@ -1,0 +1,19 @@
+! # START route_maps.j2
+{% for map_name, map_rules in route_maps.items() %}
+{% for rule in map_rules %}
+route-map {{ map_name }} {{ rule.action }} {{ loop.index * 10 }}
+{% if rule.match is defined %}
+{% for match_rule in rule.match %}
+   match {{ match_rule }}
+{% endfor %}
+{% endif %}
+{% if rule.set is defined %}
+{% for set_rule in rule.set %}
+   set {{ set_rule }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+!
+{% endfor %}
+! # END route_maps.j2
+

@@ -1,0 +1,182 @@
+---
+# =============================================================================
+# End-to-End Connectivity Test Playbook
+# =============================================================================
+# Tests network connectivity between all devices in the fabric
+#
+# Tests performed:
+# 1. Ping from each leaf to all spine loopbacks
+# 2. Ping from each leaf to all other leaf loopbacks
+# 3. Traceroute verification (ECMP paths)
+# 4. LLDP neighbor verification
+#
+# Usage:
+#   ansible-playbook playbooks/test_connectivity.yml
+#   ansible-playbook playbooks/test_connectivity.yml --tags ping
+#   ansible-playbook playbooks/test_connectivity.yml --tags lldp
+# =============================================================================
+
+- name: Connectivity Test - Ping All Loopbacks
+  hosts: network
+  gather_facts: false
+  connection: network_cli
+  
+  vars:
+    ansible_network_os: arista.eos.eos
+    ansible_user: admin
+    ansible_password: admin
+    ansible_become: true
+    ansible_become_method: enable
+    # All loopback IPs in the fabric
+    spine_loopbacks:
+      - {name: spine-01, ip: "10.255.0.1"}
+      - {name: spine-02, ip: "10.255.0.2"}
+    
+    leaf_loopbacks:
+      - {name: leaf-01, ip: "10.255.0.11"}
+      - {name: leaf-02, ip: "10.255.0.12"}
+      - {name: leaf-03, ip: "10.255.0.13"}
+      - {name: leaf-04, ip: "10.255.0.14"}
+    
+    all_loopbacks: "{{ spine_loopbacks + leaf_loopbacks }}"
+    
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    # =========================================================================
+    # LLDP Neighbor Verification
+    # =========================================================================
+    - name: "LLDP Neighbor Check"
+      tags: [lldp, neighbors]
+      block:
+        - name: Get LLDP neighbors
+          arista.eos.eos_command:
+            commands:
+              - show lldp neighbors
+          register: lldp_neighbors
+
+        - name: Display LLDP neighbors
+          ansible.builtin.debug:
+            msg: |
+              ============================================
+              LLDP Neighbors for {{ inventory_hostname }}
+              ============================================
+              {{ lldp_neighbors.stdout[0] }}
+
+        - name: Get LLDP neighbor count
+          arista.eos.eos_command:
+            commands:
+              - show lldp neighbors | json
+          register: lldp_json
+
+        - name: Validate LLDP neighbors exist
+          ansible.builtin.set_fact:
+            lldp_count: "{{ lldp_json.stdout[0].lldpNeighbors | length }}"
+
+        - name: Report LLDP status
+          ansible.builtin.debug:
+            msg: "{{ '✓ ' ~ lldp_count ~ ' LLDP neighbors detected' if lldp_count | int > 0 else '⚠ No LLDP neighbors found' }}"
+
+    # =========================================================================
+    # Ping Tests - Spine Loopbacks
+    # =========================================================================
+    - name: "Ping Test - Spine Loopbacks"
+      tags: [ping, spine]
+      block:
+        - name: Get my loopback IP
+          arista.eos.eos_command:
+            commands:
+              - show ip interface Loopback0 | json
+          register: my_loopback
+
+        - name: Parse my loopback
+          ansible.builtin.set_fact:
+            source_ip: "{{ my_loopback.stdout[0].interfaces.Loopback0.interfaceAddress.primaryIp.address }}"
+
+        - name: Ping spine loopbacks
+          arista.eos.eos_command:
+            commands:
+              - "ping {{ item.ip }} source {{ source_ip }} repeat 3 timeout 2"
+          register: ping_spines
+          loop: "{{ spine_loopbacks }}"
+          loop_control:
+            label: "{{ item.name }} ({{ item.ip }})"
+          when: item.ip != source_ip
+
+        - name: Report spine ping results
+          ansible.builtin.debug:
+            msg: "{{ '✓' if '3 received' in item.stdout[0] or '2 received' in item.stdout[0] else '✗' }} Ping to {{ item.item.name }} ({{ item.item.ip }}): {{ '100%' if '3 received' in item.stdout[0] else 'partial/failed' }}"
+          loop: "{{ ping_spines.results }}"
+          loop_control:
+            label: "{{ item.item.name }}"
+          when: item.stdout is defined
+
+    # =========================================================================
+    # Ping Tests - Leaf Loopbacks
+    # =========================================================================
+    - name: "Ping Test - Leaf Loopbacks"
+      tags: [ping, leaf]
+      block:
+        - name: Ping leaf loopbacks
+          arista.eos.eos_command:
+            commands:
+              - "ping {{ item.ip }} source {{ source_ip }} repeat 3 timeout 2"
+          register: ping_leaves
+          loop: "{{ leaf_loopbacks }}"
+          loop_control:
+            label: "{{ item.name }} ({{ item.ip }})"
+          when: item.ip != source_ip
+
+        - name: Report leaf ping results
+          ansible.builtin.debug:
+            msg: "{{ '✓' if '3 received' in item.stdout[0] or '2 received' in item.stdout[0] else '✗' }} Ping to {{ item.item.name }} ({{ item.item.ip }}): {{ '100%' if '3 received' in item.stdout[0] else 'partial/failed' }}"
+          loop: "{{ ping_leaves.results }}"
+          loop_control:
+            label: "{{ item.item.name }}"
+          when: item.stdout is defined
+
+    # =========================================================================
+    # Traceroute Test (Verify ECMP)
+    # =========================================================================
+    - name: "Traceroute Test - Verify Paths"
+      tags: [traceroute, ecmp]
+      when: "'leaf' in group_names"
+      block:
+        - name: Determine target (pick a leaf that's not in same MLAG pair)
+          ansible.builtin.set_fact:
+            trace_target: "{{ '10.255.0.13' if inventory_hostname in ['leaf-01', 'leaf-02'] else '10.255.0.11' }}"
+
+        - name: Run traceroute to target
+          arista.eos.eos_command:
+            commands:
+              - "traceroute {{ trace_target }} source {{ source_ip }}"
+          register: traceroute_result
+
+        - name: Display traceroute
+          ansible.builtin.debug:
+            msg: |
+              Traceroute from {{ inventory_hostname }} to {{ trace_target }}:
+              {{ traceroute_result.stdout[0] }}
+
+# =============================================================================
+# Connectivity Matrix Summary
+# =============================================================================
+- name: Connectivity Test Summary
+  hosts: localhost
+  gather_facts: false
+  
+  tasks:
+    - name: Display connectivity summary
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║           CONNECTIVITY TEST COMPLETE                           ║
+          ╠════════════════════════════════════════════════════════════════╣
+          ║  Expected Results:                                             ║
+          ║  • Each device should reach all spine loopbacks                ║
+          ║  • Each device should reach all leaf loopbacks                 ║
+          ║  • Traceroutes should show 2 hops (via spine)                  ║
+          ║  • LLDP should show 2+ neighbors per device                    ║
+          ╚════════════════════════════════════════════════════════════════╝
+

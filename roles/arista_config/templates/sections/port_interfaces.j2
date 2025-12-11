@@ -1,0 +1,56 @@
+! # START port_interfaces.j2
+interface {{ interface.name | arista_interface_name }}
+   description {{ interface.description | default('') }}
+{% if interface.portfast is defined and interface.portfast %}
+   spanning-tree portfast
+{% endif %}
+{% if interface.speed is defined %}
+   speed {{ interface.speed }}
+{% endif %}
+{% if interface.ip is defined %}
+{# L3 port configuration #}
+{% if 'loopback' not in interface.name | lower %}
+   no switchport
+   mtu {{ interface.mtu | default(fabric_defaults.underlay_mtu | default(9214)) }}
+{% endif %}
+{% if vrf is defined and vrf != 'default' %}
+   vrf {{ vrf }}
+{% endif %}
+   ip address {{ interface.ip }}
+{% else %}
+{# L2 port configuration #}
+   switchport
+{% if interface.switchport_mode == 'trunk' %}
+   switchport mode {{ interface.switchport_mode }}
+   switchport trunk allowed vlan {{ interface.allowed_vlans }}
+{% if interface.native_vlan is defined %}
+   switchport trunk native vlan {{ interface.native_vlan }}
+{% endif %}
+{% else %}
+   switchport access vlan {{ interface.allowed_vlans | default(1) }}
+{% endif %}
+{% endif %}
+{% if interface.no_lldp is defined %}
+{% if interface.no_lldp == 'transmit' %}
+   no lldp transmit
+{% elif interface.no_lldp == 'receive' %}
+   no lldp receive
+{% else %}
+   no lldp transmit
+   no lldp receive
+{% endif %}
+{% endif %}
+{% if interface.acl_in is defined %}
+   ip access-group {{ interface.acl_in }} in
+{% endif %}
+{% if interface.acl_out is defined %}
+   ip access-group {{ interface.acl_out }} out
+{% endif %}
+{% if interface.shutdown is defined and interface.shutdown %}
+   shutdown
+{% else %}
+   no shutdown
+{% endif %}
+!
+! # END port_interfaces.j2
+

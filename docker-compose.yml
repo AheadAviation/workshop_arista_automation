@@ -1,0 +1,192 @@
+---
+# NetBox + Arista ContainerLab Demo
+# Docker Compose for NetBox Stack + Ansible Automation
+#
+# Usage:
+#   docker compose up -d                    # Start NetBox stack
+#   docker compose logs -f netbox           # View NetBox logs
+#   docker compose run --rm ansible <cmd>   # Run Ansible commands
+#   docker compose down -v                  # Remove everything
+#
+# Ansible Examples:
+#   docker compose run --rm ansible python scripts/full_import.py
+#   docker compose run --rm ansible ansible-playbook playbooks/generate_configs.yml
+#   docker compose run --rm ansible ansible-inventory --list
+
+services:
+  # ==========================================================================
+  # NetBox Application
+  # ==========================================================================
+  netbox:
+    image: netboxcommunity/netbox:v4.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Database - using correct env var names for netbox-docker
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: netbox
+      DB_USER: netbox
+      DB_PASSWORD: netbox
+      DB_WAIT_DEBUG: 1
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DATABASE: 0
+      REDIS_CACHE_HOST: redis
+      REDIS_CACHE_PORT: 6379
+      REDIS_CACHE_DATABASE: 1
+      REDIS_SSL: "false"
+      REDIS_CACHE_SSL: "false"
+      # NetBox settings
+      SECRET_KEY: changeme_this_is_not_secure_for_demo_only_1234567890
+      ALLOWED_HOSTS: "*"
+      SUPERUSER_NAME: admin
+      SUPERUSER_EMAIL: admin@example.com
+      SUPERUSER_PASSWORD: admin
+      SUPERUSER_API_TOKEN: 0123456789abcdef0123456789abcdef01234567
+      SKIP_SUPERUSER: "false"
+      # Skip CSRF for local dev
+      CSRF_TRUSTED_ORIGINS: http://localhost:8888 http://127.0.0.1:8888
+      CORS_ORIGIN_ALLOW_ALL: "true"
+      # Login settings
+      LOGIN_REQUIRED: "false"
+    ports:
+      - "8888:8080"
+    volumes:
+      - netbox-media:/opt/netbox/netbox/media
+      - netbox-reports:/opt/netbox/netbox/reports
+      - netbox-scripts:/opt/netbox/netbox/scripts
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    restart: unless-stopped
+
+  # ==========================================================================
+  # NetBox Background Worker
+  # ==========================================================================
+  netbox-worker:
+    image: netboxcommunity/netbox:v4.1
+    depends_on:
+      netbox:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: netbox
+      DB_USER: netbox
+      DB_PASSWORD: netbox
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DATABASE: 0
+      REDIS_CACHE_HOST: redis
+      REDIS_CACHE_PORT: 6379
+      REDIS_CACHE_DATABASE: 1
+      REDIS_SSL: "false"
+      REDIS_CACHE_SSL: "false"
+      SECRET_KEY: changeme_this_is_not_secure_for_demo_only_1234567890
+    command: /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py rqworker
+    restart: unless-stopped
+
+  # ==========================================================================
+  # PostgreSQL Database
+  # ==========================================================================
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: netbox
+      POSTGRES_PASSWORD: netbox
+      POSTGRES_DB: netbox
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netbox"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Redis Cache
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Ansible Automation Container
+  # ==========================================================================
+  ansible:
+    build:
+      context: .
+      dockerfile: docker/ansible/Dockerfile
+    depends_on:
+      netbox:
+        condition: service_healthy
+    environment:
+      NETBOX_URL: http://netbox:8080
+      NETBOX_TOKEN: 0123456789abcdef0123456789abcdef01234567
+      ANSIBLE_HOST_KEY_CHECKING: "False"
+      ANSIBLE_PYTHON_INTERPRETER: auto_silent
+      CEOS_IMAGE: ceos:4.32.0F
+    volumes:
+      - ./scripts:/ansible/scripts:ro
+      - ./playbooks:/ansible/playbooks:ro
+      - ./roles:/ansible/roles:ro
+      - ./inventory:/ansible/inventory:ro
+      - ./group_vars:/ansible/group_vars:ro
+      - ./netbox_data:/ansible/netbox_data:ro
+      - ./clab:/ansible/clab:rw
+      - ./output:/ansible/output:rw
+    working_dir: /ansible
+    stdin_open: true
+    tty: true
+
+  # ==========================================================================
+  # ContainerLab Runner (Privileged container for full networking)
+  # ==========================================================================
+  clab:
+    build:
+      context: .
+      dockerfile: docker/clab-runner/Dockerfile
+    privileged: true
+    pid: host
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./clab:/clab/topology:rw
+      - ./output/configs:/clab/configs:ro
+    working_dir: /clab
+    stdin_open: true
+    tty: true
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  netbox-media:
+  netbox-reports:
+  netbox-scripts:
+  postgres-data:
+  redis-data:
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  default:
+    name: netbox-lab-network

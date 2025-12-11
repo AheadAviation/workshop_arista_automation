@@ -1,0 +1,153 @@
+---
+# =============================================================================
+# Arista Config Generation Role - Main Tasks
+# =============================================================================
+# This role generates Arista EOS configurations from NetBox data
+# Uses modular Jinja2 templates ported from mceos for production-grade configs
+# =============================================================================
+
+- name: Set device role fact
+  ansible.builtin.set_fact:
+    device_role: "{{ device_roles[0] | default('unknown') }}"
+  when: device_roles is defined and device_roles | length > 0
+
+- name: Set device role fact (fallback)
+  ansible.builtin.set_fact:
+    device_role: "unknown"
+  when: device_roles is not defined or device_roles | length == 0
+
+- name: Extract custom fields
+  ansible.builtin.set_fact:
+    bgp_asn: "{{ custom_fields.bgp_asn | default(65000) }}"
+    router_id: "{{ custom_fields.router_id | default('') }}"
+    vtep_ip: "{{ custom_fields.vtep_ip | default('') }}"
+    switch_id: "{{ custom_fields.switch_id | default(1) }}"
+    mlag_index: "{{ custom_fields.mlag_index | default(0) }}"
+    mlag_name: "{{ custom_fields.mlag_name | default('') }}"
+  when: custom_fields is defined
+
+- name: Display device information
+  ansible.builtin.debug:
+    msg: |
+      Device: {{ inventory_hostname }}
+      Role: {{ device_role | default('unknown') }}
+      BGP ASN: {{ bgp_asn | default('not set') }}
+      Router ID: {{ router_id | default('not set') }}
+      VTEP IP: {{ vtep_ip | default('not set') }}
+      Switch ID: {{ switch_id | default('not set') }}
+      MLAG Index: {{ mlag_index | default('not set') }}
+
+- name: Ensure output directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0777'
+  delegate_to: localhost
+  run_once: true
+  ignore_errors: true
+  loop:
+    - "{{ config_output_dir }}"
+    - "{{ output_dir }}/network_state"
+
+- name: Gather interface data from NetBox
+  ansible.builtin.set_fact:
+    device_interfaces: "{{ interfaces | default([]) }}"
+
+- name: Get config context from NetBox
+  ansible.builtin.set_fact:
+    netbox_config_context: "{{ config_context | default({}) }}"
+
+- name: Extract management settings from config context
+  ansible.builtin.set_fact:
+    mgmt_vrf: "{{ config_context.management.vrf | default('MGMT') }}"
+    mgmt_gateway: "{{ config_context.management.gateway | default(clab_mgmt_gateway) }}"
+    ntp: "{{ config_context.ntp | default({'servers': fabric_defaults.ntp_servers, 'vrf': 'MGMT', 'interface': 'Management0'}) }}"
+    dns: "{{ config_context.dns | default({'servers': fabric_defaults.dns_servers}) }}"
+  when: config_context is defined
+
+- name: Set default management settings
+  ansible.builtin.set_fact:
+    mgmt_vrf: "MGMT"
+    mgmt_gateway: "{{ clab_mgmt_gateway }}"
+    ntp:
+      servers: "{{ fabric_defaults.ntp_servers }}"
+      vrf: "MGMT"
+      interface: "Management0"
+    dns:
+      servers: "{{ fabric_defaults.dns_servers }}"
+  when: config_context is not defined
+
+- name: Extract tenants from config context
+  ansible.builtin.set_fact:
+    tenants: "{{ config_context.tenants | default([]) }}"
+  when: config_context is defined and config_context.tenants is defined
+
+- name: Extract MLAG domain from config context
+  ansible.builtin.set_fact:
+    mlag_domain: "{{ config_context.mlag_domain | default(omit) }}"
+  when: config_context is defined and config_context.mlag_domain is defined
+
+- name: Extract EVPN peers from config context
+  ansible.builtin.set_fact:
+    evpn_peers: "{{ config_context.evpn_peers | default([]) }}"
+  when: config_context is defined
+
+- name: Initialize interface IP mapping
+  ansible.builtin.set_fact:
+    interface_ips: {}
+    interfaces_info: {}
+
+- name: Build interface IP mapping from interfaces
+  ansible.builtin.set_fact:
+    interface_ips: >-
+      {{
+        interface_ips | combine({
+          item.name: item.ip_addresses[0].address
+        })
+      }}
+    interfaces_info: >-
+      {{
+        interfaces_info | combine({
+          item.name: {
+            'description': item.description | default(''),
+            'enabled': item.enabled | default(true),
+            'type': item.type.value | default('other')
+          }
+        })
+      }}
+  loop: "{{ device_interfaces }}"
+  when: 
+    - item.ip_addresses is defined
+    - item.ip_addresses | length > 0
+  loop_control:
+    label: "{{ item.name | default('unknown') }}"
+
+- name: Display interface IPs found
+  ansible.builtin.debug:
+    msg: "Interface IPs: {{ interface_ips }}"
+    verbosity: 1
+
+- name: Initialize BGP neighbors list
+  ansible.builtin.set_fact:
+    bgp_neighbors: []
+
+# Use Python ipaddress for proper peer IP calculation
+- name: Calculate BGP neighbors using Python
+  ansible.builtin.set_fact:
+    bgp_neighbors: "{{ lookup('template', 'calculate_bgp_neighbors.j2') | from_yaml }}"
+
+- name: Display BGP neighbors
+  ansible.builtin.debug:
+    msg: "BGP Neighbors: {{ bgp_neighbors }}"
+    verbosity: 1
+
+- name: Generate device configuration using modular templates
+  ansible.builtin.template:
+    src: sections/base.j2
+    dest: "{{ config_output_dir }}/{{ inventory_hostname }}.cfg"
+    mode: '0644'
+  delegate_to: localhost
+
+- name: Display generated config path
+  ansible.builtin.debug:
+    msg: "Config generated: {{ config_output_dir }}/{{ inventory_hostname }}.cfg"

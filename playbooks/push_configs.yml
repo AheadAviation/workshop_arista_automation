@@ -1,0 +1,102 @@
+---
+# =============================================================================
+# Push Configurations to Running Lab Devices
+# =============================================================================
+# This playbook:
+# 1. Regenerates configurations from NetBox (to pick up any changes)
+# 2. Pushes the updated configurations to running ContainerLab devices
+#
+# This is the "Day 2" workflow - make changes in NetBox, then push to devices.
+#
+# Usage:
+#   ansible-playbook playbooks/push_configs.yml
+#   ansible-playbook playbooks/push_configs.yml --limit spine-01
+#   ansible-playbook playbooks/push_configs.yml --check  # Dry run
+#
+# =============================================================================
+
+- name: Generate Fresh Configurations from NetBox
+  hosts: all
+  gather_facts: false
+  
+  vars:
+    config_output_dir: "{{ playbook_dir }}/../output/configs"
+  
+  tasks:
+    - name: Display update info
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          Day 2 Configuration Update
+          ============================================
+          Regenerating configs from NetBox and pushing to devices
+          Target hosts: {{ ansible_play_hosts | length }}
+          ============================================
+      run_once: true
+
+    - name: Include arista_config role to regenerate configs
+      ansible.builtin.include_role:
+        name: arista_config
+
+
+- name: Push Configurations to Devices
+  hosts: all
+  gather_facts: false
+  
+  vars:
+    config_output_dir: "{{ playbook_dir }}/../output/configs"
+  
+  tasks:
+    - name: Read generated configuration
+      ansible.builtin.slurp:
+        src: "{{ config_output_dir }}/{{ inventory_hostname }}.cfg"
+      register: device_config
+      delegate_to: localhost
+
+    - name: Display configuration diff preview
+      ansible.builtin.debug:
+        msg: |
+          Configuration to be pushed to {{ inventory_hostname }}:
+          {{ device_config.content | b64decode | truncate(500) }}...
+      when: ansible_check_mode
+
+    - name: Push configuration to device
+      arista.eos.eos_config:
+        src: "{{ config_output_dir }}/{{ inventory_hostname }}.cfg"
+        replace: config
+        save_when: modified
+      register: config_push
+      when: not ansible_check_mode
+
+    - name: Display push result
+      ansible.builtin.debug:
+        msg: |
+          {{ inventory_hostname }}: 
+          {% if config_push.changed | default(false) %}
+          Configuration CHANGED and applied
+          {% else %}
+          Configuration unchanged (already in sync)
+          {% endif %}
+      when: config_push is defined
+
+
+- name: Push Summary
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  
+  tasks:
+    - name: Display completion summary
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          Configuration Push Complete
+          ============================================
+          All configurations have been regenerated from NetBox
+          and pushed to the running devices.
+          
+          To verify changes:
+            ssh admin@<device-mgmt-ip>
+            show running-config
+          ============================================
+

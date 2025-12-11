@@ -1,0 +1,84 @@
+---
+# =============================================================================
+# YAML Lint Configuration
+# =============================================================================
+
+extends: default
+
+rules:
+  # Line length - allow longer lines for Ansible
+  line-length:
+    max: 200
+    level: warning
+
+  # Allow truthy values like 'yes', 'no' (common in Ansible)
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no']
+    check-keys: false
+
+  # Indentation - 2 spaces
+  indentation:
+    spaces: 2
+    indent-sequences: true
+    check-multi-line-strings: false
+
+  # Comments
+  comments:
+    require-starting-space: true
+    ignore-shebangs: true
+    min-spaces-from-content: 1
+
+  # Document markers
+  document-start:
+    present: true
+    level: warning
+
+  # Empty lines
+  empty-lines:
+    max: 2
+    max-start: 0
+    max-end: 1
+
+  # Braces
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+
+  # Brackets
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 0
+
+  # Colons
+  colons:
+    max-spaces-before: 0
+    max-spaces-after: 1
+
+  # Commas
+  commas:
+    max-spaces-before: 0
+    min-spaces-after: 1
+    max-spaces-after: 1
+
+  # Hyphens
+  hyphens:
+    max-spaces-after: 1
+
+  # Key duplicates
+  key-duplicates: enable
+
+  # New line at end
+  new-line-at-end-of-file: enable
+
+  # Trailing spaces
+  trailing-spaces: enable
+
+ignore: |
+  .git/
+  .github/
+  output/
+  clab/
+  venv/
+  .venv/
+  node_modules/
+

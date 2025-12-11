@@ -1,0 +1,127 @@
+---
+# =============================================================================
+# Out-of-Band Change Detection Playbook
+# =============================================================================
+# This playbook detects unauthorized/out-of-band changes to device configs
+# by comparing current running config to the last known good config.
+#
+# Based on mceos device_oob_check.yml
+#
+# Usage:
+#   # Check for OOB changes (fails on detection)
+#   ansible-playbook playbooks/oob_check.yml
+#
+#   # Check but don't fail
+#   ansible-playbook playbooks/oob_check.yml -e "fail_on_oob=false"
+#
+#   # Check specific devices
+#   ansible-playbook playbooks/oob_check.yml --limit spine-01,leaf-01
+# =============================================================================
+
+- name: Out-of-Band Change Detection
+  hosts: all
+  gather_facts: false
+  connection: network_cli
+  
+  vars:
+    fail_on_oob: true
+    
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Display check mode
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          OOB Change Detection
+          ============================================
+          Device: {{ inventory_hostname }}
+          Fail on OOB: {{ fail_on_oob }}
+          ============================================
+      run_once: true
+
+    - name: Ensure network state directory exists
+      ansible.builtin.file:
+        path: "{{ network_state_dir }}/{{ inventory_hostname }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+
+    - name: Check if baseline config exists
+      ansible.builtin.stat:
+        path: "{{ network_state_dir }}/{{ inventory_hostname }}/running.cfg"
+      register: baseline_file
+      delegate_to: localhost
+
+    - name: Skip if no baseline exists
+      ansible.builtin.debug:
+        msg: "No baseline config found for {{ inventory_hostname }} - skipping OOB check (run backup first)"
+      when: not baseline_file.stat.exists
+
+    - name: Perform OOB check
+      block:
+        - name: Grab current running config
+          arista.eos.eos_config:
+            backup: true
+            backup_options:
+              dir_path: "{{ network_state_dir }}/{{ inventory_hostname }}"
+              filename: "current.cfg"
+          register: current_backup
+          changed_when: false
+
+        - name: Compare current config vs baseline
+          ansible.builtin.command:
+            cmd: "diff -u -I '^\\s*!' {{ network_state_dir }}/{{ inventory_hostname }}/running.cfg {{ network_state_dir }}/{{ inventory_hostname }}/current.cfg"
+          register: diff_result
+          failed_when: false
+          changed_when: false
+          delegate_to: localhost
+
+        - name: Display config diff if changes detected
+          ansible.builtin.debug:
+            msg: |
+              ============================================
+              OOB CHANGES DETECTED: {{ inventory_hostname }}
+              ============================================
+              {{ diff_result.stdout }}
+              ============================================
+          when: diff_result.rc != 0
+
+        - name: Save OOB diff to file
+          ansible.builtin.copy:
+            content: |
+              OOB Change Report for {{ inventory_hostname }}
+              Generated: {{ ansible_date_time.iso8601 | default('unknown') }}
+              
+              {{ diff_result.stdout }}
+            dest: "{{ network_state_dir }}/{{ inventory_hostname }}/oob_changes.log"
+            mode: '0644'
+          delegate_to: localhost
+          when: diff_result.rc != 0
+
+        - name: Report no OOB changes
+          ansible.builtin.debug:
+            msg: "✓ No OOB changes detected for {{ inventory_hostname }}"
+          when: diff_result.rc == 0
+
+        - name: Fail on OOB change if configured
+          ansible.builtin.fail:
+            msg: "OOB change detected on {{ inventory_hostname }} - review diff above"
+          when: 
+            - diff_result.rc != 0
+            - fail_on_oob | bool
+
+      when: baseline_file.stat.exists
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          OOB Check Complete
+          ============================================
+          Device: {{ inventory_hostname }}
+          Baseline Exists: {{ baseline_file.stat.exists }}
+          Changes Detected: {{ diff_result.rc | default(0) != 0 if baseline_file.stat.exists else 'N/A' }}
+          ============================================
+

@@ -1,0 +1,143 @@
+! # START evpn_overlay.j2
+!
+! EVPN/VXLAN Overlay Configuration
+!
+ip dhcp relay information option
+!
+{% for tenant in tenants %}
+! ============================================================================
+! Tenant: {{ tenant.name }} (VNI Base: {{ tenant.id }})
+! ============================================================================
+vrf instance {{ tenant.name }}
+ip routing vrf {{ tenant.name }}
+!
+! Tenant VRF Loopback for source-NAT
+interface Loopback{{ 10 + tenant.id }}
+   description {{ tenant.name }} tenant VRF Loopback
+   vrf {{ tenant.name }}
+   ip address {{ tenant.loopback_network | default('172.30.' ~ tenant.id ~ '.0/24') | ansible.utils.ipmath(switch_id | default(1)) }}/32
+!
+ip address virtual source-nat vrf {{ tenant.name }} address {{ tenant.loopback_network | default('172.30.' ~ tenant.id ~ '.0/24') | ansible.utils.ipmath(switch_id | default(1)) }}
+!
+{% if tenant.l2_segments is defined %}
+! L2 VLANs for tenant {{ tenant.name }}
+{% for segment in tenant.l2_segments %}
+vlan {{ segment.vlan_number }}
+   name {{ segment.vlan_name }}
+!
+{% if segment.vlan_ip is defined %}
+interface Vlan{{ segment.vlan_number }}
+{% if segment.description is defined %}
+   description {{ segment.description }}
+{% else %}
+   description {{ segment.vlan_name }}
+{% endif %}
+   no shutdown
+   vrf {{ tenant.name }}
+   ip address virtual {{ segment.vlan_ip }}
+{% if segment.secondary_ips is defined %}
+{% for secondary_ip in segment.secondary_ips %}
+   ip address virtual {{ secondary_ip }} secondary
+{% endfor %}
+{% endif %}
+{% if segment.mtu is defined %}
+   mtu {{ segment.mtu }}
+{% else %}
+   mtu {{ fabric_defaults.underlay_mtu | default(9214) }}
+{% endif %}
+{% if segment.dhcp_helpers is defined %}
+{% for address in segment.dhcp_helpers %}
+   ip helper-address {{ address }} source-interface Loopback{{ 10 + tenant.id }}
+{% endfor %}
+{% endif %}
+!
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+!
+! MLAG iBGP peering VLANs for overlay VRFs
+{% if mlag_domain is defined %}
+! Underlay iBGP VLAN
+vlan {{ mlag_domain.ibgp_vlan | default(4080) }}
+   name IBGP_UNDERLAY
+   trunk group MLAG
+!
+no spanning-tree vlan-id {{ mlag_domain.ibgp_vlan | default(4080) }}
+!
+interface Vlan{{ mlag_domain.ibgp_vlan | default(4080) }}
+   description Underlay iBGP peering to MLAG peer
+   ip address {{ mlag_domain.underlay_peering_network | default('100.64.0.0/31') | ansible.utils.ipaddr(mlag_index | default(0)) }}
+   mtu {{ fabric_defaults.underlay_mtu | default(9214) }}
+!
+{% for tenant in tenants %}
+vlan {{ 4080 + tenant.id }}
+   name IBGP_{{ tenant.name }}
+   trunk group MLAG
+!
+no spanning-tree vlan-id {{ 4080 + tenant.id }}
+!
+interface Vlan{{ 4080 + tenant.id }}
+   description IBGP_{{ tenant.name }}
+   vrf {{ tenant.name }}
+   mtu {{ fabric_defaults.underlay_mtu | default(9214) }}
+   ip address {{ tenant.ibgp_network | default('100.64.' ~ tenant.id ~ '.0/31') | ansible.utils.ipaddr(mlag_index | default(0)) }}
+!
+{% endfor %}
+{% endif %}
+!
+! VXLAN Interface Configuration
+interface Vxlan1
+{% if mlag_domain is defined %}
+   vxlan virtual-router encapsulation mac-address mlag-system-id
+{% endif %}
+   vxlan source-interface Loopback1
+   vxlan udp-port 4789
+{% for tenant in tenants %}
+{% if tenant.l2_segments is defined %}
+   vxlan vrf {{ tenant.name }} vni {{ tenant.id }}
+{% for segment in tenant.l2_segments %}
+   vxlan vlan {{ segment.vlan_number }} vni {{ base_l2_vni | default(10000) + segment.vlan_number }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+!
+! BGP EVPN Configuration
+router bgp {{ bgp_asn }}
+!
+{% for tenant in tenants %}
+{% if tenant.l2_segments is defined %}
+! EVPN for tenant {{ tenant.name }}
+{% for segment in tenant.l2_segments %}
+   vlan {{ segment.vlan_number }}
+      rd {{ router_id }}:{{ segment.vlan_number + base_l2_vni | default(10000) }}
+      route-target both {{ bgp_asn }}:{{ segment.vlan_number + base_l2_vni | default(10000) }}
+      redistribute learned
+{% endfor %}
+{% endif %}
+{% endfor %}
+!
+! VRF BGP configuration for each tenant
+{% for tenant in tenants %}
+   vrf {{ tenant.name }}
+      router-id {{ tenant.loopback_network | default('172.30.' ~ tenant.id ~ '.0/24') | ansible.utils.ipmath(switch_id | default(1)) }}
+      rd {{ router_id }}:{{ tenant.id }}
+{% if tenant.l2_segments is defined %}
+      route-target import evpn {{ bgp_asn }}:{{ tenant.id }}
+      route-target export evpn {{ bgp_asn }}:{{ tenant.id }}
+{% endif %}
+{% if mlag_domain is defined %}
+{% if mlag_index | default(0) == 0 %}
+      neighbor {{ tenant.ibgp_network | default('100.64.' ~ tenant.id ~ '.0/31') | ansible.utils.ipaddr(1) | ansible.utils.ipaddr('address') }} peer group MLAG_PEER
+      neighbor {{ tenant.ibgp_network | default('100.64.' ~ tenant.id ~ '.0/31') | ansible.utils.ipaddr(1) | ansible.utils.ipaddr('address') }} description IBGP {{ tenant.name }}
+{% else %}
+      neighbor {{ tenant.ibgp_network | default('100.64.' ~ tenant.id ~ '.0/31') | ansible.utils.ipaddr(0) | ansible.utils.ipaddr('address') }} peer group MLAG_PEER
+      neighbor {{ tenant.ibgp_network | default('100.64.' ~ tenant.id ~ '.0/31') | ansible.utils.ipaddr(0) | ansible.utils.ipaddr('address') }} description IBGP {{ tenant.name }}
+{% endif %}
+{% endif %}
+      redistribute connected
+      redistribute static
+{% endfor %}
+!
+! # END evpn_overlay.j2
+

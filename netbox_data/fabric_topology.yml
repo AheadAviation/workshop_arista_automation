@@ -1,0 +1,343 @@
+# =============================================================================
+# Fabric Topology Definition
+# 2-Spine, 4-Leaf EVPN/VXLAN Reference Architecture for ContainerLab
+# Enhanced with mceos-style MLAG pairs and EVPN overlay configuration
+# =============================================================================
+
+# =============================================================================
+# Fabric Metadata
+# =============================================================================
+fabric:
+  name: dc1-fabric
+  site: DC1
+  description: "2-spine, 4-leaf EVPN/VXLAN fabric with MLAG pairs for ContainerLab"
+  environment: lab
+
+  design:
+    underlay: ebgp
+    overlay: evpn
+    mlag: true
+    anycast_gateway: true
+
+# =============================================================================
+# IP Addressing Plan
+# =============================================================================
+addressing:
+  loopbacks:
+    router_id:
+      network: "10.255.0.0/24"
+      prefix_length: 32
+    vtep:
+      network: "10.255.1.0/24"
+      prefix_length: 32
+
+  p2p_links:
+    network: "10.0.0.0/24"
+    prefix_length: 31
+
+  management:
+    network: "172.30.30.0/24"
+    gateway: "172.30.30.1"
+
+  # MLAG specific addressing
+  mlag:
+    peerlink_network: "169.254.1.0/30"
+    underlay_ibgp_network: "100.64.0.0/24"
+
+# =============================================================================
+# ASN Allocation (eBGP design with MLAG iBGP)
+# =============================================================================
+asn_allocation:
+  spine_asn: 65000
+  # MLAG pairs share the same ASN
+  mlag_pair_1_asn: 65001  # leaf-01, leaf-02
+  mlag_pair_2_asn: 65002  # leaf-03, leaf-04
+
+# =============================================================================
+# Spine Switches
+# =============================================================================
+spines:
+  - name: spine-01
+    role: spine
+    asn: 65000
+    router_id: "10.255.0.1"
+    management_ip: "172.30.30.11/24"
+    switch_id: 1
+    custom_fields:
+      bgp_asn: 65000
+      router_id: "10.255.0.1"
+      switch_id: 1
+      fabric_name: "dc1-fabric"
+      device_type_model: "cEOS-lab"
+    tags:
+      - containerlab
+      - evpn-fabric
+      - spine
+    interfaces:
+      loopback0: "10.255.0.1/32"
+      # Connections to leaves
+      ethernet1: {peer: leaf-01, peer_intf: ethernet1, ip: "10.0.0.0/31"}
+      ethernet2: {peer: leaf-02, peer_intf: ethernet1, ip: "10.0.0.2/31"}
+      ethernet3: {peer: leaf-03, peer_intf: ethernet1, ip: "10.0.0.4/31"}
+      ethernet4: {peer: leaf-04, peer_intf: ethernet1, ip: "10.0.0.6/31"}
+
+  - name: spine-02
+    role: spine
+    asn: 65000
+    router_id: "10.255.0.2"
+    management_ip: "172.30.30.12/24"
+    switch_id: 2
+    custom_fields:
+      bgp_asn: 65000
+      router_id: "10.255.0.2"
+      switch_id: 2
+      fabric_name: "dc1-fabric"
+      device_type_model: "cEOS-lab"
+    tags:
+      - containerlab
+      - evpn-fabric
+      - spine
+    interfaces:
+      loopback0: "10.255.0.2/32"
+      ethernet1: {peer: leaf-01, peer_intf: ethernet2, ip: "10.0.0.8/31"}
+      ethernet2: {peer: leaf-02, peer_intf: ethernet2, ip: "10.0.0.10/31"}
+      ethernet3: {peer: leaf-03, peer_intf: ethernet2, ip: "10.0.0.12/31"}
+      ethernet4: {peer: leaf-04, peer_intf: ethernet2, ip: "10.0.0.14/31"}
+
+# =============================================================================
+# Leaf Switches (Organized as MLAG Pairs)
+# =============================================================================
+leaves:
+  # =========================================================================
+  # MLAG Pair 1: leaf-01 (primary) + leaf-02 (secondary)
+  # Shared ASN: 65001, Shared VTEP: 10.255.1.1
+  # =========================================================================
+  - name: leaf-01
+    role: leaf
+    asn: 65001
+    router_id: "10.255.0.11"
+    vtep_ip: "10.255.1.1"  # Shared VTEP with MLAG peer
+    management_ip: "172.30.30.21/24"
+    switch_id: 11
+    custom_fields:
+      bgp_asn: 65001
+      router_id: "10.255.0.11"
+      vtep_ip: "10.255.1.1"
+      switch_id: 11
+      mlag_index: 0  # Primary
+      mlag_name: "MLAG-PAIR-1"
+      mlag_domain_id: 1
+      mlag_peer: "leaf-02"
+      fabric_name: "dc1-fabric"
+      device_type_model: "cEOS-lab"
+    tags:
+      - containerlab
+      - evpn-fabric
+      - leaf
+      - mlag-pair-1
+    mlag:
+      domain_id: 1
+      peer: leaf-02
+      index: 0  # Primary
+      peerlink_vlan: 4094
+      peerlink_channel: 2000
+      peerlink_network: "169.254.1.0/31"
+      underlay_peering_network: "100.64.0.0/31"
+      ibgp_vlan: 4080
+    interfaces:
+      loopback0: "10.255.0.11/32"
+      loopback1: "10.255.1.1/32"  # Shared VTEP
+      ethernet1: {peer: spine-01, peer_intf: ethernet1, ip: "10.0.0.1/31"}
+      ethernet2: {peer: spine-02, peer_intf: ethernet1, ip: "10.0.0.9/31"}
+      ethernet3: {peer: leaf-02, peer_intf: ethernet3, role: mlag-peer}
+      ethernet4: {peer: leaf-02, peer_intf: ethernet4, role: mlag-peer}
+
+  - name: leaf-02
+    role: leaf
+    asn: 65001  # Same ASN as MLAG peer
+    router_id: "10.255.0.12"
+    vtep_ip: "10.255.1.1"  # Shared VTEP with MLAG peer
+    management_ip: "172.30.30.22/24"
+    switch_id: 12
+    custom_fields:
+      bgp_asn: 65001
+      router_id: "10.255.0.12"
+      vtep_ip: "10.255.1.1"
+      switch_id: 12
+      mlag_index: 1  # Secondary
+      mlag_name: "MLAG-PAIR-1"
+      mlag_domain_id: 1
+      mlag_peer: "leaf-01"
+      fabric_name: "dc1-fabric"
+      device_type_model: "cEOS-lab"
+    tags:
+      - containerlab
+      - evpn-fabric
+      - leaf
+      - mlag-pair-1
+    mlag:
+      domain_id: 1
+      peer: leaf-01
+      index: 1  # Secondary
+      peerlink_vlan: 4094
+      peerlink_channel: 2000
+      peerlink_network: "169.254.1.0/31"
+      underlay_peering_network: "100.64.0.0/31"
+      ibgp_vlan: 4080
+    interfaces:
+      loopback0: "10.255.0.12/32"
+      loopback1: "10.255.1.1/32"  # Shared VTEP
+      ethernet1: {peer: spine-01, peer_intf: ethernet2, ip: "10.0.0.3/31"}
+      ethernet2: {peer: spine-02, peer_intf: ethernet2, ip: "10.0.0.11/31"}
+      ethernet3: {peer: leaf-01, peer_intf: ethernet3, role: mlag-peer}
+      ethernet4: {peer: leaf-01, peer_intf: ethernet4, role: mlag-peer}
+
+  # =========================================================================
+  # MLAG Pair 2: leaf-03 (primary) + leaf-04 (secondary)
+  # Shared ASN: 65002, Shared VTEP: 10.255.1.2
+  # =========================================================================
+  - name: leaf-03
+    role: leaf
+    asn: 65002
+    router_id: "10.255.0.13"
+    vtep_ip: "10.255.1.2"  # Shared VTEP with MLAG peer
+    management_ip: "172.30.30.23/24"
+    switch_id: 13
+    custom_fields:
+      bgp_asn: 65002
+      router_id: "10.255.0.13"
+      vtep_ip: "10.255.1.2"
+      switch_id: 13
+      mlag_index: 0  # Primary
+      mlag_name: "MLAG-PAIR-2"
+      mlag_domain_id: 2
+      mlag_peer: "leaf-04"
+      fabric_name: "dc1-fabric"
+      device_type_model: "cEOS-lab"
+    tags:
+      - containerlab
+      - evpn-fabric
+      - leaf
+      - mlag-pair-2
+    mlag:
+      domain_id: 2
+      peer: leaf-04
+      index: 0  # Primary
+      peerlink_vlan: 4094
+      peerlink_channel: 2000
+      peerlink_network: "169.254.1.2/31"
+      underlay_peering_network: "100.64.0.2/31"
+      ibgp_vlan: 4080
+    interfaces:
+      loopback0: "10.255.0.13/32"
+      loopback1: "10.255.1.2/32"  # Shared VTEP
+      ethernet1: {peer: spine-01, peer_intf: ethernet3, ip: "10.0.0.5/31"}
+      ethernet2: {peer: spine-02, peer_intf: ethernet3, ip: "10.0.0.13/31"}
+      ethernet3: {peer: leaf-04, peer_intf: ethernet3, role: mlag-peer}
+      ethernet4: {peer: leaf-04, peer_intf: ethernet4, role: mlag-peer}
+
+  - name: leaf-04
+    role: leaf
+    asn: 65002  # Same ASN as MLAG peer
+    router_id: "10.255.0.14"
+    vtep_ip: "10.255.1.2"  # Shared VTEP with MLAG peer
+    management_ip: "172.30.30.24/24"
+    switch_id: 14
+    custom_fields:
+      bgp_asn: 65002
+      router_id: "10.255.0.14"
+      vtep_ip: "10.255.1.2"
+      switch_id: 14
+      mlag_index: 1  # Secondary
+      mlag_name: "MLAG-PAIR-2"
+      mlag_domain_id: 2
+      mlag_peer: "leaf-03"
+      fabric_name: "dc1-fabric"
+      device_type_model: "cEOS-lab"
+    tags:
+      - containerlab
+      - evpn-fabric
+      - leaf
+      - mlag-pair-2
+    mlag:
+      domain_id: 2
+      peer: leaf-03
+      index: 1  # Secondary
+      peerlink_vlan: 4094
+      peerlink_channel: 2000
+      peerlink_network: "169.254.1.2/31"
+      underlay_peering_network: "100.64.0.2/31"
+      ibgp_vlan: 4080
+    interfaces:
+      loopback0: "10.255.0.14/32"
+      loopback1: "10.255.1.2/32"  # Shared VTEP
+      ethernet1: {peer: spine-01, peer_intf: ethernet4, ip: "10.0.0.7/31"}
+      ethernet2: {peer: spine-02, peer_intf: ethernet4, ip: "10.0.0.15/31"}
+      ethernet3: {peer: leaf-03, peer_intf: ethernet3, role: mlag-peer}
+      ethernet4: {peer: leaf-03, peer_intf: ethernet4, role: mlag-peer}
+
+# =============================================================================
+# EVPN Tenant Configuration
+# =============================================================================
+tenants:
+  - name: CORE
+    id: 1
+    description: "Core infrastructure tenant"
+    loopback_network: "172.30.1.0/24"
+    ibgp_network: "100.64.1.0/31"
+    l2_segments:
+      - vlan_number: 100
+        vlan_name: SERVERS
+        vlan_ip: "10.100.100.1/24"
+        mtu: 9000
+        description: "Server VLAN"
+      - vlan_number: 110
+        vlan_name: MGMT_SERVERS
+        vlan_ip: "10.100.110.1/24"
+        mtu: 1500
+        description: "Management VLAN"
+      - vlan_number: 120
+        vlan_name: STORAGE
+        vlan_ip: "10.100.120.1/24"
+        mtu: 9000
+        description: "Storage VLAN"
+      - vlan_number: 130
+        vlan_name: BACKUP
+        vlan_ip: "10.100.130.1/24"
+        mtu: 9000
+        description: "Backup VLAN"
+      - vlan_number: 140
+        vlan_name: VOIP
+        vlan_ip: "10.100.140.1/24"
+        mtu: 1500
+        description: "VoIP VLAN"
+
+# =============================================================================
+# Topology Diagram (ASCII)
+# =============================================================================
+#
+#                    ┌─────────────────────────────────────┐
+#                    │           DC1 Fabric                │
+#                    │                                     │
+#                    │    ┌──────────┐  ┌──────────┐      │
+#                    │    │ spine-01 │  │ spine-02 │      │
+#                    │    │  AS65000 │  │  AS65000 │      │
+#                    │    └────┬─────┘  └────┬─────┘      │
+#                    │         │             │            │
+#                    │    ┌────┴─────────────┴────┐       │
+#                    │    │      Full Mesh        │       │
+#                    │    │   (8 x /31 links)     │       │
+#                    │    └────┬─────────────┬────┘       │
+#                    │         │             │            │
+#                    │  ┌──────┴───┐   ┌─────┴──────┐    │
+#                    │  │MLAG Pair1│   │MLAG Pair 2 │    │
+#                    │  │  AS65001 │   │   AS65002  │    │
+#                    │  │VTEP:.1.1 │   │ VTEP:.1.2  │    │
+#                    │  │┌───┐┌───┐│   │┌───┐┌───┐  │    │
+#                    │  ││L01││L02││   ││L03││L04│  │    │
+#                    │  │└─┬─┘└─┬─┘│   │└─┬─┘└─┬─┘  │    │
+#                    │  │  └──┬──┘ │   │  └──┬──┘   │    │
+#                    │  │ PeerLink │   │ PeerLink   │    │
+#                    │  └──────────┘   └────────────┘    │
+#                    └─────────────────────────────────────┘
+#

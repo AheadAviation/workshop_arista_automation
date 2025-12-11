@@ -1,0 +1,47 @@
+! # START bgp_peer_groups.j2
+{% for group_name, group_data in bgp_peer_groups.items() %}
+{% if group_name == 'MLAG_PEER' and mlag_domain is not defined %}
+! Skipping MLAG_PEER BGP group - no MLAG domain defined
+{% else %}
+   neighbor {{ group_name }} peer group
+{% if group_data.bfd is defined and group_data.bfd %}
+   neighbor {{ group_name }} bfd
+{% endif %}
+{% if group_data.next_hop is defined %}
+{% if group_data.next_hop == 'self' %}
+   neighbor {{ group_name }} next-hop-self
+{% elif group_data.next_hop == 'unchanged' %}
+   neighbor {{ group_name }} next-hop-unchanged
+{% endif %}
+{% endif %}
+{% if group_data.remote_as is defined %}
+   neighbor {{ group_name }} remote-as {{ group_data.remote_as }}
+{% endif %}
+{% if group_data.password is defined %}
+   neighbor {{ group_name }} password {{ group_data.password }}
+{% endif %}
+{% if group_data.update_source is defined %}
+   neighbor {{ group_name }} update-source {{ group_data.update_source }}
+{% endif %}
+{% if group_data.multihop is defined %}
+   neighbor {{ group_name }} ebgp-multihop {{ group_data.multihop }}
+{% endif %}
+   neighbor {{ group_name }} maximum-routes {{ group_data.max_routes | default(12000) }}
+   neighbor {{ group_name }} send-community standard extended
+{% if group_data.routemap_out is defined %}
+   neighbor {{ group_name }} route-map {{ group_data.routemap_out }} out
+{% endif %}
+{% if group_data.routemap_in is defined %}
+   neighbor {{ group_name }} route-map {{ group_data.routemap_in }} in
+{% endif %}
+{% if group_data.local_as is defined %}
+   neighbor {{ group_name }} local-as {{ group_data.local_as }} no-prepend replace-as
+{% endif %}
+{% if group_data.timers is defined %}
+   neighbor {{ group_name }} timers {{ group_data.timers.keepalive }} {{ group_data.timers.hold }}
+{% endif %}
+{% endif %}
+{% endfor %}
+!
+! # END bgp_peer_groups.j2
+

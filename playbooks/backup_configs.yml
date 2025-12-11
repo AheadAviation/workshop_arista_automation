@@ -1,0 +1,108 @@
+---
+# =============================================================================
+# Backup Running Configurations
+# =============================================================================
+# This playbook creates backups of running configs from all devices.
+# These backups serve as baselines for OOB change detection.
+#
+# Usage:
+#   # Backup all devices
+#   ansible-playbook playbooks/backup_configs.yml
+#
+#   # Backup specific devices
+#   ansible-playbook playbooks/backup_configs.yml --limit spine-01,leaf-01
+# =============================================================================
+
+- name: Backup Running Configurations
+  hosts: all
+  gather_facts: false
+  connection: network_cli
+  
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Display backup info
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          Configuration Backup
+          ============================================
+          Device: {{ inventory_hostname }}
+          Backup Path: {{ network_state_dir }}/{{ inventory_hostname }}/
+          ============================================
+      run_once: true
+
+    - name: Ensure backup directories exist
+      ansible.builtin.file:
+        path: "{{ network_state_dir }}/{{ inventory_hostname }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+
+    - name: Get running configuration
+      arista.eos.eos_command:
+        commands:
+          - show running-config
+      register: running_config
+
+    - name: Get device version info
+      arista.eos.eos_command:
+        commands:
+          - show version
+      register: version_info
+
+    - name: Save running config as baseline
+      ansible.builtin.copy:
+        content: "{{ running_config.stdout[0] }}"
+        dest: "{{ network_state_dir }}/{{ inventory_hostname }}/running.cfg"
+        mode: '0644'
+      delegate_to: localhost
+
+    - name: Save timestamped backup
+      ansible.builtin.copy:
+        content: |
+          ! Backup of {{ inventory_hostname }}
+          ! Timestamp: {{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ')) }}
+          !
+          {{ running_config.stdout[0] }}
+        dest: "{{ network_state_dir }}/{{ inventory_hostname }}/backup_{{ lookup('pipe', 'date +%Y%m%d_%H%M%S') }}.cfg"
+        mode: '0644'
+      delegate_to: localhost
+
+    - name: Save version info
+      ansible.builtin.copy:
+        content: "{{ version_info.stdout[0] }}"
+        dest: "{{ network_state_dir }}/{{ inventory_hostname }}/version.txt"
+        mode: '0644'
+      delegate_to: localhost
+
+    - name: Display backup complete
+      ansible.builtin.debug:
+        msg: "✓ Backup complete for {{ inventory_hostname }}"
+
+- name: Backup Summary
+  hosts: localhost
+  gather_facts: false
+  
+  vars_files:
+    - ../group_vars/all.yml
+    
+  tasks:
+    - name: List all backups
+      ansible.builtin.find:
+        paths: "{{ network_state_dir }}"
+        patterns: "running.cfg"
+        recurse: true
+      register: backup_files
+
+    - name: Display summary
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          Backup Summary
+          ============================================
+          Total Backups: {{ backup_files.files | length }}
+          Backup Location: {{ network_state_dir }}
+          ============================================
+

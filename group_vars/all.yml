@@ -1,0 +1,142 @@
+# =============================================================================
+# Ansible Group Variables - All Hosts
+# =============================================================================
+# These variables apply to all hosts in the inventory
+# Enhanced with mceos-style settings and NAPALM integration
+# =============================================================================
+
+# =============================================================================
+# Connection Settings
+# =============================================================================
+ansible_network_os: arista.eos.eos
+ansible_connection: ansible.netcommon.network_cli
+ansible_become: true
+ansible_become_method: enable
+ansible_user: admin
+ansible_password: admin
+
+# =============================================================================
+# NetBox API Settings
+# =============================================================================
+netbox_url: "{{ lookup('env', 'NETBOX_URL') | default('http://localhost:8000', true) }}"
+netbox_token: "{{ lookup('env', 'NETBOX_TOKEN') }}"
+
+# =============================================================================
+# Output Directories
+# =============================================================================
+output_dir: "{{ playbook_dir }}/../output"
+config_output_dir: "{{ output_dir }}/configs"
+clab_output_dir: "{{ output_dir }}/clab"
+network_state_dir: "{{ output_dir }}/network_state"
+
+# =============================================================================
+# ContainerLab Settings
+# =============================================================================
+clab_topology_name: netbox-arista-lab
+clab_topology_file: "{{ playbook_dir }}/../clab/topology.clab.yml"
+
+# cEOS image name (must be imported to Docker)
+ceos_image: "{{ lookup('env', 'CEOS_IMAGE') | default('ceos:4.32.0F', true) }}"
+
+# Management network (using 172.30.30.0/24 to avoid Docker network conflicts)
+clab_mgmt_network: "172.30.30.0/24"
+clab_mgmt_gateway: "172.30.30.1"
+
+# =============================================================================
+# Fabric Defaults (mceos-style)
+# =============================================================================
+fabric_defaults:
+  underlay_mtu: 9214
+  management_vrf: MGMT
+  anycast_gateway_mac: "00:1c:73:00:00:99"
+  mac_aging: 1800
+  ntp_servers:
+    - "{{ clab_mgmt_gateway }}"
+  dns_servers:
+    - "{{ clab_mgmt_gateway }}"
+
+# =============================================================================
+# EVPN/VXLAN Defaults
+# =============================================================================
+base_l2_vni: 10000
+spine_asn: 65000
+
+# Loopback IDs
+evpn_loopback: 0
+vtep_loopback: 1
+base_tenant_loopback: 10
+
+# =============================================================================
+# MLAG Defaults
+# =============================================================================
+mlag_defaults:
+  peerlink_vlan: 4094
+  peerlink_channel: 2000
+  reload_delay_mlag: 300
+  reload_delay_non_mlag: 330
+  ibgp_vlan: 4080
+
+# =============================================================================
+# NAPALM Settings
+# =============================================================================
+napalm:
+  commit_changes: false  # Safe default - set to true to apply changes
+  get_diffs: true
+  replace_config: true
+  timeout: 120
+
+# =============================================================================
+# AAA Defaults (for lab environment)
+# =============================================================================
+aaa:
+  authentication:
+    default: 'local'
+    console: 'local'
+  authorization:
+    exec: 'default local'
+    commands: 'all default local'
+
+# =============================================================================
+# STP Defaults
+# =============================================================================
+stp_mode: mstp
+
+# =============================================================================
+# Template Settings
+# =============================================================================
+template_dir: "{{ playbook_dir }}/../roles/arista_config/templates"
+
+# =============================================================================
+# Default Tenants (if not defined in config context)
+# =============================================================================
+default_tenants:
+  - name: CORE
+    id: 1
+    loopback_network: "172.30.1.0/24"
+    ibgp_network: "100.64.1.0/31"
+    l2_segments:
+      - vlan_number: 100
+        vlan_name: SERVERS
+        vlan_ip: "10.100.100.1/24"
+        mtu: 9000
+        description: "Server VLAN"
+      - vlan_number: 110
+        vlan_name: MGMT_SERVERS
+        vlan_ip: "10.100.110.1/24"
+        mtu: 1500
+        description: "Management VLAN"
+      - vlan_number: 120
+        vlan_name: STORAGE
+        vlan_ip: "10.100.120.1/24"
+        mtu: 9000
+        description: "Storage VLAN"
+      - vlan_number: 130
+        vlan_name: BACKUP
+        vlan_ip: "10.100.130.1/24"
+        mtu: 9000
+        description: "Backup VLAN"
+      - vlan_number: 140
+        vlan_name: VOIP
+        vlan_ip: "10.100.140.1/24"
+        mtu: 1500
+        description: "VoIP VLAN"

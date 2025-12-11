@@ -1,0 +1,32 @@
+!
+! ============================================================================
+! Management Configuration
+! ============================================================================
+!
+{% set mgmt = netbox_config_context.management | default(fabric_defaults) %}
+{% set mgmt_vrf = mgmt.vrf | default(fabric_defaults.management_vrf) %}
+!
+vrf instance {{ mgmt_vrf }}
+!
+interface Management0
+   description OOB Management
+   vrf {{ mgmt_vrf }}
+{% if ansible_host is defined and ansible_host != '' %}
+   ip address {{ ansible_host }}/24
+{% else %}
+   ip address dhcp
+{% endif %}
+!
+{% set mgmt_gateway = mgmt.gateway | default(clab_mgmt_gateway) %}
+ip route vrf {{ mgmt_vrf }} 0.0.0.0/0 {{ mgmt_gateway }}
+!
+{% set dns_servers = mgmt.dns_servers | default(fabric_defaults.dns_servers) %}
+{% for dns in dns_servers %}
+ip name-server vrf {{ mgmt_vrf }} {{ dns }}
+{% endfor %}
+!
+{% set ntp_servers = mgmt.ntp_servers | default(fabric_defaults.ntp_servers) %}
+{% for ntp in ntp_servers %}
+ntp server vrf {{ mgmt_vrf }} {{ ntp }}
+{% endfor %}
+

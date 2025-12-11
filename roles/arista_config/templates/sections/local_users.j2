@@ -1,0 +1,13 @@
+! # START local_users.j2
+{% if local_users is defined %}
+{% for user in local_users %}
+username {{ user.name }} privilege {{ user.privilege | default(15) }} role {{ user.role | default('network-admin') }}{% if user.sha512 is defined %} secret sha512 {{ user.sha512 }}{% elif user.password is defined %} secret {{ user.password }}{% else %} nopassword{% endif %}
+
+{% endfor %}
+{% else %}
+! Default lab user
+username admin privilege 15 role network-admin nopassword
+{% endif %}
+!
+! # END local_users.j2
+

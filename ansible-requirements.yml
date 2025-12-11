@@ -1,0 +1,27 @@
+# =============================================================================
+# Ansible Galaxy Requirements
+# =============================================================================
+# Install with: ansible-galaxy install -r ansible-requirements.yml
+# =============================================================================
+
+collections:
+  # NetBox inventory and modules
+  - name: netbox.netbox
+    version: ">=3.17.0"
+
+  # Arista EOS modules
+  - name: arista.eos
+    version: ">=6.0.0"
+
+  # Network common utilities
+  - name: ansible.netcommon
+    version: ">=5.0.0"
+
+  # General utilities
+  - name: community.general
+    version: ">=7.0.0"
+
+  # Ansible utilities
+  - name: ansible.utils
+    version: ">=2.0.0"
+

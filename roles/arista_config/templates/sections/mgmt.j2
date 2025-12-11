@@ -1,0 +1,37 @@
+! # START mgmt.j2
+!
+hostname {{ inventory_hostname }}
+!
+{% include 'sections/local_users.j2' %}
+!
+no aaa root
+!
+vrf instance {{ mgmt_vrf | default('MGMT') }}
+ip routing vrf {{ mgmt_vrf | default('MGMT') }}
+!
+vlan internal order ascending range 4000 4079
+!
+service routing protocols model multi-agent
+!
+interface Management0
+   description OoB MGMT
+   vrf {{ mgmt_vrf | default('MGMT') }}
+   ip address {{ mgmt_ip | default(ansible_host + '/24') }}
+!
+{% if terminattr is defined and terminattr.enabled | default(false) %}
+daemon TerminAttr
+   exec /usr/bin/TerminAttr -cvaddr={{ terminattr.cvaddr | default('apiserver.arista.io:443') }} -cvcompression=gzip -cvvrf={{ mgmt_vrf | default('MGMT') }} -taillogs -cvauth=token-secure,/tmp/cv-onboarding-token -smashexcludes=ale,flexCounter,hardware,kni,pulse,strata -ingestexclude=/Sysdb/cell/1/agent,/Sysdb/cell/2/agent -disableaaa
+   no shutdown
+{% endif %}
+!
+ip route vrf {{ mgmt_vrf | default('MGMT') }} 0.0.0.0/0 {{ mgmt_gateway | default(clab_mgmt_gateway) }} name MGMT_DEFAULT_ROUTE
+!
+management api http-commands
+   protocol unix-socket
+   no shutdown
+   !
+   vrf {{ mgmt_vrf | default('MGMT') }}
+      no shutdown
+!
+! # END mgmt.j2
+

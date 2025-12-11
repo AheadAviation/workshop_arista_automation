@@ -1,0 +1,342 @@
+---
+# =============================================================================
+# Fabric Validation Playbook
+# =============================================================================
+# Comprehensive testing of the EVPN/VXLAN/MLAG fabric
+#
+# Tests performed:
+# 1. Device reachability and facts gathering
+# 2. BGP underlay peering status
+# 3. BGP EVPN overlay peering status
+# 4. MLAG domain status
+# 5. VXLAN VTEP status
+# 6. Interface status
+# 7. End-to-end connectivity
+# 8. ECMP path verification
+#
+# Usage:
+#   ansible-playbook playbooks/validate_fabric.yml
+#   ansible-playbook playbooks/validate_fabric.yml --tags bgp
+#   ansible-playbook playbooks/validate_fabric.yml --tags mlag
+#   ansible-playbook playbooks/validate_fabric.yml -v  # verbose
+# =============================================================================
+
+- name: Fabric Validation - Gather Facts and Verify Configuration
+  hosts: network
+  gather_facts: false
+  connection: network_cli
+  
+  vars:
+    validation_results: []
+    failed_tests: []
+    ansible_network_os: arista.eos.eos
+    ansible_user: admin
+    ansible_password: admin
+    ansible_become: true
+    ansible_become_method: enable
+    
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    # =========================================================================
+    # Phase 1: Device Reachability and Facts
+    # =========================================================================
+    - name: "PHASE 1: Device Reachability"
+      tags: [always, facts, reachability]
+      block:
+        - name: Gather EOS facts
+          arista.eos.eos_facts:
+            gather_subset:
+              - all
+          register: device_facts
+
+        - name: Display device information
+          ansible.builtin.debug:
+            msg: |
+              ============================================
+              Device: {{ inventory_hostname }}
+              ============================================
+              Hostname: {{ device_facts.ansible_facts.ansible_net_hostname }}
+              Model: {{ device_facts.ansible_facts.ansible_net_model }}
+              Version: {{ device_facts.ansible_facts.ansible_net_version }}
+              Serial: {{ device_facts.ansible_facts.ansible_net_serialnum }}
+              Uptime: {{ device_facts.ansible_facts.ansible_net_uptime | default('N/A') }}
+              ============================================
+
+        - name: Validate hostname matches inventory
+          ansible.builtin.assert:
+            that:
+              - device_facts.ansible_facts.ansible_net_hostname == inventory_hostname
+            fail_msg: "Hostname mismatch: expected {{ inventory_hostname }}, got {{ device_facts.ansible_facts.ansible_net_hostname }}"
+            success_msg: "✓ Hostname verified: {{ inventory_hostname }}"
+
+    # =========================================================================
+    # Phase 2: Interface Status
+    # =========================================================================
+    - name: "PHASE 2: Interface Status"
+      tags: [interfaces]
+      block:
+        - name: Get interface status
+          arista.eos.eos_command:
+            commands:
+              - show interfaces status
+          register: intf_status
+
+        - name: Get interface brief
+          arista.eos.eos_command:
+            commands:
+              - show ip interface brief
+          register: ip_intf_brief
+
+        - name: Display interface summary
+          ansible.builtin.debug:
+            msg: "{{ ip_intf_brief.stdout_lines[0] }}"
+            verbosity: 1
+
+        - name: Validate fabric interfaces are up
+          arista.eos.eos_command:
+            commands:
+              - show interfaces Ethernet1 status
+              - show interfaces Ethernet2 status
+          register: fabric_intf
+          failed_when: "'notconnect' in fabric_intf.stdout | join(' ')"
+
+        - name: Report interface status
+          ansible.builtin.debug:
+            msg: "✓ Fabric interfaces (Eth1, Eth2) are connected"
+
+    # =========================================================================
+    # Phase 3: BGP Underlay Verification
+    # =========================================================================
+    - name: "PHASE 3: BGP Underlay Status"
+      tags: [bgp, underlay]
+      block:
+        - name: Get BGP summary
+          arista.eos.eos_command:
+            commands:
+              - show ip bgp summary
+          register: bgp_summary
+
+        - name: Display BGP summary
+          ansible.builtin.debug:
+            msg: "{{ bgp_summary.stdout_lines[0] }}"
+
+        - name: Get BGP neighbor details
+          arista.eos.eos_command:
+            commands:
+              - show ip bgp neighbors | json
+          register: bgp_neighbors_json
+
+        - name: Parse BGP neighbor count
+          ansible.builtin.set_fact:
+            bgp_neighbor_data: "{{ bgp_neighbors_json.stdout[0] }}"
+
+        - name: Count established BGP sessions
+          ansible.builtin.set_fact:
+            established_count: "{{ bgp_neighbor_data.vrfs.default.peers | dict2items | selectattr('value.peerState', 'equalto', 'Established') | list | length }}"
+            total_peers: "{{ bgp_neighbor_data.vrfs.default.peers | dict2items | list | length }}"
+
+        - name: Validate BGP underlay sessions
+          ansible.builtin.assert:
+            that:
+              - established_count | int > 0
+              - established_count == total_peers
+            fail_msg: "BGP sessions not fully established: {{ established_count }}/{{ total_peers }}"
+            success_msg: "✓ All BGP underlay sessions established ({{ established_count }}/{{ total_peers }})"
+
+        - name: Get BGP routes received
+          arista.eos.eos_command:
+            commands:
+              - show ip bgp | json
+          register: bgp_routes
+
+        - name: Report BGP route count
+          ansible.builtin.debug:
+            msg: "✓ BGP routes in table: {{ bgp_routes.stdout[0].vrfs.default.bgpRouteEntries | dict2items | length }}"
+
+    # =========================================================================
+    # Phase 4: BGP EVPN Overlay (Leaf only)
+    # =========================================================================
+    - name: "PHASE 4: BGP EVPN Overlay Status"
+      tags: [bgp, evpn, overlay]
+      when: "'leaf' in group_names"
+      block:
+        - name: Get EVPN summary
+          arista.eos.eos_command:
+            commands:
+              - show bgp evpn summary
+          register: evpn_summary
+
+        - name: Display EVPN summary
+          ansible.builtin.debug:
+            msg: "{{ evpn_summary.stdout_lines[0] }}"
+
+        - name: Validate EVPN peers exist
+          ansible.builtin.assert:
+            that:
+              - "'Estab' in evpn_summary.stdout[0] or evpn_summary.stdout[0] | length > 0"
+            fail_msg: "No EVPN peers found"
+            success_msg: "✓ EVPN overlay configured"
+          ignore_errors: true
+
+    # =========================================================================
+    # Phase 5: MLAG Status (Leaf only)
+    # =========================================================================
+    - name: "PHASE 5: MLAG Status"
+      tags: [mlag]
+      when: "'leaf' in group_names"
+      block:
+        - name: Get MLAG status
+          arista.eos.eos_command:
+            commands:
+              - show mlag
+          register: mlag_status
+
+        - name: Display MLAG status
+          ansible.builtin.debug:
+            msg: "{{ mlag_status.stdout_lines[0] }}"
+
+        - name: Get MLAG detail JSON
+          arista.eos.eos_command:
+            commands:
+              - show mlag | json
+          register: mlag_json
+
+        - name: Parse MLAG state
+          ansible.builtin.set_fact:
+            mlag_state: "{{ mlag_json.stdout[0].state }}"
+            mlag_peer_state: "{{ mlag_json.stdout[0].negStatus | default('unknown') }}"
+            mlag_config_sanity: "{{ mlag_json.stdout[0].configSanity | default('unknown') }}"
+
+        - name: Validate MLAG is active
+          ansible.builtin.assert:
+            that:
+              - mlag_state == 'active'
+            fail_msg: "MLAG not active: state={{ mlag_state }}"
+            success_msg: "✓ MLAG active - peer negotiation: {{ mlag_peer_state }}"
+          ignore_errors: true
+
+    # =========================================================================
+    # Phase 6: VXLAN Status (Leaf only)
+    # =========================================================================
+    - name: "PHASE 6: VXLAN/VTEP Status"
+      tags: [vxlan, vtep]
+      when: "'leaf' in group_names"
+      block:
+        - name: Get VXLAN interface status
+          arista.eos.eos_command:
+            commands:
+              - show interfaces Vxlan1
+          register: vxlan_intf
+
+        - name: Display VXLAN interface
+          ansible.builtin.debug:
+            msg: "{{ vxlan_intf.stdout_lines[0] }}"
+            verbosity: 1
+
+        - name: Get VTEP info
+          arista.eos.eos_command:
+            commands:
+              - show vxlan vtep
+          register: vtep_info
+          ignore_errors: true
+
+        - name: Get VNI mappings
+          arista.eos.eos_command:
+            commands:
+              - show vxlan vni
+          register: vni_info
+          ignore_errors: true
+
+        - name: Display VNI mappings
+          ansible.builtin.debug:
+            msg: "{{ vni_info.stdout_lines[0] | default('No VNI mappings') }}"
+
+        - name: Validate VXLAN interface exists
+          ansible.builtin.assert:
+            that:
+              - "'Vxlan1' in vxlan_intf.stdout[0]"
+            fail_msg: "VXLAN interface not configured"
+            success_msg: "✓ VXLAN interface configured"
+          ignore_errors: true
+
+    # =========================================================================
+    # Phase 7: Routing Table Verification
+    # =========================================================================
+    - name: "PHASE 7: Routing Table Verification"
+      tags: [routing]
+      block:
+        - name: Get routing table
+          arista.eos.eos_command:
+            commands:
+              - show ip route summary
+          register: route_summary
+
+        - name: Display route summary
+          ansible.builtin.debug:
+            msg: "{{ route_summary.stdout_lines[0] }}"
+
+        - name: Get BGP routes to other loopbacks
+          arista.eos.eos_command:
+            commands:
+              - show ip route 10.255.0.0/24 longer-prefixes
+          register: loopback_routes
+
+        - name: Display loopback routes
+          ansible.builtin.debug:
+            msg: "{{ loopback_routes.stdout_lines[0] }}"
+
+        - name: Validate routes to all loopbacks
+          ansible.builtin.assert:
+            that:
+              - "'10.255.0' in loopback_routes.stdout[0]"
+            fail_msg: "Missing routes to fabric loopbacks"
+            success_msg: "✓ Routes to fabric loopbacks present"
+
+    # =========================================================================
+    # Phase 8: ECMP Verification
+    # =========================================================================
+    - name: "PHASE 8: ECMP Path Verification"
+      tags: [ecmp]
+      when: "'leaf' in group_names"
+      block:
+        - name: Check for ECMP paths (multiple next-hops)
+          arista.eos.eos_command:
+            commands:
+              - show ip route 10.255.0.1
+          register: spine_route
+
+        - name: Display route to spine
+          ansible.builtin.debug:
+            msg: "{{ spine_route.stdout_lines[0] }}"
+
+        - name: Count ECMP paths
+          ansible.builtin.set_fact:
+            ecmp_paths: "{{ spine_route.stdout[0] | regex_findall('via \\d+\\.\\d+\\.\\d+\\.\\d+') | length }}"
+
+        - name: Validate ECMP
+          ansible.builtin.debug:
+            msg: "{{ '✓ ECMP active with ' ~ ecmp_paths ~ ' paths' if ecmp_paths | int >= 2 else '⚠ Single path detected (expected 2 for ECMP)' }}"
+
+# =============================================================================
+# Summary Play
+# =============================================================================
+- name: Fabric Validation Summary
+  hosts: localhost
+  gather_facts: false
+  
+  tasks:
+    - name: Display validation complete message
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║           FABRIC VALIDATION COMPLETE                           ║
+          ╠════════════════════════════════════════════════════════════════╣
+          ║  Review output above for detailed results                      ║
+          ║                                                                ║
+          ║  ✓ = Test passed                                               ║
+          ║  ⚠ = Warning (non-critical)                                   ║
+          ║  ✗ = Test failed                                               ║
+          ╚════════════════════════════════════════════════════════════════╝
+

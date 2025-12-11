@@ -1,0 +1,48 @@
+! # START vlan_interfaces.j2
+{% set vlan_number = interface.name | lower | replace('vlan', '') %}
+vlan {{ vlan_number }}
+{% if interface.vlan_name is defined %}
+   name {{ interface.vlan_name }}
+{% endif %}
+!
+{% if interface.ip is defined %}
+interface {{ interface.name }}
+{% if interface.description is defined %}
+   description {{ interface.description }}
+{% elif interface.vlan_name is defined %}
+   description {{ interface.vlan_name }}
+{% endif %}
+   mtu {{ interface.mtu | default(fabric_defaults.underlay_mtu | default(9214)) }}
+{% if vrf is defined and vrf != 'default' %}
+   vrf {{ vrf }}
+{% endif %}
+   ip address {{ interface.ip }}
+{% if interface.ntp_serve is defined and interface.ntp_serve %}
+   ntp serve
+{% endif %}
+{% if interface.dhcp_helpers is defined %}
+{% for helper in interface.dhcp_helpers %}
+   ip helper-address {{ helper }}
+{% endfor %}
+{% endif %}
+{% if interface.acl_in is defined %}
+   ip access-group {{ interface.acl_in }} in
+{% endif %}
+{% if interface.acl_out is defined %}
+   ip access-group {{ interface.acl_out }} out
+{% endif %}
+{% if interface.virtual_router_addresses is defined %}
+{% for address in interface.virtual_router_addresses %}
+   ip virtual-router address {{ address }}
+{% endfor %}
+{% endif %}
+   no shutdown
+!
+{% if interface.igmp_snooping_querier is defined %}
+ip igmp snooping querier
+ip igmp snooping vlan {{ vlan_number }} querier address {{ interface.igmp_snooping_querier }}
+{% endif %}
+{% endif %}
+!
+! # END vlan_interfaces.j2
+

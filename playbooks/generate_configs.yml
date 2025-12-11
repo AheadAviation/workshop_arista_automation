@@ -1,0 +1,60 @@
+---
+# =============================================================================
+# Generate Arista Configurations from NetBox
+# =============================================================================
+# This playbook pulls data from NetBox and generates device configurations
+# using Jinja2 templates.
+#
+# Usage:
+#   ansible-playbook playbooks/generate_configs.yml
+#   ansible-playbook playbooks/generate_configs.yml --limit spine-01
+#
+# =============================================================================
+
+- name: Generate Arista EOS Configurations from NetBox
+  hosts: all
+  gather_facts: false
+  
+  vars_files:
+    - "../group_vars/all.yml"
+  
+  vars:
+    config_output_dir: "{{ playbook_dir }}/../output/configs"
+  
+  tasks:
+    - name: Display playbook info
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          NetBox -> Arista Config Generation
+          ============================================
+          Target hosts: {{ ansible_play_hosts | length }}
+          Output directory: {{ config_output_dir }}
+          ============================================
+      run_once: true
+
+    - name: Include arista_config role
+      ansible.builtin.include_role:
+        name: arista_config
+
+    - name: List generated configurations
+      ansible.builtin.find:
+        paths: "{{ config_output_dir }}"
+        patterns: "*.cfg"
+      register: config_files
+      delegate_to: localhost
+      run_once: true
+
+    - name: Display generated configs summary
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          Configuration Generation Complete
+          ============================================
+          Generated {{ config_files.files | length }} configuration files:
+          {% for f in config_files.files %}
+          - {{ f.path | basename }}
+          {% endfor %}
+          ============================================
+      run_once: true
+

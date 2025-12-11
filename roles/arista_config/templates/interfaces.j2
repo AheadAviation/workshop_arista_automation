@@ -1,0 +1,35 @@
+!
+! ============================================================================
+! Loopback Interfaces
+! ============================================================================
+!
+interface Loopback0
+   description Router ID
+{% if router_id is defined and router_id %}
+   ip address {{ router_id }}/32
+{% endif %}
+!
+{% if device_role == 'leaf' and vtep_ip is defined and vtep_ip %}
+interface Loopback1
+   description VTEP Source
+   ip address {{ vtep_ip }}/32
+!
+{% endif %}
+!
+! ============================================================================
+! Fabric Interfaces
+! ============================================================================
+!
+{% set underlay = netbox_config_context.underlay | default({}) %}
+{% set underlay_mtu = underlay.mtu | default(fabric_defaults.underlay_mtu) %}
+{% for intf_name, intf_ip in interface_ips.items() %}
+{% if intf_name is match('^eth[0-9]+$') %}
+{% set eos_intf = 'Ethernet' ~ intf_name | replace('eth', '') %}
+interface {{ eos_intf }}
+   description Fabric Link
+   mtu {{ underlay_mtu }}
+   no switchport
+   ip address {{ intf_ip }}
+!
+{% endif %}
+{% endfor %}

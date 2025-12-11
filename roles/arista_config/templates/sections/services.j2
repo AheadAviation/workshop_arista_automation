@@ -1,0 +1,55 @@
+! # START services.j2
+!
+! Management and monitoring services
+!
+{% if dns is defined %}
+{% if dns.domain is defined %}
+ip domain-name {{ dns.domain }}
+{% endif %}
+{% if dns.search_domains is defined %}
+{% for domain in dns.search_domains %}
+ip domain list {{ domain }}
+{% endfor %}
+{% endif %}
+{% for server in dns.servers | default(fabric_defaults.dns_servers | default([])) %}
+ip name-server vrf {{ mgmt_vrf | default('MGMT') }} {{ server }}
+{% endfor %}
+{% else %}
+{% for server in fabric_defaults.dns_servers | default([]) %}
+ip name-server vrf {{ mgmt_vrf | default('MGMT') }} {{ server }}
+{% endfor %}
+{% endif %}
+!
+{% if snmp is defined %}
+! SNMP Configuration
+{% if snmp.location is defined %}
+snmp-server location {{ snmp.location }}
+{% endif %}
+{% if snmp.contact is defined %}
+snmp-server contact {{ snmp.contact }}
+{% endif %}
+{% if snmp.communities is defined %}
+{% for community in snmp.communities %}
+snmp-server community {{ community.name }} {{ community.access | default('ro') }}
+{% endfor %}
+{% endif %}
+{% endif %}
+!
+{% if banner is defined %}
+banner login
+{{ banner.login | default('') }}
+EOF
+banner motd
+{{ banner.motd | default('') }}
+EOF
+{% else %}
+banner login
+***************************************************************************
+* This system is for authorized use only.                                  *
+* All access is logged and monitored.                                      *
+***************************************************************************
+EOF
+{% endif %}
+!
+! # END services.j2
+

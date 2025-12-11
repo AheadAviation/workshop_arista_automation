@@ -1,0 +1,9 @@
+! # START ntp.j2
+ntp local-interface vrf {{ ntp.vrf | default(mgmt_vrf | default('MGMT')) }} {{ ntp.interface | default('Management0') }}
+!
+{% for server in ntp.servers | default(fabric_defaults.ntp_servers | default([])) %}
+ntp server vrf {{ ntp.vrf | default(mgmt_vrf | default('MGMT')) }} {{ server }} iburst
+{% endfor %}
+!
+! # END ntp.j2
+

@@ -1,0 +1,64 @@
+---
+# =============================================================================
+# Ansible Lint Configuration
+# =============================================================================
+
+# Exclude paths from linting
+exclude_paths:
+  - .git/
+  - .github/
+  - output/
+  - clab/
+  - venv/
+  - .venv/
+
+# Skip specific rules
+skip_list:
+  # Skip FQCN for builtin modules (allow 'debug' instead of 'ansible.builtin.debug')
+  - fqcn[action-core]
+  # Skip experimental rules
+  - experimental
+  # Skip meta requirements (no meta/main.yml needed for simple roles)
+  - meta-no-info
+  # Skip galaxy metadata
+  - galaxy[no-changelog]
+  # Skip handler naming (not using handlers heavily)
+  - no-handler
+  # Skip role name validation
+  - role-name[path]
+
+# Warn but don't fail on these
+warn_list:
+  # Command modules should use warn parameter
+  - command-instead-of-module
+  # No changed when (for commands that don't change state)
+  - no-changed-when
+  # Risky file permissions
+  - risky-file-permissions
+  # YAML issues
+  - yaml[line-length]
+
+# Enable specific profiles
+# profile: production  # Uncomment for stricter checks
+
+# Offline mode - don't try to fetch galaxy roles
+offline: true
+
+# Use default rules
+use_default_rules: true
+
+# Parseable output format for CI
+parseable: true
+
+# Show progress
+quiet: false
+
+# Colored output
+colored: true
+
+# Loop variable prefix
+loop_var_prefix: ''
+
+# Variables naming pattern
+var_naming_pattern: "^[a-z_][a-z0-9_]*$"
+

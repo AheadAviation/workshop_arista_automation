@@ -1,0 +1,9 @@
+# This directory stores network state files for OOB change detection
+# Files in this directory:
+#   - {device}/running.cfg - Last known good config (baseline)
+#   - {device}/current.cfg - Current running config (for comparison)
+#   - {device}/oob_changes.log - Detected OOB changes
+#   - {device}/latest.diff - Latest config diff from NAPALM
+#   - {device}/archive.cfg - Archived config before last push
+#   - {device}/backup_*.cfg - Timestamped backups
+

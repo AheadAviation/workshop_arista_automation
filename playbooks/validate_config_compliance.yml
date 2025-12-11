@@ -1,0 +1,196 @@
+---
+# =============================================================================
+# Configuration Compliance Validation
+# =============================================================================
+# Validates that device configurations match NetBox Source of Truth
+#
+# Checks:
+# 1. Hostname matches NetBox
+# 2. BGP ASN matches NetBox custom field
+# 3. Router ID matches NetBox custom field
+# 4. VTEP IP matches NetBox custom field (leaves)
+# 5. Interface IPs match NetBox
+# 6. MLAG configuration matches NetBox
+#
+# Usage:
+#   ansible-playbook playbooks/validate_config_compliance.yml
+# =============================================================================
+
+- name: Configuration Compliance Validation
+  hosts: network
+  gather_facts: false
+  connection: network_cli
+  
+  vars:
+    compliance_results: []
+    ansible_network_os: arista.eos.eos
+    ansible_user: admin
+    ansible_password: admin
+    ansible_become: true
+    ansible_become_method: enable
+    
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Display compliance check header
+      ansible.builtin.debug:
+        msg: |
+          ════════════════════════════════════════════════════════════════
+          Configuration Compliance Check: {{ inventory_hostname }}
+          ════════════════════════════════════════════════════════════════
+
+    # =========================================================================
+    # Gather Device State
+    # =========================================================================
+    - name: Get device configuration
+      arista.eos.eos_command:
+        commands:
+          - show running-config | json
+          - show ip bgp summary | json
+          - show ip interface brief | json
+          - show mlag | json
+        wait_for: result[0] contains hostname
+      register: device_state
+
+    - name: Parse device state
+      ansible.builtin.set_fact:
+        running_hostname: "{{ device_state.stdout[0].hostname }}"
+        running_bgp_asn: "{{ device_state.stdout[1].vrfs.default.asn | default('N/A') }}"
+        running_router_id: "{{ device_state.stdout[1].vrfs.default.routerId | default('N/A') }}"
+        running_interfaces: "{{ device_state.stdout[2].interfaces }}"
+        running_mlag_state: "{{ device_state.stdout[3].state | default('disabled') }}"
+
+    # =========================================================================
+    # Compliance Check: Hostname
+    # =========================================================================
+    - name: "CHECK: Hostname"
+      block:
+        - name: Validate hostname matches inventory
+          ansible.builtin.assert:
+            that:
+              - running_hostname == inventory_hostname
+            fail_msg: "✗ HOSTNAME MISMATCH - Expected: {{ inventory_hostname }}, Running: {{ running_hostname }}"
+            success_msg: "✓ Hostname compliant: {{ running_hostname }}"
+      rescue:
+        - name: Record hostname non-compliance
+          ansible.builtin.set_fact:
+            compliance_results: "{{ compliance_results + ['HOSTNAME: Expected ' + inventory_hostname + ', Got ' + running_hostname] }}"
+
+    # =========================================================================
+    # Compliance Check: BGP ASN
+    # =========================================================================
+    - name: "CHECK: BGP ASN"
+      when: custom_fields.bgp_asn is defined
+      block:
+        - name: Validate BGP ASN matches NetBox
+          ansible.builtin.assert:
+            that:
+              - running_bgp_asn | string == custom_fields.bgp_asn | string
+            fail_msg: "✗ BGP ASN MISMATCH - NetBox: {{ custom_fields.bgp_asn }}, Running: {{ running_bgp_asn }}"
+            success_msg: "✓ BGP ASN compliant: {{ running_bgp_asn }}"
+      rescue:
+        - name: Record ASN non-compliance
+          ansible.builtin.set_fact:
+            compliance_results: "{{ compliance_results + ['BGP_ASN: Expected ' + (custom_fields.bgp_asn | string) + ', Got ' + (running_bgp_asn | string)] }}"
+
+    # =========================================================================
+    # Compliance Check: Router ID
+    # =========================================================================
+    - name: "CHECK: Router ID"
+      when: custom_fields.router_id is defined
+      block:
+        - name: Validate Router ID matches NetBox
+          ansible.builtin.assert:
+            that:
+              - running_router_id == custom_fields.router_id
+            fail_msg: "✗ ROUTER ID MISMATCH - NetBox: {{ custom_fields.router_id }}, Running: {{ running_router_id }}"
+            success_msg: "✓ Router ID compliant: {{ running_router_id }}"
+      rescue:
+        - name: Record Router ID non-compliance
+          ansible.builtin.set_fact:
+            compliance_results: "{{ compliance_results + ['ROUTER_ID: Expected ' + custom_fields.router_id + ', Got ' + running_router_id] }}"
+
+    # =========================================================================
+    # Compliance Check: MLAG State (Leaves)
+    # =========================================================================
+    - name: "CHECK: MLAG State"
+      when: 
+        - "'leaf' in group_names"
+        - custom_fields.mlag_name is defined
+      block:
+        - name: Validate MLAG is active
+          ansible.builtin.assert:
+            that:
+              - running_mlag_state == 'active'
+            fail_msg: "✗ MLAG NOT ACTIVE - State: {{ running_mlag_state }}"
+            success_msg: "✓ MLAG compliant: {{ running_mlag_state }}"
+      rescue:
+        - name: Record MLAG non-compliance
+          ansible.builtin.set_fact:
+            compliance_results: "{{ compliance_results + ['MLAG: Expected active, Got ' + running_mlag_state] }}"
+
+    # =========================================================================
+    # Compliance Check: Interface IPs
+    # =========================================================================
+    - name: "CHECK: Interface IPs"
+      when: interfaces is defined
+      block:
+        - name: Check each interface IP
+          ansible.builtin.debug:
+            msg: |
+              Interface IP Check:
+              {% for intf in interfaces %}
+              {% if intf.ip_addresses is defined and intf.ip_addresses | length > 0 %}
+              - {{ intf.name }}: NetBox={{ intf.ip_addresses[0].address }}
+              {% endif %}
+              {% endfor %}
+          register: intf_check
+
+    # =========================================================================
+    # Summary
+    # =========================================================================
+    - name: Display compliance summary
+      ansible.builtin.debug:
+        msg: |
+          ────────────────────────────────────────────────────────────────
+          Compliance Summary for {{ inventory_hostname }}
+          ────────────────────────────────────────────────────────────────
+          {% if compliance_results | length == 0 %}
+          ✓ ALL CHECKS PASSED - Device is compliant with NetBox
+          {% else %}
+          ✗ NON-COMPLIANT - {{ compliance_results | length }} issue(s) found:
+          {% for result in compliance_results %}
+            - {{ result }}
+          {% endfor %}
+          {% endif %}
+          ────────────────────────────────────────────────────────────────
+
+# =============================================================================
+# Final Summary
+# =============================================================================
+- name: Compliance Summary
+  hosts: localhost
+  gather_facts: false
+  
+  tasks:
+    - name: Collect all compliance results
+      ansible.builtin.set_fact:
+        total_issues: "{{ groups['all'] | map('extract', hostvars, 'compliance_results') | flatten | list }}"
+
+    - name: Display final summary
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║           COMPLIANCE CHECK COMPLETE                            ║
+          ╠════════════════════════════════════════════════════════════════╣
+          {% if total_issues | length == 0 %}
+          ║  ✓ ALL DEVICES COMPLIANT WITH NETBOX                          ║
+          {% else %}
+          ║  ✗ {{ total_issues | length }} COMPLIANCE ISSUES FOUND
+          {% for issue in total_issues %}
+          ║    - {{ issue }}
+          {% endfor %}
+          {% endif %}
+          ╚════════════════════════════════════════════════════════════════╝
+

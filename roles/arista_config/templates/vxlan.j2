@@ -1,0 +1,14 @@
+!
+! ============================================================================
+! VXLAN Configuration
+! ============================================================================
+!
+{% if vtep_ip is defined and vtep_ip %}
+{% set overlay = netbox_config_context.overlay | default({}) %}
+interface Vxlan1
+   description VTEP Interface
+   vxlan source-interface Loopback1
+   vxlan udp-port 4789
+!
+{% endif %}
+

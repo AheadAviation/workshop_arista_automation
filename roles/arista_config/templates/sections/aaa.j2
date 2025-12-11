@@ -1,0 +1,65 @@
+! # START aaa.j2
+{% if tacacs is defined %}
+{% if tacacs.key7 is defined %}
+tacacs-server key 7 {{ tacacs.key7 }}
+{% endif %}
+tacacs-server timeout {{ tacacs.timeout | default(2) }}
+tacacs-server policy unknown-mandatory-attribute ignore
+!
+{% if tacacs.servers is defined %}
+{% for server in tacacs.servers %}
+tacacs-server host {{ server.ip }} vrf {{ server.vrf | default(mgmt_vrf | default('MGMT')) }} key 7 {{ server.key7 }}
+{% endfor %}
+{% endif %}
+!
+ip tacacs vrf {{ mgmt_vrf | default('MGMT') }} source-interface Management0
+{% endif %}
+!
+{% if aaa is defined %}
+{% if aaa.tacacs is defined %}
+{% for group in aaa.tacacs %}
+aaa group server tacacs+ {{ group.name }}
+{% for server in group.servers %}
+   server {{ server.ip }} vrf {{ server.vrf | default(mgmt_vrf | default('MGMT')) }}
+{% endfor %}
+{% endfor %}
+{% endif %}
+!
+{% if aaa.authentication is defined %}
+aaa authentication login default {{ aaa.authentication.default | default('local') }}
+aaa authentication login console {{ aaa.authentication.console | default('local') }}
+!
+{% if aaa.authentication.policies is defined %}
+{% for policy in aaa.authentication.policies %}
+aaa authentication policy {{ policy }}
+{% endfor %}
+{% endif %}
+{% else %}
+! Default AAA settings for lab
+aaa authentication login default local
+aaa authentication login console local
+{% endif %}
+!
+{% if aaa.authorization is defined %}
+aaa authorization exec {{ aaa.authorization.exec | default('default local') }}
+aaa authorization commands {{ aaa.authorization.commands | default('all default local') }}
+{% else %}
+aaa authorization exec default local
+aaa authorization commands all default local
+{% endif %}
+!
+{% if aaa.accounting is defined %}
+aaa accounting exec {{ aaa.accounting.exec }}
+aaa accounting system {{ aaa.accounting.system }}
+aaa accounting commands {{ aaa.accounting.commands }}
+{% endif %}
+{% else %}
+! Default AAA settings for lab
+aaa authentication login default local
+aaa authentication login console local
+aaa authorization exec default local
+aaa authorization commands all default local
+{% endif %}
+!
+! # END aaa.j2
+

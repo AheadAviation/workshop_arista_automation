@@ -1,0 +1,26 @@
+!
+! ============================================================================
+! {{ inventory_hostname }} - Arista EOS Configuration
+! Generated from NetBox - Source of Truth
+! ============================================================================
+!
+hostname {{ inventory_hostname }}
+!
+{% include 'management.j2' %}
+
+{% include 'interfaces.j2' %}
+
+{% include 'bgp.j2' %}
+
+{% if device_role == 'leaf' %}
+{% include 'vxlan.j2' %}
+
+{% include 'mlag.j2' %}
+{% endif %}
+
+{% include 'services.j2' %}
+!
+! ============================================================================
+! End of Configuration
+! ============================================================================
+

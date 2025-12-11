@@ -1,0 +1,134 @@
+---
+# =============================================================================
+# Gather Facts and Generate Report
+# =============================================================================
+# Collects comprehensive facts from all devices and generates a fabric report
+#
+# Output:
+# - Console summary
+# - JSON report file (output/reports/fabric_report.json)
+# - HTML report file (output/reports/fabric_report.html)
+#
+# Usage:
+#   ansible-playbook playbooks/gather_facts_report.yml
+# =============================================================================
+
+- name: Gather Facts from All Devices
+  hosts: network
+  gather_facts: false
+  connection: network_cli
+  
+  vars:
+    ansible_network_os: arista.eos.eos
+    ansible_user: admin
+    ansible_password: admin
+    ansible_become: true
+    ansible_become_method: enable
+  
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Gather EOS facts
+      arista.eos.eos_facts:
+        gather_subset:
+          - all
+      register: eos_facts
+
+    - name: Get system info
+      arista.eos.eos_command:
+        commands:
+          - show version | json
+          - show ip bgp summary | json
+          - show mlag | json
+          - show vxlan vtep | json
+          - show ip route summary | json
+          - show lldp neighbors | json
+      register: system_info
+      ignore_errors: true
+
+    - name: Build device report
+      ansible.builtin.set_fact:
+        device_report:
+          hostname: "{{ eos_facts.ansible_facts.ansible_net_hostname }}"
+          model: "{{ eos_facts.ansible_facts.ansible_net_model }}"
+          version: "{{ eos_facts.ansible_facts.ansible_net_version }}"
+          serial: "{{ eos_facts.ansible_facts.ansible_net_serialnum }}"
+          interfaces: "{{ eos_facts.ansible_facts.ansible_net_interfaces | dict2items | length }}"
+          bgp:
+            neighbors: "{{ system_info.stdout[1].vrfs.default.peers | default({}) | dict2items | length }}"
+            established: "{{ system_info.stdout[1].vrfs.default.peers | default({}) | dict2items | selectattr('value.peerState', 'equalto', 'Established') | list | length }}"
+          mlag:
+            state: "{{ system_info.stdout[2].state | default('N/A') }}"
+            peer_link: "{{ system_info.stdout[2].peerLink | default('N/A') }}"
+          lldp:
+            neighbors: "{{ system_info.stdout[5].lldpNeighbors | default([]) | length }}"
+          routing:
+            total_routes: "{{ system_info.stdout[4].vrfs.default.totalRoutes | default(0) }}"
+
+    - name: Display device summary
+      ansible.builtin.debug:
+        msg: |
+          ════════════════════════════════════════════════════════════════
+          Device: {{ inventory_hostname }}
+          ════════════════════════════════════════════════════════════════
+          Model: {{ device_report.model | default('N/A') }}
+          Version: {{ device_report.version | default('N/A') }}
+          Interfaces: {{ device_report.interfaces }}
+          BGP Neighbors: {{ device_report.bgp.established }}/{{ device_report.bgp.neighbors }} established
+          MLAG State: {{ device_report.mlag.state | default('N/A') }}
+          LLDP Neighbors: {{ device_report.lldp.neighbors }}
+          Total Routes: {{ device_report.routing.total_routes }}
+          ════════════════════════════════════════════════════════════════
+
+# =============================================================================
+# Generate Consolidated Report
+# =============================================================================
+- name: Generate Fabric Report
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Get current timestamp
+      ansible.builtin.setup:
+        gather_subset:
+          - date_time
+      
+    - name: Collect all device reports
+      ansible.builtin.set_fact:
+        all_reports: "{{ groups['network'] | map('extract', hostvars, 'device_report') | list }}"
+
+    - name: Generate JSON report
+      ansible.builtin.copy:
+        content: |
+          {
+            "report_generated": "{{ ansible_date_time.iso8601 }}",
+            "fabric_name": "{{ clab_topology_name }}",
+            "devices": {{ all_reports | to_nice_json }}
+          }
+        dest: "{{ playbook_dir }}/../output/reports/fabric_report.json"
+        mode: '0644'
+
+    - name: Generate HTML report
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/arista_config/templates/fabric_report.html.j2"
+        dest: "{{ playbook_dir }}/../output/reports/fabric_report.html"
+        mode: '0644'
+      ignore_errors: true
+
+    - name: Display summary
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║              FABRIC REPORT GENERATED                           ║
+          ╠════════════════════════════════════════════════════════════════╣
+          ║  Report Location: output/reports/                              ║
+          ║  - fabric_report.json                                          ║
+          ║  Total Devices: {{ all_reports | length }}
+          ║  Report Time: {{ ansible_date_time.iso8601 }}
+          ╚════════════════════════════════════════════════════════════════╝
+

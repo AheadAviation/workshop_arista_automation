@@ -1,0 +1,32 @@
+! # START interfaces.j2
+{% for vrf, interfaces in local_interfaces.items() %}
+{% for interface in interfaces %}
+{% if 'vlan' in interface.name | lower %}
+{% include 'sections/vlan_interfaces.j2' %}
+{% elif 'port-channel' in interface.name | lower %}
+{% include 'sections/portchannel_interfaces.j2' %}
+{% else %}
+{% include 'sections/port_interfaces.j2' %}
+{% endif %}
+{% endfor %}
+{% endfor %}
+!
+! Fabric link interfaces from NetBox
+{% for intf_name, intf_data in interface_ips | default({}) | dictsort %}
+{% if intf_name is match('^eth[0-9]+$') or intf_name is match('^Ethernet[0-9]+$') %}
+{% set intf_info = interfaces_info[intf_name] | default({}) %}
+interface {{ intf_name | arista_interface_name }}
+{% if intf_info.description is defined %}
+   description {{ intf_info.description }}
+{% else %}
+   description Fabric Link
+{% endif %}
+   mtu {{ fabric_defaults.underlay_mtu | default(9214) }}
+   no switchport
+   ip address {{ intf_data }}
+   no shutdown
+!
+{% endif %}
+{% endfor %}
+! # END interfaces.j2
+

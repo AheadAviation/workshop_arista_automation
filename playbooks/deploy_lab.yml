@@ -1,0 +1,140 @@
+---
+# =============================================================================
+# Deploy ContainerLab Topology
+# =============================================================================
+# This playbook:
+# 1. Generates device configurations from NetBox
+# 2. Dynamically creates ContainerLab topology from NetBox cables
+# 3. Deploys the ContainerLab topology
+#
+# Usage:
+#   ansible-playbook playbooks/deploy_lab.yml
+#
+# Prerequisites:
+#   - NetBox running with imported topology
+#   - ContainerLab installed (in WSL2 on Windows)
+#   - cEOS image imported to Docker
+#
+# =============================================================================
+
+- name: Prepare configurations from NetBox
+  hosts: all
+  gather_facts: false
+  
+  vars_files:
+    - "../group_vars/all.yml"
+  
+  vars:
+    config_output_dir: "{{ playbook_dir }}/../output/configs"
+  
+  tasks:
+    - name: Include arista_config role to generate configs
+      ansible.builtin.include_role:
+        name: arista_config
+
+
+- name: Generate and Deploy ContainerLab Topology
+  hosts: localhost
+  gather_facts: true
+  connection: local
+  
+  vars:
+    clab_output_dir: "{{ playbook_dir }}/../clab"
+    config_output_dir: "{{ playbook_dir }}/../output/configs"
+    clab_topology_file: "{{ clab_output_dir }}/topology.clab.yml"
+    clab_topology_name: netbox-arista-lab
+    ceos_image: "{{ lookup('env', 'CEOS_IMAGE') | default('ceos:4.32.0F', true) }}"
+    clab_mgmt_subnet: "172.20.20.0/24"
+    netbox_url: "{{ lookup('env', 'NETBOX_URL') | default('http://netbox:8080', true) }}"
+    netbox_token: "{{ lookup('env', 'NETBOX_TOKEN') }}"
+  
+  tasks:
+    - name: Display deployment info
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          ContainerLab Deployment
+          ============================================
+          Topology name: {{ clab_topology_name }}
+          cEOS image: {{ ceos_image }}
+          Management subnet: {{ clab_mgmt_subnet }}
+          NetBox URL: {{ netbox_url }}
+          ============================================
+
+    - name: Generate ContainerLab topology dynamically from NetBox
+      ansible.builtin.command:
+        cmd: python scripts/generate_clab_topology.py --output clab/topology.clab.yml --image {{ ceos_image }}
+        chdir: "{{ playbook_dir }}/.."
+      register: topology_gen
+      changed_when: true
+
+    - name: Display topology generation output
+      ansible.builtin.debug:
+        msg: "{{ topology_gen.stdout_lines }}"
+
+    - name: Read generated topology
+      ansible.builtin.slurp:
+        src: "{{ clab_topology_file }}"
+      register: topology_content
+
+    - name: Display topology summary
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          Generated Topology
+          ============================================
+          {{ topology_content.content | b64decode | regex_search('# Devices:.*') }}
+          {{ topology_content.content | b64decode | regex_search('# Links:.*') }}
+          ============================================
+
+    - name: Check if ContainerLab is available
+      ansible.builtin.command: which containerlab
+      register: clab_check
+      changed_when: false
+      failed_when: false
+
+    - name: Deploy ContainerLab topology (Linux/WSL)
+      ansible.builtin.command:
+        cmd: "containerlab deploy --topo {{ clab_topology_file }} --reconfigure"
+        chdir: "{{ clab_output_dir }}"
+      register: clab_deploy
+      when: clab_check.rc == 0
+      become: true
+
+    - name: Display ContainerLab deployment result
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          ContainerLab Deployment Result
+          ============================================
+          {{ clab_deploy.stdout | default('Deployment completed') }}
+          ============================================
+      when: clab_deploy is defined and clab_deploy.stdout is defined
+
+    - name: Display manual deployment instructions (Windows)
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          Manual Deployment Instructions (Windows)
+          ============================================
+          ContainerLab must be run in WSL2. Execute:
+          
+          1. Open WSL2 terminal
+          2. Navigate to project:
+             cd /mnt/c/Users/BrianNelson/PycharmProjects/netbox-arista-lab
+          3. Deploy topology:
+             sudo containerlab deploy --topo clab/topology.clab.yml
+          4. Check status:
+             sudo containerlab inspect --topo clab/topology.clab.yml
+          
+          Device Access (after deployment):
+          - spine-01: ssh admin@172.20.20.11
+          - spine-02: ssh admin@172.20.20.12
+          - leaf-01:  ssh admin@172.20.20.21
+          - leaf-02:  ssh admin@172.20.20.22
+          - leaf-03:  ssh admin@172.20.20.23
+          - leaf-04:  ssh admin@172.20.20.24
+          
+          Password: admin
+          ============================================
+      when: clab_check.rc != 0

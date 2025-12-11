@@ -1,0 +1,38 @@
+!
+! ============================================================================
+! BGP Configuration
+! ============================================================================
+!
+{% if bgp_asn is defined and bgp_asn %}
+{% set bgp_config = netbox_config_context.bgp | default({}) %}
+ip routing
+!
+router bgp {{ bgp_asn }}
+   router-id {{ router_id | default('0.0.0.0') }}
+   no bgp default ipv4-unicast
+   maximum-paths 4 ecmp 4
+   distance bgp 20 200 200
+   graceful-restart restart-time 300
+   graceful-restart
+   !
+   ! BGP Neighbors (dynamically calculated from interface IPs)
+{% for neighbor in bgp_neighbors | default([]) %}
+   neighbor {{ neighbor.peer_ip }} remote-as {{ neighbor.peer_asn }}
+   neighbor {{ neighbor.peer_ip }} description Ethernet{{ neighbor.local_interface | replace('eth', '') }}
+   neighbor {{ neighbor.peer_ip }} send-community extended
+   neighbor {{ neighbor.peer_ip }} maximum-routes 12000
+{% endfor %}
+   !
+   address-family ipv4
+{% for neighbor in bgp_neighbors | default([]) %}
+      neighbor {{ neighbor.peer_ip }} activate
+{% endfor %}
+      redistribute connected
+   !
+{% if device_role == 'leaf' %}
+   address-family evpn
+{% for neighbor in bgp_neighbors | default([]) %}
+      neighbor {{ neighbor.peer_ip }} activate
+{% endfor %}
+{% endif %}
+{% endif %}

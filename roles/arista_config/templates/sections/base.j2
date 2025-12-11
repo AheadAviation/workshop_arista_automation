@@ -1,0 +1,56 @@
+!
+! ============================================================================
+! {{ inventory_hostname }} - Arista EOS Configuration
+! Generated from NetBox - Source of Truth
+! ============================================================================
+!
+{% include 'sections/mgmt.j2' %}
+!
+{% include 'sections/aaa.j2' %}
+!
+{% if ntp is defined %}
+{% include 'sections/ntp.j2' %}
+{% endif %}
+!
+{% if log_hosts is defined %}
+{% include 'sections/logging.j2' %}
+{% endif %}
+!
+{% include 'sections/stp.j2' %}
+!
+{% if varp_mac is defined %}
+{% include 'sections/varp.j2' %}
+{% endif %}
+!
+{% if mlag_domain is defined %}
+{% include 'sections/mlag_domain.j2' %}
+{% endif %}
+!
+{% if prefix_lists is defined and prefix_lists | length > 0 %}
+{% include 'sections/prefix_lists.j2' %}
+{% endif %}
+!
+{% if route_maps is defined and route_maps | length > 0 %}
+{% include 'sections/route_maps.j2' %}
+{% endif %}
+!
+{% if device_role == 'leaf' or device_role == 'spine' %}
+{% include 'sections/bgp_underlay.j2' %}
+{% endif %}
+!
+{% if device_role == 'leaf' and tenants is defined %}
+{% include 'sections/evpn_overlay.j2' %}
+{% endif %}
+!
+{% if local_interfaces is defined %}
+{% include 'sections/interfaces.j2' %}
+{% endif %}
+!
+{% include 'sections/services.j2' %}
+!
+! ============================================================================
+! End of Configuration
+! ============================================================================
+end
+!
+

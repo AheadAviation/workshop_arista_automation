@@ -1,0 +1,136 @@
+! # START bgp_underlay.j2
+!
+! Underlay Loopbacks
+!
+{% if device_role == 'spine' %}
+interface Loopback0
+   description Router ID / BGP Peering
+   ip address {{ router_id }}/32
+!
+{% elif device_role == 'leaf' %}
+interface Loopback0
+   description Router ID / BGP Peering
+   ip address {{ router_id }}/32
+!
+interface Loopback1
+   description VXLAN VTEP
+   ip address {{ vtep_ip }}/32
+!
+{% endif %}
+!
+ip routing
+!
+router bgp {{ bgp_asn }}
+   router-id {{ router_id }}
+   update wait-install
+   maximum-paths 8 ecmp 16
+   no bgp default ipv4-unicast
+   !
+{% if bgp_peer_groups is defined and bgp_peer_groups | length > 0 %}
+{% include 'sections/bgp_peer_groups.j2' %}
+{% else %}
+   ! Default peer groups for EVPN fabric
+{% if device_role == 'spine' %}
+   neighbor LEAF_IPV4 peer group
+   neighbor LEAF_IPV4 maximum-routes 12000
+   neighbor LEAF_IPV4 send-community standard extended
+   !
+   neighbor LEAF_EVPN peer group
+   neighbor LEAF_EVPN update-source Loopback0
+   neighbor LEAF_EVPN ebgp-multihop 3
+   neighbor LEAF_EVPN next-hop-unchanged
+   neighbor LEAF_EVPN maximum-routes 0
+   neighbor LEAF_EVPN send-community standard extended
+{% elif device_role == 'leaf' %}
+   neighbor SPINE_IPV4 peer group
+   neighbor SPINE_IPV4 remote-as {{ spine_asn | default(65000) }}
+   neighbor SPINE_IPV4 maximum-routes 12000
+   neighbor SPINE_IPV4 send-community standard extended
+   !
+   neighbor SPINE_EVPN peer group
+   neighbor SPINE_EVPN remote-as {{ spine_asn | default(65000) }}
+   neighbor SPINE_EVPN update-source Loopback0
+   neighbor SPINE_EVPN ebgp-multihop 3
+   neighbor SPINE_EVPN maximum-routes 0
+   neighbor SPINE_EVPN send-community standard extended
+{% if mlag_domain is defined %}
+   !
+   neighbor MLAG_PEER peer group
+   neighbor MLAG_PEER remote-as {{ bgp_asn }}
+   neighbor MLAG_PEER next-hop-self
+   neighbor MLAG_PEER maximum-routes 12000
+   neighbor MLAG_PEER send-community standard extended
+{% endif %}
+{% endif %}
+{% endif %}
+   !
+   redistribute connected route-map REDISTRIBUTE_CONNECTED
+   !
+{% if mlag_domain is defined %}
+   ! MLAG iBGP underlay peering
+{% if mlag_index | default(0) == 0 %}
+   neighbor {{ mlag_domain.underlay_peering_network | default('100.64.0.0/31') | ansible.utils.ipaddr('net') | ansible.utils.ipaddr(1) | ansible.utils.ipaddr('address') }} peer group MLAG_PEER
+   neighbor {{ mlag_domain.underlay_peering_network | default('100.64.0.0/31') | ansible.utils.ipaddr('net') | ansible.utils.ipaddr(1) | ansible.utils.ipaddr('address') }} description MLAG_IBGP_UNDERLAY
+{% else %}
+   neighbor {{ mlag_domain.underlay_peering_network | default('100.64.0.0/31') | ansible.utils.ipaddr('net') | ansible.utils.ipaddr(0) | ansible.utils.ipaddr('address') }} peer group MLAG_PEER
+   neighbor {{ mlag_domain.underlay_peering_network | default('100.64.0.0/31') | ansible.utils.ipaddr('net') | ansible.utils.ipaddr(0) | ansible.utils.ipaddr('address') }} description MLAG_IBGP_UNDERLAY
+{% endif %}
+{% endif %}
+   !
+   ! Underlay BGP Neighbors
+{% for neighbor in bgp_neighbors | default([]) %}
+   neighbor {{ neighbor.peer_ip }} peer group {{ neighbor.peer_group | default('SPINE_IPV4' if device_role == 'leaf' else 'LEAF_IPV4') }}
+{% if neighbor.description is defined %}
+   neighbor {{ neighbor.peer_ip }} description {{ neighbor.description }}
+{% endif %}
+{% if neighbor.remote_as is defined %}
+   neighbor {{ neighbor.peer_ip }} remote-as {{ neighbor.remote_as }}
+{% endif %}
+   !
+{% endfor %}
+   !
+{% if device_role == 'spine' %}
+   ! Spine EVPN overlay peerings to leaves
+{% for leaf in evpn_peers | default([]) %}
+   neighbor {{ leaf.loopback_ip }} peer group LEAF_EVPN
+   neighbor {{ leaf.loopback_ip }} description EVPN {{ leaf.name }}
+   neighbor {{ leaf.loopback_ip }} remote-as {{ leaf.asn }}
+{% endfor %}
+   !
+   address-family evpn
+      neighbor LEAF_EVPN activate
+   !
+   address-family ipv4
+      neighbor LEAF_IPV4 activate
+      no neighbor LEAF_EVPN activate
+{% elif device_role == 'leaf' %}
+   ! Leaf EVPN overlay peerings to spines
+{% for spine in evpn_peers | default([]) %}
+   neighbor {{ spine.loopback_ip }} peer group SPINE_EVPN
+   neighbor {{ spine.loopback_ip }} description EVPN {{ spine.name }}
+{% endfor %}
+   !
+   address-family evpn
+      neighbor SPINE_EVPN activate
+{% if mlag_domain is defined %}
+      no neighbor MLAG_PEER activate
+{% endif %}
+   !
+   address-family ipv4
+      neighbor SPINE_IPV4 activate
+      no neighbor SPINE_EVPN activate
+{% if mlag_domain is defined %}
+      neighbor MLAG_PEER activate
+{% endif %}
+{% endif %}
+   !
+!
+! Route map for redistribution
+route-map REDISTRIBUTE_CONNECTED permit 10
+   match interface Loopback0
+!
+route-map REDISTRIBUTE_CONNECTED permit 20
+   match interface Loopback1
+!
+! # END bgp_underlay.j2
+
