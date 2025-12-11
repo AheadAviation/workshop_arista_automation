@@ -1,0 +1,56 @@
+---
+# =============================================================================
+# AVD Inventory
+# =============================================================================
+# This inventory defines the fabric structure for AVD
+# Groups match AVD role expectations (FABRIC, SPINES, L3_LEAVES, etc.)
+# =============================================================================
+
+all:
+  children:
+    # Main fabric group - all devices
+    FABRIC:
+      children:
+        SPINES:
+        L3_LEAVES:
+
+    # Spine switches
+    SPINES:
+      hosts:
+        spine-01:
+          ansible_host: 172.30.30.11
+        spine-02:
+          ansible_host: 172.30.30.12
+
+    # L3 Leaf switches (with MLAG pairs)
+    L3_LEAVES:
+      children:
+        MLAG_PAIR_1:
+        MLAG_PAIR_2:
+
+    # MLAG Pair 1
+    MLAG_PAIR_1:
+      hosts:
+        leaf-01:
+          ansible_host: 172.30.30.21
+        leaf-02:
+          ansible_host: 172.30.30.22
+
+    # MLAG Pair 2
+    MLAG_PAIR_2:
+      hosts:
+        leaf-03:
+          ansible_host: 172.30.30.23
+        leaf-04:
+          ansible_host: 172.30.30.24
+
+    # Network services apply to all leaves
+    NETWORK_SERVICES:
+      children:
+        L3_LEAVES:
+
+    # Connected endpoints apply to all leaves
+    CONNECTED_ENDPOINTS:
+      children:
+        L3_LEAVES:
+

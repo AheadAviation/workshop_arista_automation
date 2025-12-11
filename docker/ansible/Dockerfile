@@ -61,9 +61,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
     napalm>=4.1.0
 
 # Install Ansible collections globally
+# Including arista.avd for production-grade config generation
 RUN ansible-galaxy collection install \
     netbox.netbox \
     arista.eos \
+    arista.avd \
     ansible.netcommon \
     community.general \
     ansible.utils \

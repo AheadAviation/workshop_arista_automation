@@ -1,0 +1,34 @@
+---
+# =============================================================================
+# AVD Connected Endpoints
+# =============================================================================
+# This file defines servers, hosts, and other endpoints connected to leaves
+# For the workshop, we leave this mostly empty as we focus on fabric config
+# =============================================================================
+
+# Port Profiles
+port_profiles:
+  - profile: SERVER_PROFILE
+    mode: access
+    vlans: "100"
+    spanning_tree_portfast: edge
+    spanning_tree_bpduguard: enabled
+
+  - profile: STORAGE_PROFILE
+    mode: access
+    vlans: "120"
+    mtu: 9000
+    spanning_tree_portfast: edge
+
+  - profile: TRUNK_PROFILE
+    mode: trunk
+    vlans: "100,110,120,130,140"
+    native_vlan: 1
+    spanning_tree_portfast: edge
+
+# Servers (example - can be populated from NetBox)
+servers: []
+
+# Network Ports (example - can be populated from NetBox)
+network_ports: []
+

@@ -1,0 +1,101 @@
+---
+# =============================================================================
+# AVD Network Services (Tenants, VRFs, VLANs)
+# =============================================================================
+# This file defines the overlay services - tenants, VRFs, L2/L3 VLANs
+# Data is populated from NetBox config contexts
+# =============================================================================
+
+tenants:
+  # Tenant: CORE
+  - name: CORE
+    mac_vrf_vni_base: 10000
+    vrfs:
+      - name: CORE
+        vrf_vni: 1
+        vtep_diagnostic:
+          loopback: 100
+          loopback_ip_range: 172.30.1.0/24
+        svis:
+          # VLAN 100 - Servers
+          - id: 100
+            name: SERVERS
+            enabled: true
+            ip_virtual_router_addresses:
+              - 10.100.100.1
+            nodes:
+              - node: leaf-01
+                ip_address: 10.100.100.2/24
+              - node: leaf-02
+                ip_address: 10.100.100.3/24
+              - node: leaf-03
+                ip_address: 10.100.100.4/24
+              - node: leaf-04
+                ip_address: 10.100.100.5/24
+          # VLAN 110 - Management Servers
+          - id: 110
+            name: MGMT_SERVERS
+            enabled: true
+            ip_virtual_router_addresses:
+              - 10.100.110.1
+            nodes:
+              - node: leaf-01
+                ip_address: 10.100.110.2/24
+              - node: leaf-02
+                ip_address: 10.100.110.3/24
+              - node: leaf-03
+                ip_address: 10.100.110.4/24
+              - node: leaf-04
+                ip_address: 10.100.110.5/24
+          # VLAN 120 - Storage
+          - id: 120
+            name: STORAGE
+            enabled: true
+            mtu: 9000
+            ip_virtual_router_addresses:
+              - 10.100.120.1
+            nodes:
+              - node: leaf-01
+                ip_address: 10.100.120.2/24
+              - node: leaf-02
+                ip_address: 10.100.120.3/24
+              - node: leaf-03
+                ip_address: 10.100.120.4/24
+              - node: leaf-04
+                ip_address: 10.100.120.5/24
+          # VLAN 130 - Backup
+          - id: 130
+            name: BACKUP
+            enabled: true
+            mtu: 9000
+            ip_virtual_router_addresses:
+              - 10.100.130.1
+            nodes:
+              - node: leaf-01
+                ip_address: 10.100.130.2/24
+              - node: leaf-02
+                ip_address: 10.100.130.3/24
+              - node: leaf-03
+                ip_address: 10.100.130.4/24
+              - node: leaf-04
+                ip_address: 10.100.130.5/24
+          # VLAN 140 - VoIP
+          - id: 140
+            name: VOIP
+            enabled: true
+            ip_virtual_router_addresses:
+              - 10.100.140.1
+            nodes:
+              - node: leaf-01
+                ip_address: 10.100.140.2/24
+              - node: leaf-02
+                ip_address: 10.100.140.3/24
+              - node: leaf-03
+                ip_address: 10.100.140.4/24
+              - node: leaf-04
+                ip_address: 10.100.140.5/24
+
+    l2vlans:
+      # Pure L2 VLANs if needed
+      []
+

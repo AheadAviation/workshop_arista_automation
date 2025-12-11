@@ -1,0 +1,155 @@
+---
+# =============================================================================
+# AVD Fabric Configuration
+# =============================================================================
+# This file defines the EVPN/VXLAN fabric using Arista Validated Designs (AVD)
+# Data is populated from NetBox via the netbox_to_avd.py transformation script
+# =============================================================================
+
+# Fabric Name
+fabric_name: NETBOX_FABRIC
+
+# Design Type
+design:
+  type: l3ls-evpn
+
+# Spine Switches
+spine:
+  defaults:
+    platform: cEOS-lab
+    bgp_as: 65000
+    loopback_ipv4_pool: 10.255.0.0/24
+    bgp_defaults:
+      - no bgp default ipv4-unicast
+      - update wait-install
+      - distance bgp 20 200 200
+  nodes:
+    # Populated from NetBox
+    - name: spine-01
+      id: 1
+      mgmt_ip: 172.30.30.11/24
+    - name: spine-02
+      id: 2
+      mgmt_ip: 172.30.30.12/24
+
+# Leaf Switches
+l3leaf:
+  defaults:
+    platform: cEOS-lab
+    loopback_ipv4_pool: 10.255.0.0/24
+    vtep_loopback_ipv4_pool: 10.255.1.0/24
+    uplink_switches:
+      - spine-01
+      - spine-02
+    uplink_interfaces:
+      - Ethernet1
+      - Ethernet2
+    mlag_interfaces:
+      - Ethernet3
+      - Ethernet4
+    mlag_peer_ipv4_pool: 169.254.1.0/24
+    mlag_peer_l3_ipv4_pool: 100.64.0.0/24
+    virtual_router_mac_address: 00:1c:73:00:00:99
+    spanning_tree_mode: mstp
+    spanning_tree_priority: 16384
+  node_groups:
+    # MLAG Pair 1 - Populated from NetBox
+    - group: MLAG_PAIR_1
+      bgp_as: 65001
+      nodes:
+        - name: leaf-01
+          id: 11
+          mgmt_ip: 172.30.30.21/24
+          uplink_switch_interfaces:
+            - Ethernet1
+            - Ethernet1
+        - name: leaf-02
+          id: 12
+          mgmt_ip: 172.30.30.22/24
+          uplink_switch_interfaces:
+            - Ethernet2
+            - Ethernet2
+    # MLAG Pair 2 - Populated from NetBox
+    - group: MLAG_PAIR_2
+      bgp_as: 65002
+      nodes:
+        - name: leaf-03
+          id: 13
+          mgmt_ip: 172.30.30.23/24
+          uplink_switch_interfaces:
+            - Ethernet3
+            - Ethernet3
+        - name: leaf-04
+          id: 14
+          mgmt_ip: 172.30.30.24/24
+          uplink_switch_interfaces:
+            - Ethernet4
+            - Ethernet4
+
+# =============================================================================
+# Underlay Configuration
+# =============================================================================
+underlay_routing_protocol: ebgp
+overlay_routing_protocol: ebgp
+
+# P2P Links
+underlay_p2p_network_summary: 10.0.0.0/24
+
+# BGP Settings
+bgp_peer_groups:
+  ipv4_underlay_peers:
+    password: null
+  evpn_overlay_peers:
+    password: null
+  mlag_ipv4_underlay_peer:
+    password: null
+
+# =============================================================================
+# Overlay Configuration
+# =============================================================================
+
+# EVPN
+evpn_overlay_bgp_rtc: false
+evpn_overlay_peer_groups:
+  - evpn_overlay_peers
+
+# =============================================================================
+# Management
+# =============================================================================
+mgmt_gateway: 172.30.30.1
+mgmt_interface: Management0
+mgmt_interface_vrf: MGMT
+
+# DNS
+name_servers:
+  - 172.30.30.1
+
+# NTP
+ntp:
+  servers:
+    - name: 172.30.30.1
+      vrf: MGMT
+      preferred: true
+
+# Local Users
+local_users:
+  - name: admin
+    privilege: 15
+    role: network-admin
+    no_password: true
+
+# AAA
+aaa_authorization:
+  exec:
+    default: local
+  commands:
+    all_default: local
+
+# Banner
+banners:
+  login: |
+    ***************************************************************************
+    * This system is for authorized use only.                                  *
+    * All access is logged and monitored.                                      *
+    ***************************************************************************
+

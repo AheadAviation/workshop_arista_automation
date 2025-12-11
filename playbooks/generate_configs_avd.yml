@@ -1,0 +1,72 @@
+---
+# =============================================================================
+# Generate Configurations using Arista Validated Designs (AVD)
+# =============================================================================
+# This playbook uses the arista.avd collection to generate production-grade
+# configurations from structured data.
+#
+# Prerequisites:
+#   - arista.avd collection installed
+#   - AVD group_vars populated (manually or via netbox_to_avd.py)
+#
+# Usage:
+#   ansible-playbook playbooks/generate_configs_avd.yml
+#
+# Outputs:
+#   - avd/intended/structured_configs/*.yml  - Structured device data
+#   - avd/intended/configs/*.cfg             - Device configurations
+#   - avd/documentation/                     - Fabric documentation
+# =============================================================================
+
+- name: Build EVPN Fabric Configuration with AVD
+  hosts: FABRIC
+  gather_facts: false
+  connection: local
+
+  vars:
+    # AVD output directories
+    structured_config_dir: "{{ playbook_dir }}/../avd/intended/structured_configs"
+    config_dir: "{{ playbook_dir }}/../avd/intended/configs"
+    documentation_dir: "{{ playbook_dir }}/../avd/documentation"
+
+  tasks:
+    - name: Display AVD generation info
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║         AVD Configuration Generation                          ║
+          ╠════════════════════════════════════════════════════════════════╣
+          ║  Using Arista Validated Designs for production-grade configs  ║
+          ║  Output: avd/intended/configs/                                 ║
+          ╚════════════════════════════════════════════════════════════════╝
+      run_once: true
+
+    # Generate structured configuration using eos_designs
+    - name: Generate AVD Structured Configuration
+      ansible.builtin.import_role:
+        name: arista.avd.eos_designs
+
+    # Generate device configurations from structured data
+    - name: Generate Device Configurations
+      ansible.builtin.import_role:
+        name: arista.avd.eos_cli_config_gen
+
+    # Generate fabric documentation
+    - name: Generate Fabric Documentation
+      ansible.builtin.import_role:
+        name: arista.avd.eos_designs_documentation
+      run_once: true
+      when: generate_documentation | default(true)
+
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║                  AVD Generation Complete                       ║
+          ╠════════════════════════════════════════════════════════════════╣
+          ║  Configs: avd/intended/configs/*.cfg                           ║
+          ║  Structured: avd/intended/structured_configs/*.yml             ║
+          ║  Docs: avd/documentation/                                      ║
+          ╚════════════════════════════════════════════════════════════════╝
+      run_once: true
+
