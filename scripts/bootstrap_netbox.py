@@ -579,15 +579,18 @@ class NetBoxBootstrap:
                 if role_ids:
                     ctx_data["roles"] = role_ids
 
-            # Link to tags if specified
+            # Link to tags if specified - use tag slugs, not IDs
             if "tags" in ctx:
-                tag_ids = []
+                tag_slugs = []
                 for tag_slug in ctx["tags"]:
                     tag = self.nb.extras.tags.get(slug=tag_slug)
                     if tag:
-                        tag_ids.append(tag.id)
-                if tag_ids:
-                    ctx_data["tags"] = tag_ids
+                        # Use the slug for the API, not the ID
+                        tag_slugs.append(tag.slug)
+                    else:
+                        console.print(f"  [yellow]⚠[/yellow] Tag not found: {tag_slug}")
+                if tag_slugs:
+                    ctx_data["tags"] = tag_slugs
 
             self._create_or_update(self.nb.extras.config_contexts, ctx_data)
 
