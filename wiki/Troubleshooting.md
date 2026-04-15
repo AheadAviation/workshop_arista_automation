@@ -399,6 +399,14 @@ docker compose down -v
    - Verify `mlag-pair-1` tag is applied in NetBox
    - Verify `mlag_domain` config context exists
 
+4. **Check `flatten_config_context` is enabled** (most common root cause):
+
+   Open `inventory/netbox.yml` and confirm:
+   ```yaml
+   flatten_config_context: true
+   ```
+   If it is `false`, config context data is returned as a raw list and **none of the MLAG, VXLAN, or tenant variables will be set**. This silently produces configs without MLAG or VXLAN sections. Set to `true` and regenerate configs.
+
 ### VXLAN Tests Fail
 
 **Symptom:** VTEPs not learning or no VXLAN tunnels

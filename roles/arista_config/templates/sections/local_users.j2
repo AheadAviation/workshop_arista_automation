@@ -6,7 +6,7 @@ username {{ user.name }} privilege {{ user.privilege | default(15) }} role {{ us
 {% endfor %}
 {% else %}
 ! Default lab user
-username admin privilege 15 role network-admin nopassword
+username admin privilege 15 role network-admin secret admin
 {% endif %}
 !
 ! # END local_users.j2

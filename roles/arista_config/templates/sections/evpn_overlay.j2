@@ -67,7 +67,7 @@ no spanning-tree vlan-id {{ mlag_domain.ibgp_vlan | default(4080) }}
 !
 interface Vlan{{ mlag_domain.ibgp_vlan | default(4080) }}
    description Underlay iBGP peering to MLAG peer
-   ip address {{ mlag_domain.underlay_peering_network | default('100.64.0.0/31') | ansible.utils.ipaddr(mlag_index | default(0)) }}
+   ip address {{ mlag_domain.underlay_peering_network | default('100.64.0.0/31') | ansible.utils.ipaddr('net') | ansible.utils.ipaddr(mlag_index | int) }}
    mtu {{ fabric_defaults.underlay_mtu | default(9214) }}
 !
 {% for tenant in tenants %}
@@ -81,7 +81,7 @@ interface Vlan{{ 4080 + tenant.id }}
    description IBGP_{{ tenant.name }}
    vrf {{ tenant.name }}
    mtu {{ fabric_defaults.underlay_mtu | default(9214) }}
-   ip address {{ tenant.ibgp_network | default('100.64.' ~ tenant.id ~ '.0/31') | ansible.utils.ipaddr(mlag_index | default(0)) }}
+   ip address {{ tenant.ibgp_network | default('100.64.' ~ tenant.id ~ '.0/31') | ansible.utils.ipaddr('net') | ansible.utils.ipaddr(mlag_index | int) }}
 !
 {% endfor %}
 {% endif %}
@@ -127,7 +127,7 @@ router bgp {{ bgp_asn }}
       route-target export evpn {{ bgp_asn }}:{{ tenant.id }}
 {% endif %}
 {% if mlag_domain is defined %}
-{% if mlag_index | default(0) == 0 %}
+{% if (mlag_index | int) == 0 %}
       neighbor {{ tenant.ibgp_network | default('100.64.' ~ tenant.id ~ '.0/31') | ansible.utils.ipaddr(1) | ansible.utils.ipaddr('address') }} peer group MLAG_PEER
       neighbor {{ tenant.ibgp_network | default('100.64.' ~ tenant.id ~ '.0/31') | ansible.utils.ipaddr(1) | ansible.utils.ipaddr('address') }} description IBGP {{ tenant.name }}
 {% else %}

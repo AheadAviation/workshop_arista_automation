@@ -1,5 +1,6 @@
 {# Calculate BGP neighbors from point-to-point interfaces #}
 {% set ns = namespace(neighbors=[]) %}
+{% set leaf_asn_base_val = leaf_asn_base | default(65001) | int %}
 {% for intf_name, intf_ip in interface_ips.items() %}
 {% if intf_name is match('^eth[0-9]+$') and ('/31' in intf_ip or '/30' in intf_ip) %}
 {% set ip_addr = intf_ip.split('/')[0] %}
@@ -14,11 +15,11 @@
 {% set peer_ip = octets[0] ~ '.' ~ octets[1] ~ '.' ~ octets[2] ~ '.' ~ peer_last | string %}
 {# Determine peer ASN based on device role #}
 {% if device_role == 'leaf' %}
-{% set peer_asn = 65000 %}
+{% set peer_asn = spine_asn | default(65000) | int %}
 {% else %}
-{# Spine connects to leaves - ASN based on interface number #}
+{# Spine connects to leaves - 2 ports per leaf ASN (eth1+eth2 -> ASN base, eth3+eth4 -> ASN base+1, etc.) #}
 {% set intf_num = intf_name | replace('eth', '') | int %}
-{% set peer_asn = 65000 + intf_num %}
+{% set peer_asn = leaf_asn_base_val + ((intf_num - 1) // 2) %}
 {% endif %}
 {% set _ = ns.neighbors.append({
   'local_interface': intf_name,
@@ -29,5 +30,4 @@
 {% endif %}
 {% endfor %}
 {{ ns.neighbors | to_yaml }}
-
 

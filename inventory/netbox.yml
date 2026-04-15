@@ -31,7 +31,7 @@ group_by:
 # Host Variables
 # =============================================================================
 config_context: true
-flatten_config_context: false
+flatten_config_context: true
 flatten_custom_fields: true
 
 # =============================================================================

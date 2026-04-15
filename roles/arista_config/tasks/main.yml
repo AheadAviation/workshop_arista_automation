@@ -53,17 +53,17 @@
   ansible.builtin.set_fact:
     device_interfaces: "{{ interfaces | default([]) }}"
 
-- name: Get config context from NetBox
+- name: Set config context reference
   ansible.builtin.set_fact:
-    netbox_config_context: "{{ config_context | default({}) }}"
+    netbox_config_context: "{{ hostvars[inventory_hostname] }}"
 
-- name: Extract management settings from config context
+- name: Set management settings from flattened context
   ansible.builtin.set_fact:
-    mgmt_vrf: "{{ config_context.management.vrf | default('MGMT') }}"
-    mgmt_gateway: "{{ config_context.management.gateway | default(clab_mgmt_gateway) }}"
-    ntp: "{{ config_context.ntp | default({'servers': fabric_defaults.ntp_servers, 'vrf': 'MGMT', 'interface': 'Management0'}) }}"
-    dns: "{{ config_context.dns | default({'servers': fabric_defaults.dns_servers}) }}"
-  when: config_context is defined
+    mgmt_vrf: "{{ management.vrf | default('MGMT') }}"
+    mgmt_gateway: "{{ management.gateway | default(clab_mgmt_gateway) }}"
+    ntp: "{{ ntp | default({'servers': fabric_defaults.ntp_servers, 'vrf': 'MGMT', 'interface': 'Management0'}) }}"
+    dns: "{{ dns | default({'servers': fabric_defaults.dns_servers}) }}"
+  when: management is defined
 
 - name: Set default management settings
   ansible.builtin.set_fact:
@@ -75,22 +75,42 @@
       interface: "Management0"
     dns:
       servers: "{{ fabric_defaults.dns_servers }}"
-  when: config_context is not defined
+  when: management is not defined
 
-- name: Extract tenants from config context
+- name: Initialize tenants if not set
   ansible.builtin.set_fact:
-    tenants: "{{ config_context.tenants | default([]) }}"
-  when: config_context is defined and config_context.tenants is defined
+    tenants: "{{ tenants | default([]) }}"
 
-- name: Extract MLAG domain from config context
+- name: Initialize EVPN peers if not set from context
   ansible.builtin.set_fact:
-    mlag_domain: "{{ config_context.mlag_domain | default(omit) }}"
-  when: config_context is defined and config_context.mlag_domain is defined
+    evpn_peers: []
 
-- name: Extract EVPN peers from config context
+- name: Fetch peer devices for EVPN overlay
+  ansible.builtin.uri:
+    url: "{{ netbox_url }}/api/dcim/devices/?role={{ 'leaf' if device_role == 'spine' else 'spine' }}&limit=100"
+    headers:
+      Authorization: "Token {{ netbox_token }}"
+    return_content: true
+  register: evpn_peer_devices
+  delegate_to: localhost
+  when: device_role in ['spine', 'leaf']
+
+- name: Initialize EVPN peers list
   ansible.builtin.set_fact:
-    evpn_peers: "{{ config_context.evpn_peers | default([]) }}"
-  when: config_context is defined
+    evpn_peers: []
+  when: device_role in ['spine', 'leaf']
+
+- name: Build EVPN overlay peers list
+  ansible.builtin.set_fact:
+    evpn_peers: "{{ evpn_peers + [{'name': item.name, 'loopback_ip': item.custom_fields.router_id, 'asn': item.custom_fields.bgp_asn}] }}"
+  loop: "{{ evpn_peer_devices.json.results | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - device_role in ['spine', 'leaf']
+    - evpn_peer_devices is defined
+    - item.custom_fields.router_id is defined
+    - item.custom_fields.router_id | default('') | length > 0
 
 - name: Initialize interface IP mapping
   ansible.builtin.set_fact:

@@ -44,6 +44,27 @@
 !
 {% if local_interfaces is defined %}
 {% include 'sections/interfaces.j2' %}
+{% elif interface_ips is defined and interface_ips | length > 0 %}
+! # START interfaces.j2
+! Fabric link interfaces from NetBox
+{% for intf_name, intf_data in interface_ips | dictsort %}
+{% if intf_name is match('^eth[0-9]+$') or intf_name is match('^Ethernet[0-9]+$') %}
+{% set eos_name = 'Ethernet' ~ intf_name[3:] if intf_name.lower().startswith('eth') and not intf_name.lower().startswith('ethernet') else intf_name %}
+{% set intf_info = interfaces_info[intf_name] | default({}) %}
+interface {{ eos_name }}
+{% if intf_info.description is defined and intf_info.description %}
+   description {{ intf_info.description }}
+{% else %}
+   description Fabric Link
+{% endif %}
+   mtu {{ fabric_defaults.underlay_mtu | default(9214) }}
+   no switchport
+   ip address {{ intf_data }}
+   no shutdown
+!
+{% endif %}
+{% endfor %}
+! # END interfaces.j2
 {% endif %}
 !
 {% include 'sections/services.j2' %}
