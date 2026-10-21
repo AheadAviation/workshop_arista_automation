@@ -39,6 +39,7 @@ output/clab/
 
 # ContainerLab output (generated labs)
 /clab-*/
+clab/clab-*/
 *.clab.yml
 !clab/topology.clab.yml.j2
 topology-docker.clab.yml
@@ -75,4 +76,7 @@ secrets/
 # Backup files
 *.bak
 *.backup
+output/changes/
+output/alerts/
+output/reports/*.md
 

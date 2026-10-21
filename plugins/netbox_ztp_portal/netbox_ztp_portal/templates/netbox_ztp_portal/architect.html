@@ -1,0 +1,75 @@
+{% extends 'netbox_ztp_portal/base_portal.html' %}
+
+{% block tab_architect %} class="active"{% endblock %}
+
+{% block portal_body %}
+<div class="card">
+  <h1>New Site &mdash; EVPN/VXLAN Fabric Designer</h1>
+  <p class="muted">Define the fabric. The portal computes every device, interface, cable,
+     loopback, management IP, ASN, and MLAG relationship &mdash; offset so it never collides
+     with the existing DC1 fabric &mdash; then writes it to NetBox tagged for ContainerLab.</p>
+  <div class="grid two">
+    <div>
+      <label for="ztp-site-code">Site code</label>
+      <input id="ztp-site-code" value="DC2" maxlength="8" placeholder="DC2">
+    </div>
+    <div>
+      <label for="ztp-spines">Spine switches</label>
+      <select id="ztp-spines">
+        <option value="2" selected>2 spines</option>
+        <option value="1">1 spine</option>
+      </select>
+    </div>
+    <div>
+      <label for="ztp-pairs">Leaf MLAG pairs</label>
+      <select id="ztp-pairs">
+        <option value="2" selected>2 pairs (4 leaves)</option>
+        <option value="1">1 pair (2 leaves)</option>
+      </select>
+    </div>
+  </div>
+
+  <details style="margin-top:14px">
+    <summary>Site details &amp; base services (optional &mdash; sensible defaults applied)</summary>
+    <div class="grid two" style="margin-top:12px">
+      <div>
+        <label for="ztp-desc">Site description</label>
+        <input id="ztp-desc" placeholder="e.g. Secondary DC fabric, Chicago">
+      </div>
+      <div>
+        <label for="ztp-region">Region</label>
+        <input id="ztp-region" placeholder="e.g. us-central">
+      </div>
+      <div>
+        <label for="ztp-ntp">NTP servers (comma-separated)</label>
+        <input id="ztp-ntp" placeholder="10.0.0.10, 10.0.0.11">
+      </div>
+      <div>
+        <label for="ztp-dns">DNS domain</label>
+        <input id="ztp-dns" placeholder="ahead.local">
+      </div>
+      <div>
+        <label for="ztp-snmp">SNMP RO community</label>
+        <input id="ztp-snmp" placeholder="ahead-ro">
+      </div>
+    </div>
+    <p class="muted" style="margin-top:8px;font-size:.85rem">One <strong>Build</strong> writes the site,
+       all spine/leaf devices, interfaces, fabric cables, loopbacks, management IPs, BGP ASNs, EVPN VLANs,
+       the base-services config-context, and per-pair MLAG config-contexts &mdash; everything the pipeline needs.</p>
+  </details>
+
+  <div style="margin-top:16px;display:flex;gap:10px">
+    <button class="btn" id="ztp-preview">Preview fabric</button>
+    <button class="btn success" id="ztp-build" disabled>Build everything in NetBox</button>
+  </div>
+</div>
+
+<div class="card hidden" id="ztp-preview-out"></div>
+<div class="card hidden" id="ztp-build-out"></div>
+
+<div class="card hidden" id="ztp-nextsteps">
+  <h2>Next steps &mdash; deploy to ContainerLab</h2>
+  <p class="muted">Run these from the workshop root to render configs and boot the new nodes.</p>
+  <pre></pre>
+</div>
+{% endblock %}

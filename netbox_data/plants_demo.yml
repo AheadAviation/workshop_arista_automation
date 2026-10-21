@@ -1,0 +1,889 @@
+---
+# =============================================================================
+# Plants Demo Add-on - Sample Data
+# =============================================================================
+# OPTIONAL module. Layers a multi-site manufacturer (plants + distribution
+# centers, Meraki-centric with some Juniper/Ubiquiti, owners/approvers/change
+# windows) on top of the core Arista fabric lab WITHOUT modifying it.
+#
+# Everything here is fictional. Nothing carries the `containerlab` tag, so the
+# Arista inventory, config generation and ContainerLab topology never see it.
+#
+# Load: python scripts/plants_demo/cli.py setup
+# Audit: python scripts/plants_demo/cli.py audit
+# Remove: python scripts/plants_demo/cli.py remove --yes
+# =============================================================================
+
+addon:
+  tag: plants-demo
+  domain: summitdoors.example
+
+# -----------------------------------------------------------------------------
+# Reference data (all new - none of these exist in the core lab)
+# -----------------------------------------------------------------------------
+tags:
+  - {name: plants-demo, slug: plants-demo, color: 9e9e9e, description: "Created by the Plants Demo add-on"}
+  - {name: meraki, slug: meraki, color: 4caf50, description: "Cisco Meraki managed"}
+  - {name: juniper, slug: juniper, color: 3f51b5, description: "Juniper managed (non-Meraki)"}
+  - {name: ubiquiti, slug: ubiquiti, color: 03a9f4, description: "Ubiquiti managed (non-Meraki)"}
+  - {name: ot-network, slug: ot-network, color: ff9800, description: "Operational technology / plant floor"}
+  - {name: legacy-os, slug: legacy-os, color: f44336, description: "Running an end-of-life operating system"}
+  - {name: decommission-candidate, slug: decommission-candidate, color: 795548, description: "Believed unneeded - confirm owner then retire"}
+  - {name: spreadsheet-import, slug: spreadsheet-import, color: 607d8b, description: "Imported from a spreadsheet by the Plants Demo add-on"}
+  - {name: meraki-sync, slug: meraki-sync, color: 66bb6a, description: "Created by the Meraki sync from the dashboard"}
+  - {name: scan-found, slug: scan-found, color: ffc107, description: "Answered a network scan; not yet identified"}
+
+manufacturers:
+  - {name: Cisco Meraki, slug: cisco-meraki}
+  - {name: Juniper Networks, slug: juniper}
+  - {name: Ubiquiti, slug: ubiquiti}
+  - {name: Dell, slug: dell}
+  - {name: Generic, slug: generic}
+
+# Platforms with a manufacturer only allow that manufacturer's device types,
+# so the Windows platforms intentionally have none.
+platforms:
+  - {name: Cisco Meraki (Cloud), slug: meraki-cloud, manufacturer: cisco-meraki}
+  - {name: Junos, slug: junos, manufacturer: juniper}
+  - {name: UniFi OS, slug: unifi-os, manufacturer: ubiquiti}
+  - {name: Windows XP, slug: windows-xp}
+  - {name: Windows 7, slug: windows-7}
+  - {name: Windows 10, slug: windows-10}
+  - {name: Windows Server 2012 R2, slug: windows-server-2012-r2}
+  - {name: Windows Server 2016, slug: windows-server-2016}
+  - {name: Windows Server 2019, slug: windows-server-2019}
+  - {name: Windows Server 2022, slug: windows-server-2022}
+
+device_roles:
+  - {name: Firewall, slug: firewall, color: f44336}
+  - {name: Access Switch, slug: access-switch, color: 2196f3}
+  - {name: Wireless AP, slug: wireless-ap, color: 8bc34a}
+  - {name: Server, slug: server, color: 607d8b}
+  - {name: OT Workstation, slug: ot-workstation, color: ff9800}
+
+prefix_roles:
+  - {name: Management, slug: management, weight: 10}
+  - {name: Corporate, slug: corporate, weight: 20}
+  - {name: Voice, slug: voice, weight: 30}
+  - {name: Guest, slug: guest, weight: 40}
+  - {name: Servers, slug: servers, weight: 50}
+  - {name: OT, slug: ot, weight: 60}
+
+custom_field_choice_sets:
+  - name: Criticality
+    extra_choices: [[critical, Critical], [high, High], [medium, Medium], [low, Low]]
+  - name: Source System
+    extra_choices:
+      - [spreadsheet, Spreadsheet]
+      - [meraki-api, Meraki API]
+      - [ninjaone, NinjaOne]
+      - [manual, Manual]
+
+# ui_visible=if-set keeps these hidden on the Arista devices, which never use them.
+custom_fields:
+  - {name: criticality, label: Criticality, type: select, choice_set: Criticality, object_types: [dcim.site, dcim.device], weight: 200}
+  - {name: change_window, label: Change Window, type: text, object_types: [dcim.site], weight: 210, description: "Standing maintenance window (blank = negotiated each time)"}
+  - {name: firmware_canary, label: Firmware Canary, type: boolean, object_types: [dcim.site], weight: 220, description: "Low-impact site that receives firmware first"}
+  - {name: meraki_network_id, label: Meraki Network ID, type: text, object_types: [dcim.site], weight: 230}
+  - {name: meraki_serial, label: Meraki Serial, type: text, object_types: [dcim.device], weight: 240}
+  - {name: firmware_version, label: Firmware Version, type: text, object_types: [dcim.device], weight: 245, description: "As reported by the Meraki dashboard"}
+  - {name: business_application, label: Business Application, type: text, object_types: [dcim.device], weight: 250}
+  - {name: os_eol_date, label: OS End-of-Life Date, type: date, object_types: [dcim.device], weight: 260}
+  - {name: source_system, label: Source System, type: select, choice_set: Source System, object_types: [dcim.site, dcim.device], weight: 270}
+  - {name: depends_on, label: Depends On, type: multiobject, related_object_type: dcim.device, object_types: [dcim.device], weight: 280, description: "Systems this one needs to talk to (the flows a firewall must allow)"}
+
+# -----------------------------------------------------------------------------
+# Organization
+# -----------------------------------------------------------------------------
+regions:
+  - {name: North America, slug: north-america}
+  - {name: United States, slug: united-states, parent: north-america}
+  - {name: Canada, slug: canada, parent: north-america}
+  - {name: Mexico, slug: mexico, parent: north-america}
+  - {name: EMEA, slug: emea}
+  - {name: United Kingdom, slug: united-kingdom, parent: emea}
+  - {name: APAC, slug: apac}
+  - {name: China, slug: china, parent: apac}
+  - {name: New Zealand, slug: new-zealand, parent: apac}
+
+tenant_groups:
+  - {name: Business Units, slug: business-units}
+
+tenants:
+  - {name: Corporate, slug: corporate, group: business-units}
+  - {name: Residential Doors, slug: residential-doors, group: business-units}
+  - {name: Commercial Doors, slug: commercial-doors, group: business-units}
+  - {name: Logistics, slug: logistics, group: business-units}
+
+contact_groups:
+  - {name: IT Infrastructure, slug: it-infrastructure}
+  - {name: Applications, slug: applications}
+  - {name: Plant Operations, slug: plant-operations}
+
+# Roles are what let an approval workflow ask "who do I have to talk to?"
+contact_roles:
+  - {name: Owner, slug: owner}
+  - {name: Approver, slug: approver}
+  - {name: Change Window Contact, slug: change-window}
+  - {name: Escalation, slug: escalation}
+
+contacts:
+  dana-ortiz: {name: Dana Ortiz, group: it-infrastructure, title: Director of IT}
+  priya-nair: {name: Priya Nair, group: it-infrastructure, title: Senior Network Engineer}
+  marcus-lee: {name: Marcus Lee, group: it-infrastructure, title: Network Engineer}
+  nora-fields: {name: Nora Fields, group: it-infrastructure, title: Systems Administrator}
+  sam-whitaker: {name: Sam Whitaker, group: it-infrastructure, title: Service Desk Lead}
+  elena-petrova: {name: Elena Petrova, group: applications, title: ERP Applications Lead}
+  raj-patel: {name: Raj Patel, group: applications, title: Manufacturing Systems Owner}
+  carla-mendez: {name: Carla Mendez, group: plant-operations, title: Plant Manager - Columbus}
+  tom-brennan: {name: Tom Brennan, group: plant-operations, title: Plant Manager - Greenville}
+  joanne-kim: {name: Joanne Kim, group: plant-operations, title: Plant Manager - Tulsa}
+  ken-ito: {name: Ken Ito, group: plant-operations, title: Distribution Manager - Memphis}
+  bea-lopez: {name: Bea Lopez, group: plant-operations, title: Distribution Manager - Reno}
+  pat-oneill: {name: Pat Oneill, group: plant-operations, title: Plant Manager - Mississauga}
+  luis-herrera: {name: Luis Herrera, group: plant-operations, title: Plant Manager - Monterrey}
+  ana-gutierrez: {name: Ana Gutierrez, group: plant-operations, title: Plant Manager - Tijuana}
+  harry-clarke: {name: Harry Clarke, group: plant-operations, title: Site Lead - Telford}
+  wei-zhang: {name: Wei Zhang, group: plant-operations, title: Site Lead - Suzhou}
+  aroha-ngata: {name: Aroha Ngata, group: plant-operations, title: Warehouse Manager - Auckland}
+
+# -----------------------------------------------------------------------------
+# Device types. `group` drives cabling: lan (firewall downlinks), uplink
+# (toward the network core), access (host-facing), mgmt (management IP).
+# -----------------------------------------------------------------------------
+device_types:
+  mx85:
+    manufacturer: cisco-meraki
+    model: MX85
+    slug: meraki-mx85
+    kind: firewall
+    role: firewall
+    platform: meraki-cloud
+    tags: [meraki]
+    interfaces:
+      - {name: WAN1, type: 1000base-t, group: wan}
+      - {name: WAN2, type: 1000base-t, group: wan}
+      - {pattern: "Port {n}", start: 3, count: 8, type: 1000base-t, group: lan}
+      - {name: Management, type: virtual, group: mgmt}
+  mx68:
+    manufacturer: cisco-meraki
+    model: MX68
+    slug: meraki-mx68
+    kind: firewall
+    role: firewall
+    platform: meraki-cloud
+    tags: [meraki]
+    interfaces:
+      - {name: WAN1, type: 1000base-t, group: wan}
+      - {name: WAN2, type: 1000base-t, group: wan}
+      - {pattern: "Port {n}", start: 3, count: 10, type: 1000base-t, group: lan}
+      - {name: Management, type: virtual, group: mgmt}
+  ms120-24p:
+    manufacturer: cisco-meraki
+    model: MS120-24P
+    slug: meraki-ms120-24p
+    kind: switch
+    role: access-switch
+    platform: meraki-cloud
+    tags: [meraki]
+    interfaces:
+      - {pattern: "Port {n}", start: 1, count: 24, type: 1000base-t, group: access}
+      - {pattern: "Uplink {n}", start: 25, count: 4, type: 1000base-x-sfp, group: uplink}
+      - {name: Management, type: virtual, group: mgmt}
+  ms225-48lp:
+    manufacturer: cisco-meraki
+    model: MS225-48LP
+    slug: meraki-ms225-48lp
+    kind: switch
+    role: access-switch
+    platform: meraki-cloud
+    tags: [meraki]
+    interfaces:
+      - {pattern: "Port {n}", start: 1, count: 48, type: 1000base-t, group: access}
+      - {pattern: "Uplink {n}", start: 49, count: 4, type: 10gbase-x-sfpp, group: uplink}
+      - {name: Management, type: virtual, group: mgmt}
+  mr46:
+    manufacturer: cisco-meraki
+    model: MR46
+    slug: meraki-mr46
+    kind: ap
+    role: wireless-ap
+    platform: meraki-cloud
+    tags: [meraki]
+    interfaces:
+      - {name: eth0, type: 2.5gbase-t, group: uplink}
+      - {name: Management, type: virtual, group: mgmt}
+  ex2300-24p:
+    manufacturer: juniper
+    model: EX2300-24P
+    slug: juniper-ex2300-24p
+    kind: switch
+    role: access-switch
+    platform: junos
+    tags: [juniper]
+    interfaces:
+      - {pattern: "ge-0/0/{n}", start: 0, count: 24, type: 1000base-t, group: access}
+      - {pattern: "xe-0/1/{n}", start: 0, count: 4, type: 10gbase-x-sfpp, group: uplink}
+      - {name: me0, type: 1000base-t, group: mgmt, mgmt_only: true}
+  usw-pro-24-poe:
+    manufacturer: ubiquiti
+    model: USW-Pro-24-PoE
+    slug: ubiquiti-usw-pro-24-poe
+    kind: switch
+    role: access-switch
+    platform: unifi-os
+    tags: [ubiquiti]
+    interfaces:
+      - {pattern: "Port {n}", start: 1, count: 24, type: 1000base-t, group: access}
+      - {pattern: "SFP+ {n}", start: 1, count: 2, type: 10gbase-x-sfpp, group: uplink}
+      - {name: Management, type: virtual, group: mgmt}
+  poweredge-r650:
+    manufacturer: dell
+    model: PowerEdge R650
+    slug: dell-poweredge-r650
+    kind: server
+    role: server
+    interfaces:
+      - {name: iDRAC, type: 1000base-t, group: mgmt, mgmt_only: true}
+      - {name: NIC1, type: 10gbase-x-sfpp, group: uplink}
+      - {name: NIC2, type: 10gbase-x-sfpp, group: uplink}
+  hmi-workstation:
+    manufacturer: generic
+    model: HMI Workstation
+    slug: generic-hmi-workstation
+    kind: endpoint
+    role: ot-workstation
+    interfaces:
+      - {name: eth0, type: 1000base-t, group: uplink}
+
+# -----------------------------------------------------------------------------
+# Site layout. Each profile expands into fw/sw/ap devices named
+# <site>-fw01, <site>-sw01, <site>-ap01 (vendor-neutral naming on purpose).
+# -----------------------------------------------------------------------------
+profiles:
+  large:
+    firewall: {type: mx85, count: 2}
+    switch: {type: ms225-48lp, count: 3}
+    ap: {type: mr46, count: 6}
+    extra_vlans: [50]
+  medium:
+    firewall: {type: mx85, count: 1}
+    switch: {type: ms120-24p, count: 2}
+    ap: {type: mr46, count: 4}
+  small:
+    firewall: {type: mx68, count: 1}
+    switch: {type: ms120-24p, count: 1}
+    ap: {type: mr46, count: 2}
+
+# vid -> (name, prefix role). `plants` also get OT; every site gets the rest.
+vlans:
+  common:
+    - {vid: 10, name: CORP, role: corporate}
+    - {vid: 20, name: VOICE, role: voice}
+    - {vid: 30, name: GUEST, role: guest}
+    - {vid: 99, name: MGMT, role: management}
+  plant_only:
+    - {vid: 100, name: OT, role: ot}
+  extra:
+    50: {name: SERVERS, role: servers}
+
+# `index` is the 2nd octet of the site's 10.<index>.0.0/16 block - keep it stable.
+sites:
+  - code: us-hq
+    index: 1
+    name: Columbus HQ and Plant 1
+    region: united-states
+    tenant: corporate
+    kind: plant
+    profile: large
+    time_zone: America/New_York
+    address: "100 Industrial Pkwy, Columbus, OH"
+    criticality: critical
+    change_window: "Sun 01:00-05:00 ET"
+    contacts:
+      owner: [carla-mendez]
+      approver: [dana-ortiz, priya-nair]
+      change-window: [carla-mendez]
+      escalation: [sam-whitaker]
+    servers:
+      - {name: us-hq-dc01, application: "Active Directory / DNS / DHCP", criticality: critical, platform: windows-server-2019, eol: "2029-01-09", owner: [nora-fields], approver: [dana-ortiz]}
+      - {name: us-hq-dc02, application: "Active Directory / DNS", criticality: critical, platform: windows-server-2019, eol: "2029-01-09", owner: [nora-fields], approver: [dana-ortiz]}
+      - {name: us-hq-fs01, application: "File services", criticality: medium, platform: windows-server-2016, eol: "2027-01-12", owner: [nora-fields]}
+      - {name: us-hq-mes01, application: "Manufacturing Execution System", criticality: critical, platform: windows-server-2019, eol: "2029-01-09", owner: [raj-patel], approver: [carla-mendez, priya-nair]}
+      - {name: us-hq-erpint01, application: "Oracle Fusion ERP integration (invoicing)", criticality: high, platform: windows-server-2022, eol: "2031-10-14", owner: [elena-petrova], approver: [elena-petrova]}
+      # Nobody can say what this is. It is still running.
+      - {name: us-hq-legacy01, application: "", criticality: low, platform: windows-server-2012-r2, eol: "2023-10-10", tags: [decommission-candidate, legacy-os]}
+    endpoints:
+      - {name: us-hq-hmi01, application: "Press Line 1 HMI", criticality: high, platform: windows-10, eol: "2025-10-14", owner: [carla-mendez], tags: [legacy-os], depends_on: [us-hq-mes01]}
+      - {name: us-hq-hmi02, application: "Press Line 2 HMI", criticality: high, platform: windows-10, eol: "2025-10-14", owner: [carla-mendez], tags: [legacy-os], depends_on: [us-hq-mes01, us-hq-fs01]}
+
+  - code: us-plt2
+    index: 2
+    name: Greenville Plant 2
+    region: united-states
+    tenant: residential-doors
+    kind: plant
+    profile: medium
+    time_zone: America/New_York
+    address: "2200 Mill Rd, Greenville, SC"
+    criticality: high
+    change_window: "Sun 01:00-05:00 ET"
+    contacts:
+      owner: [tom-brennan]
+      approver: [priya-nair]
+      change-window: [tom-brennan]
+      escalation: [sam-whitaker]
+    servers:
+      - {name: us-plt2-mes01, application: "MES edge server", criticality: high, platform: windows-server-2019, eol: "2029-01-09", owner: [raj-patel]}
+    endpoints:
+      # Put in by the line integrator, on the corporate VLAN, and nobody claimed it.
+      - {name: us-plt2-hmi01, application: "Door Line 3 HMI", criticality: high, platform: windows-10, eol: "2025-10-14", vlan: 10, tags: [legacy-os], depends_on: [us-plt2-mes01]}
+
+  - code: us-plt3
+    index: 3
+    name: Tulsa Plant 3
+    region: united-states
+    tenant: commercial-doors
+    kind: plant
+    profile: medium
+    time_zone: America/Chicago
+    address: "850 Frontier Blvd, Tulsa, OK"
+    criticality: high
+    change_window: "Sat 22:00-02:00 CT"
+    contacts:
+      owner: [joanne-kim]
+      approver: [priya-nair]
+      change-window: [joanne-kim]
+      escalation: [sam-whitaker]
+    servers:
+      - {name: us-plt3-mes01, application: "MES edge server", criticality: high, platform: windows-server-2019, eol: "2029-01-09", owner: [raj-patel]}
+    endpoints:
+      - {name: us-plt3-hmi01, application: "Assembly Cell HMI", criticality: medium, platform: windows-10, eol: "2025-10-14", owner: [joanne-kim], tags: [legacy-os], depends_on: [us-plt3-mes01]}
+
+  # Small distribution centers take firmware first (low blast radius).
+  - code: us-dc1
+    index: 4
+    name: Memphis Distribution Center
+    region: united-states
+    tenant: logistics
+    kind: dc
+    profile: small
+    time_zone: America/Chicago
+    address: "4100 Airways Blvd, Memphis, TN"
+    criticality: medium
+    change_window: "Daily 20:00-23:00 CT"
+    firmware_canary: true
+    contacts:
+      owner: [ken-ito]
+      approver: [marcus-lee]
+      change-window: [ken-ito]
+      escalation: [sam-whitaker]
+
+  - code: us-dc2
+    index: 5
+    name: Reno Distribution Center
+    region: united-states
+    tenant: logistics
+    kind: dc
+    profile: small
+    time_zone: America/Los_Angeles
+    address: "77 Logistics Way, Reno, NV"
+    criticality: medium
+    change_window: "Daily 20:00-23:00 PT"
+    contacts:
+      owner: [bea-lopez]
+      approver: [marcus-lee]
+      change-window: [bea-lopez]
+      escalation: [sam-whitaker]
+
+  - code: ca-plt1
+    index: 6
+    name: Mississauga Plant
+    region: canada
+    tenant: commercial-doors
+    kind: plant
+    profile: medium
+    time_zone: America/Toronto
+    address: "300 Dundas Industrial Dr, Mississauga, ON"
+    criticality: high
+    change_window: "Sun 01:00-05:00 ET"
+    contacts:
+      owner: [pat-oneill]
+      approver: [priya-nair]
+      change-window: [pat-oneill]
+      escalation: [sam-whitaker]
+
+  # Meraki firewall + Juniper switches, plus plant-floor machines nobody has patched in years.
+  - code: mx-plt1
+    index: 7
+    name: Monterrey Plant
+    region: mexico
+    tenant: residential-doors
+    kind: plant
+    profile: medium
+    overrides: {switch: ex2300-24p}
+    time_zone: America/Monterrey
+    address: "Parque Industrial Apodaca, Monterrey, NL"
+    criticality: high
+    change_window: "Sun 00:00-04:00 CT"
+    contacts:
+      owner: [luis-herrera]
+      approver: [priya-nair, dana-ortiz]
+      change-window: [luis-herrera]
+      escalation: [sam-whitaker]
+    servers:
+      - {name: mx-plt1-mes01, application: "MES edge server", criticality: high, platform: windows-server-2019, eol: "2029-01-09", owner: [raj-patel]}
+      - {name: mx-plt1-srv-old01, application: "", criticality: low, platform: windows-server-2012-r2, eol: "2023-10-10", tags: [decommission-candidate, legacy-os]}
+      - {name: mx-plt1-srv-old02, application: "", criticality: low, platform: windows-server-2012-r2, eol: "2023-10-10", tags: [decommission-candidate, legacy-os]}
+    endpoints:
+      - {name: mx-plt1-hmi01, application: "Paint Line HMI", criticality: high, platform: windows-xp, eol: "2014-04-08", owner: [luis-herrera], tags: [legacy-os], depends_on: [mx-plt1-mes01]}
+      - {name: mx-plt1-hmi02, application: "CNC Cell 4 HMI", criticality: high, platform: windows-xp, eol: "2014-04-08", owner: [luis-herrera], tags: [legacy-os], depends_on: [mx-plt1-mes01]}
+      - {name: mx-plt1-hmi03, application: "Packaging Line HMI", criticality: medium, platform: windows-xp, eol: "2014-04-08", owner: [luis-herrera], tags: [legacy-os], depends_on: [mx-plt1-mes01]}
+      - {name: mx-plt1-hmi04, application: "Finishing Cell HMI", criticality: medium, platform: windows-7, eol: "2020-01-14", owner: [luis-herrera], tags: [legacy-os]}
+      - {name: mx-plt1-hmi05, application: "QA Station HMI", criticality: medium, platform: windows-7, eol: "2020-01-14", owner: [luis-herrera], tags: [legacy-os], depends_on: [mx-plt1-mes01, mx-plt1-srv-old01]}
+
+  - code: mx-plt2
+    index: 8
+    name: Tijuana Plant
+    region: mexico
+    tenant: commercial-doors
+    kind: plant
+    profile: small
+    overrides: {switch: usw-pro-24-poe}
+    time_zone: America/Tijuana
+    address: "Parque Industrial Pacifico, Tijuana, BC"
+    criticality: medium
+    change_window: "Sun 00:00-04:00 PT"
+    contacts:
+      owner: [ana-gutierrez]
+      approver: [marcus-lee]
+      change-window: [ana-gutierrez]
+      escalation: [sam-whitaker]
+
+  - code: uk-plt1
+    index: 9
+    name: Telford Plant
+    region: united-kingdom
+    tenant: residential-doors
+    kind: plant
+    profile: small
+    time_zone: Europe/London
+    address: "Halesfield Industrial Estate, Telford"
+    criticality: medium
+    change_window: "Sun 06:00-10:00 GMT"
+    contacts:
+      owner: [harry-clarke]
+      approver: [marcus-lee]
+      change-window: [harry-clarke]
+      escalation: [sam-whitaker]
+
+  - code: cn-plt1
+    index: 10
+    name: Suzhou Plant
+    region: china
+    tenant: commercial-doors
+    kind: plant
+    profile: small
+    overrides: {switch: ex2300-24p}
+    time_zone: Asia/Shanghai
+    address: "Suzhou Industrial Park, Jiangsu"
+    criticality: medium
+    change_window: "Sat 20:00-23:59 CST"
+    contacts:
+      owner: [wei-zhang]
+      approver: [marcus-lee]
+      change-window: [wei-zhang]
+      escalation: [sam-whitaker]
+    endpoints:
+      - {name: cn-plt1-pc01, application: "Line Controller PC", criticality: medium, platform: windows-7, eol: "2020-01-14", owner: [wei-zhang], tags: [legacy-os], depends_on: [us-hq-mes01]}
+      - {name: cn-plt1-pc02, application: "Line Controller PC", criticality: medium, platform: windows-7, eol: "2020-01-14", owner: [wei-zhang], tags: [legacy-os]}
+
+  # No standing change window: every change is a negotiation. The audit flags it.
+  - code: nz-dc1
+    index: 11
+    name: Auckland Warehouse
+    region: new-zealand
+    tenant: logistics
+    kind: dc
+    profile: small
+    time_zone: Pacific/Auckland
+    address: "12 Harbour View Rd, Auckland"
+    criticality: low
+    change_window: ""
+    contacts:
+      owner: [aroha-ngata]
+      approver: [marcus-lee]
+      escalation: [sam-whitaker]
+
+# -----------------------------------------------------------------------------
+# Internet circuits (NetBox Circuits). Each lands on a port of the site's first
+# firewall. Providers, numbers and contacts are fictional.
+# -----------------------------------------------------------------------------
+circuit_types:
+  - {name: Dedicated Internet, slug: dedicated-internet}
+  - {name: Business Broadband, slug: business-broadband}
+  - {name: LTE Backup, slug: lte-backup}
+
+providers:
+  - {name: Spectrum Enterprise, slug: spectrum, account: "SE-448812", noc: "+1-555-0181", portal: "https://portal.spectrum.example", sla: "4 hour restore"}
+  - {name: Windstream, slug: windstream, account: "WS-20931", noc: "+1-555-0182", portal: "https://portal.windstream.example", sla: "8 hour restore"}
+  - {name: AT&T Business, slug: att, account: "ATT-77104", noc: "+1-555-0183", portal: "https://portal.att.example", sla: "next business day"}
+  - {name: Bell Business, slug: bell, account: "BB-55120", noc: "+1-555-0184", portal: "https://portal.bell.example", sla: "4 hour restore"}
+  - {name: Telmex Empresas, slug: telmex, account: "TMX-90811", noc: "+52-555-0185", portal: "https://portal.telmex.example", sla: "8 hour restore"}
+  - {name: BT Business, slug: bt, account: "BT-31877", noc: "+44-555-0186", portal: "https://portal.bt.example", sla: "6 hour restore"}
+  - {name: China Telecom Global, slug: china-telecom, account: "CTG-66012", noc: "+86-555-0187", portal: "https://portal.chinatelecom.example", sla: "8 hour restore"}
+  - {name: Spark Business, slug: spark, account: "SP-11745", noc: "+64-555-0188", portal: "https://portal.spark.example", sla: "next business day"}
+
+# role: primary | backup. commit_mbps is what the site pays for.
+circuits:
+  - {cid: SPEC-COL-100231, site: us-hq, provider: spectrum, type: dedicated-internet, commit_mbps: 1000, port: WAN1, role: primary}
+  - {cid: ATT-COL-55821, site: us-hq, provider: att, type: business-broadband, commit_mbps: 500, port: WAN2, role: backup}
+  - {cid: SPEC-GVL-100877, site: us-plt2, provider: spectrum, type: dedicated-internet, commit_mbps: 500, port: WAN1, role: primary}
+  - {cid: WIN-TUL-88213, site: us-plt3, provider: windstream, type: dedicated-internet, commit_mbps: 500, port: WAN1, role: primary}
+  - {cid: ATT-TUL-LTE-0412, site: us-plt3, provider: att, type: lte-backup, commit_mbps: 50, port: WAN2, role: backup}
+  - {cid: ATT-MEM-60233, site: us-dc1, provider: att, type: business-broadband, commit_mbps: 300, port: WAN1, role: primary}
+  - {cid: ATT-RNO-60871, site: us-dc2, provider: att, type: business-broadband, commit_mbps: 300, port: WAN1, role: primary}
+  - {cid: BELL-MIS-7720, site: ca-plt1, provider: bell, type: dedicated-internet, commit_mbps: 500, port: WAN1, role: primary}
+  - {cid: TMX-MTY-30219, site: mx-plt1, provider: telmex, type: dedicated-internet, commit_mbps: 200, port: WAN1, role: primary}
+  - {cid: TMX-TIJ-30544, site: mx-plt2, provider: telmex, type: business-broadband, commit_mbps: 100, port: WAN1, role: primary}
+  - {cid: BT-TLF-91023, site: uk-plt1, provider: bt, type: dedicated-internet, commit_mbps: 200, port: WAN1, role: primary}
+  - {cid: CTG-SZH-40017, site: cn-plt1, provider: china-telecom, type: dedicated-internet, commit_mbps: 100, port: WAN1, role: primary}
+  - {cid: SPK-AKL-22091, site: nz-dc1, provider: spark, type: business-broadband, commit_mbps: 100, port: WAN1, role: primary}
+
+# -----------------------------------------------------------------------------
+# Ticket history (SAMPLE). What the team's ticket system would already know:
+# past incidents and what fixed them. Alerts count these as earlier incidents
+# and quote the fix. Ages are days before "now", so the sample never goes stale.
+# -----------------------------------------------------------------------------
+incident_history:
+  - {id: ZD-48211, device: us-plt3-fw01, days_ago: 4, alert: "Uplink status changed", circuit: WIN-TUL-88213, by: Sam Whitaker, fix: "Windstream fibre cut on Frontier Blvd. Ran on the LTE backup for 5 hours; Windstream ticket WS-T-77120."}
+  - {id: ZD-47630, device: us-plt3-fw01, days_ago: 13, alert: "Uplink status changed", circuit: WIN-TUL-88213, by: Sam Whitaker, fix: "Windstream line card failure at the central office. Restored after 3 hours; Windstream ticket WS-T-76402."}
+  - {id: ZD-46977, device: us-plt3-fw01, days_ago: 24, alert: "Uplink status changed", circuit: WIN-TUL-88213, by: Marcus Lee, fix: "Windstream planned maintenance nobody was told about. Asked Windstream to add the service desk to their notices."}
+  - {id: ZD-47102, device: us-plt3-ap02, days_ago: 11, alert: "APs went down", by: Sam Whitaker, fix: "us-plt3-sw01 ran out of PoE budget after a camera was added. Moved the camera to us-plt3-sw02."}
+
+# -----------------------------------------------------------------------------
+# Network scan (cli.py scan, MOCK). The mock answers for every address NetBox
+# records at the site, except the devices under `silent`, plus the `extra`
+# hosts nobody wrote down. The vendor is what the MAC prefix would say.
+# -----------------------------------------------------------------------------
+scan_mock:
+  silent: [mx-plt1-srv-old02, us-dc2-ap02]
+  extra:
+    us-hq:
+      - {ip: 10.1.100.40, mac: "00:80:f4:3a:19:40", vendor: "Schneider Electric", ports: [502]}
+    us-plt2:
+      - {ip: 10.2.100.57, mac: "00:1d:9c:4a:10:57", vendor: "Rockwell Automation", ports: [44818]}
+      - {ip: 10.2.100.58, mac: "00:0e:8c:22:7b:01", vendor: "Siemens", ports: [102]}
+      - {ip: 10.2.10.140, mac: "b8:27:eb:5d:11:9a", vendor: "Raspberry Pi", hostname: pi-scoreboard, ports: [22, 80]}
+    mx-plt1:
+      - {ip: 10.7.100.31, mac: "00:1d:9c:7e:02:31", vendor: "Rockwell Automation", ports: [44818]}
+      - {ip: 10.7.10.77, mac: "50:c7:bf:08:4d:77", vendor: "TP-Link", ports: [80, 443]}
+
+# -----------------------------------------------------------------------------
+# Monitoring for the gear the Meraki dashboard cannot see (cli.py alert poll,
+# MOCK). Every Juniper and Ubiquiti device answers unless it is listed here or
+# marked down with `alert poll --simulate-down`.
+# -----------------------------------------------------------------------------
+monitor_mock:
+  unreachable: []
+  uplink_alert_pct: 80  # open a ticket when a primary circuit runs this full
+
+# -----------------------------------------------------------------------------
+# Audit policy. Network gear may inherit its site's owner/approver; anything
+# else (servers, OT machines) must have an explicit device-level owner, because
+# "the plant manager" is not an answer to "who owns this server?".
+# -----------------------------------------------------------------------------
+audit:
+  site_inherit_roles: [firewall, access-switch, wireless-ap, spine, leaf, border]
+
+# -----------------------------------------------------------------------------
+# Spreadsheet import (cli.py import-sheet). How the free text in an asset
+# register maps onto NetBox. Matching ignores case and punctuation and works on
+# whole words. Edit these to fit a real sheet; values that match nothing are
+# reported to the user, never guessed.
+# -----------------------------------------------------------------------------
+sheet_import:
+  tag: spreadsheet-import
+  source_system: spreadsheet
+  # Sheet "Model" text -> device type key (see device_types). Text that contains a
+  # device type's model name ("Dell PowerEdge R650") matches without an entry here.
+  model_aliases:
+    optiplex: hmi-workstation
+    precision: hmi-workstation
+  # Sheet "OS" text -> platform slug. First match wins.
+  platform_aliases:
+    xp: windows-xp
+    winxp: windows-xp
+    win 7: windows-7
+    win7: windows-7
+    windows 7: windows-7
+    win 10: windows-10
+    win10: windows-10
+    windows 10: windows-10
+    2012 r2: windows-server-2012-r2
+    "2016": windows-server-2016
+    "2019": windows-server-2019
+    "2022": windows-server-2022
+  # Sheet "Status" text -> NetBox device status.
+  status_aliases:
+    active: active
+    in use: active
+    live: active
+    production: active
+    spare: inventory
+    stock: inventory
+    planned: planned
+    ordered: planned
+    retired: decommissioning
+    decommissioned: decommissioning
+    scrap: decommissioning
+  # NetBox does not know an operating system's end-of-life date, so it comes from here.
+  eol_dates:
+    windows-xp: "2014-04-08"
+    windows-7: "2020-01-14"
+    windows-10: "2025-10-14"
+    windows-server-2012-r2: "2023-10-10"
+    windows-server-2016: "2027-01-12"
+    windows-server-2019: "2029-01-09"
+    windows-server-2022: "2031-10-14"
+
+# -----------------------------------------------------------------------------
+# Mock Meraki dashboard (cli.py meraki-sync / meraki-mock). The mock serves the
+# Meraki-managed devices above, as the dashboard would report them, plus the
+# differences below so the sync has something to find. Every device named here
+# must exist in the sample data (the mock refuses to start otherwise).
+# Firmware strings are opaque text to the sync; the wireless form is the one used
+# in Meraki's API documentation.
+# -----------------------------------------------------------------------------
+meraki_mock:
+  org: {id: "999001", name: "Summit Door Works (mock)"}
+  firmware:
+    current: {appliance: wired-18-211-2, switch: switch-16-8, wireless: wireless-30-6}
+    behind:  # device -> firmware it is stuck on
+      us-hq-sw02: switch-15-21-1
+      uk-plt1-ap01: wireless-29-7
+      mx-plt2-fw01: wired-17-10-2
+  status:  # device -> availability reported by the dashboard (default online)
+    us-plt3-ap02: offline
+    mx-plt1-ap04: offline
+    ca-plt1-ap04: dormant
+    nz-dc1-ap02: alerting
+  lan_ip:  # device -> address the dashboard reports (NetBox says otherwise)
+    us-plt2-sw01: 10.2.99.19
+  network:  # device -> site whose dashboard network it is really in
+    us-plt3-ap04: us-plt2
+  model:  # device -> model the dashboard reports (NetBox says otherwise)
+    us-plt3-sw02: MS225-48LP
+  removed: [us-dc2-ap02]  # still in NetBox, gone from the dashboard
+  extra:  # in the dashboard, not (necessarily) in NetBox. Serials match the sample spreadsheet.
+    - {name: GVL-PACK-SW01, site: us-plt2, model: MS120-24P, serial: Q2KD-4F2A-91BC, lan_ip: 10.2.99.60}
+    - {name: MEM-SW02, site: us-dc1, model: MS120-24P, serial: Q2LB-1D90-7E22, lan_ip: 10.4.99.60}
+    - {name: MEM-SW03, site: us-dc1, model: MS120-24P, serial: Q2LB-5C41-02AF, lan_ip: 10.4.99.61}
+    - {name: CA-PLT1-AP05, site: ca-plt1, model: MR46, serial: Q2NW-7H3K-91PA, lan_ip: 10.6.99.25}
+    - {name: US-PLT2-CAM01, site: us-plt2, model: MV12W, serial: Q2GV-3C8D-55QZ, lan_ip: 10.2.99.80, product_type: camera, firmware: camera-5-2}
+  dhcp:  # the MX's DHCP scopes (GET /devices/{serial}/appliance/dhcp/subnets)
+    vlans: [10, 20, 30, 100]  # MGMT and SERVERS are static
+    pool: 152                 # leasable addresses per /24; .100-.199 is the static range
+    relay: [us-hq]            # a Windows server does DHCP here; the MX only relays
+    used:                     # site -> {vlan: leases in use}; the rest sit at 20-60%
+      us-plt2: {100: 149, 30: 126}
+  clients:  # access point -> wireless clients connected (default: 5-24)
+    us-plt2-ap01: 31
+  uplinks:  # site -> % of its primary circuit in use (GET /networks/{id}/appliance/uplinks/usageHistory); the rest sit at 15-55%
+    us-plt2: 86
+
+# -----------------------------------------------------------------------------
+# Optional bridge to the core Arista lab (setup --link-fabric). Adds owners and
+# a change window to the existing DC1 site so the fabric takes part in the same
+# ownership/approval story. Only ADDS contact assignments and custom-field values.
+# -----------------------------------------------------------------------------
+fabric_link:
+  site: dc1
+  custom_fields:
+    criticality: high
+    change_window: "Sat 22:00-02:00 MT"
+    source_system: manual
+  contacts:
+    owner: [priya-nair]
+    approver: [dana-ortiz]
+    change-window: [marcus-lee]
+    escalation: [sam-whitaker]
+
+# -----------------------------------------------------------------------------
+# Role-based access for the demo (see rbac.py). Passwords come from
+# DEMO_USER_PASSWORD, never from this file.
+# -----------------------------------------------------------------------------
+rbac:
+  groups:
+    plants-netops:
+      description: "Network engineers - full edit on network objects"
+      edit_actions: [add, change, delete]
+      edit:
+        - dcim.site
+        - dcim.device
+        - dcim.interface
+        - dcim.cable
+        - dcim.devicetype
+        - ipam.vlan
+        - ipam.prefix
+        - ipam.ipaddress
+        - tenancy.contact
+        - tenancy.contactassignment
+        - extras.journalentry
+    plants-helpdesk:
+      description: "L1/L2 - can reserve IPs and annotate, cannot reshape the network"
+      edit_actions: [add, change]
+      edit:
+        - ipam.ipaddress
+        - extras.journalentry
+    plants-approvers:
+      description: "Change approvers - read everything, comment via journal"
+      edit_actions: [add]
+      edit:
+        - extras.journalentry
+  users:
+    demo.netops: {group: plants-netops, first_name: Demo, last_name: NetOps}
+    demo.helpdesk: {group: plants-helpdesk, first_name: Demo, last_name: HelpDesk}
+    demo.approver: {group: plants-approvers, first_name: Demo, last_name: Approver}
+
+# -----------------------------------------------------------------------------
+# Showcase: what the team asked for, shown inside NetBox.
+#   saved_filters  -> appear in the NetBox filter bar ("Saved filters")
+#   runbooks       -> EXAMPLE level-1 steps printed by `plants-triage`
+#   post_change_checks -> EXAMPLE checks printed by `plants-impact`
+# These are illustrations. Replace the wording with the team's real procedures.
+# A saved filter only narrows a list if NetBox understands every parameter, and
+# NetBox silently ignores the ones it does not, so `plants-views` checks each one.
+# -----------------------------------------------------------------------------
+showcase:
+  saved_filters:
+    - slug: plants-old-os
+      name: "Plants: old operating systems (end of life)"
+      object_type: dcim.device
+      description: "Everything running an end-of-life OS, at every site"
+      parameters: {tag: [legacy-os]}
+    - slug: plants-xp-and-7
+      name: "Plants: Windows XP and Windows 7"
+      object_type: dcim.device
+      description: "The machines the cyber assessment keeps undercounting"
+      parameters: {platform: [windows-xp, windows-7]}
+    - slug: plants-decommission
+      name: "Plants: believed unneeded (decommission candidates)"
+      object_type: dcim.device
+      description: "Running, but nobody can say why - confirm the owner, then retire"
+      parameters: {tag: [decommission-candidate]}
+    - slug: plants-offline
+      name: "Plants: offline devices"
+      object_type: dcim.device
+      description: "Status offline (the Meraki sync sets this from the dashboard)"
+      parameters: {tag: [plants-demo], status: [offline]}
+    - slug: plants-critical-devices
+      name: "Plants: critical devices"
+      object_type: dcim.device
+      description: "Where a change needs the most care"
+      parameters: {tag: [plants-demo], cf_criticality: [critical]}
+    - slug: plants-ot-machines
+      name: "Plants: plant-floor (OT) machines"
+      object_type: dcim.device
+      description: "HMIs and workstations on the OT networks"
+      parameters: {tag: [ot-network]}
+    - slug: plants-meraki-gear
+      name: "Plants: Meraki-managed"
+      object_type: dcim.device
+      description: "What the Meraki dashboard knows about"
+      parameters: {tag: [meraki]}
+    - slug: plants-non-meraki-network
+      name: "Plants: Juniper and Ubiquiti (spreadsheet today)"
+      object_type: dcim.device
+      description: "Network gear the Meraki portal cannot see"
+      parameters: {manufacturer: [juniper, ubiquiti]}
+    - slug: plants-from-spreadsheet
+      name: "Plants: imported from a spreadsheet"
+      object_type: dcim.device
+      description: "Records that came from the asset register"
+      parameters: {tag: [spreadsheet-import]}
+    - slug: plants-from-meraki
+      name: "Plants: added by the Meraki sync"
+      object_type: dcim.device
+      description: "Devices the dashboard had and NetBox did not"
+      parameters: {tag: [meraki-sync]}
+    - slug: plants-canary-sites
+      name: "Plants: firmware canary sites"
+      object_type: dcim.site
+      description: "Low-impact sites that receive firmware first"
+      parameters: {cf_firmware_canary: ["true"]}
+    - slug: plants-critical-sites
+      name: "Plants: critical sites"
+      object_type: dcim.site
+      description: "Sites where downtime is most expensive"
+      parameters: {cf_criticality: [critical]}
+    - slug: plants-ot-networks
+      name: "Plants: OT networks"
+      object_type: ipam.prefix
+      description: "Every plant-floor network - the segmentation project's scope"
+      parameters: {role: [ot]}
+
+  # Placeholders: {name} {model} {serial} {ip} {status} {site} {platform} {owner}
+  # {window} {criticality} {application} {upstream} {upstream_port}
+  # {upstream_status} {siblings_note} {blast_count}
+  # {blast_summary} {affected_owners}
+  runbooks:
+    ap:
+      - "Find {name} (serial {serial}) in the Meraki dashboard and note whether it shows offline, alerting or dormant."
+      - "Check the switch it plugs into: {upstream} {upstream_port} (status in NetBox: {upstream_status}). {siblings_note}."
+      - "If several devices on that switch are down, suspect the switch or its uplink, not this access point."
+      - "At the port: is the cable seated, is the port enabled, is PoE delivering power?"
+      - "Power-cycle only that port, once, and wait three minutes. Do not reboot the switch."
+      - "Still down: tell {owner}, then open a Meraki support case quoting serial {serial}."
+    switch:
+      - "Check {name} (serial {serial}) in the Meraki dashboard, and its uplink: {upstream} {upstream_port}."
+      - "{blast_count} devices sit behind it ({blast_summary}). Their owners need to know before anything disruptive: {affected_owners}."
+      - "Confirm the uplink cable or SFP is seated and the port on {upstream} is up."
+      - "Do not reboot it without {owner}. Standing change window for this site: {window}."
+      - "Still down: escalate to {owner} and open a Meraki support case quoting serial {serial}."
+    # <kind>-<manufacturer slug> wins over <kind> for that vendor's gear.
+    switch-juniper:
+      - "{name} is a Juniper switch: the Meraki dashboard cannot see it. Try {ip} from the site's MX (Tools > Ping) or the jump host."
+      - "{blast_count} devices sit behind it ({blast_summary}). Their owners need to know before anything disruptive: {affected_owners}."
+      - "Check its uplink: {upstream} {upstream_port} (status in NetBox: {upstream_status}). Is the port up on that side?"
+      - "Do not reboot it without {owner}. Standing change window for this site: {window}."
+      - "Still down: escalate to {owner} and open a Juniper (JTAC) case with the chassis serial from the label."
+    switch-ubiquiti:
+      - "{name} is a Ubiquiti switch: look it up in the site's UniFi controller, not the Meraki dashboard. Try {ip} from the site's MX."
+      - "{blast_count} devices sit behind it ({blast_summary}). Their owners need to know before anything disruptive: {affected_owners}."
+      - "Check its uplink: {upstream} {upstream_port} (status in NetBox: {upstream_status})."
+      - "Do not reboot it without {owner}. Standing change window for this site: {window}."
+      - "Still down: escalate to {owner}; Ubiquiti support is by RMA, so check for a spare first."
+    firewall:
+      - "Check both WAN links for {name} in the Meraki dashboard. Is one down, or both?"
+      - "{blast_count} devices lose connectivity if it is down ({blast_summary}). Owners to tell: {affected_owners}."
+      - "Call {owner} now: this site is {criticality} criticality."
+      - "If the unit itself is unreachable, open a Meraki support case quoting serial {serial}."
+    server:
+      - "Owner of {name}: {owner}. Application: {application}. Check with them before touching it."
+      - "Check the switch it plugs into: {upstream} {upstream_port} (status in NetBox: {upstream_status})."
+      - "Does {ip} answer? Does the application owner already know about an outage?"
+      - "Standing change window for this site: {window}."
+    endpoint:
+      - "{name} is plant-floor equipment running {platform}. Tell {owner} first: it is production."
+      - "Check the cable and the switch port: {upstream} {upstream_port} (status in NetBox: {upstream_status})."
+      - "Do not reboot or patch without {owner}. Standing change window for this site: {window}."
+    generic:
+      - "Find {name} in the Meraki dashboard or the vendor console."
+      - "Tell {owner}. Standing change window for this site: {window}."
+
+  post_change_checks:
+    firewall:
+      - "Both WAN links up and passing traffic"
+      - "Clients at the site can reach a corporate service and the internet"
+    switch:
+      - "Uplink up, no new errors on the ports"
+      - "Clients and devices behind it reconnect"
+    ap:
+      - "Clients associate and get an address"
+    server:
+      - "The application answers, and its owner confirms"
+    endpoint:
+      - "The machine is reachable and its operator confirms"
+    generic:
+      - "The device answers and its owner confirms"

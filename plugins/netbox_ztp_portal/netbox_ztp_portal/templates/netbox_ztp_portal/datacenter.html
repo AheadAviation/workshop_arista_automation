@@ -1,0 +1,31 @@
+{% extends 'netbox_ztp_portal/base_portal.html' %}
+
+{% block tab_datacenter %} class="active"{% endblock %}
+
+{% block portal_body %}
+<div class="card">
+  <h1>New Block &mdash; Stand Up Devices in ContainerLab</h1>
+  <p class="muted">Deploy a portal-built fabric to the lab straight from here &mdash; no CLI. Clicking
+     <strong>Deploy</strong> queues the fabric; the ZTP agent renders configs, regenerates the topology,
+     boots the cEOS nodes, and pushes their configs, then reports status back below.</p>
+  <div class="result" id="ztp-agent-note">
+    One-time setup: start the host agent so deploys run automatically &mdash;
+    <code>./run.ps1 agent</code> (leave it running in a terminal).
+  </div>
+  <table>
+    <thead><tr><th>Fabric</th><th>Deploy status</th><th></th></tr></thead>
+    <tbody id="ztp-fabric-deploy"><tr><td colspan="3">Loading&hellip;</td></tr></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>ZTP pipeline &mdash; per device</h2>
+  <p class="muted">Live stage of every spine/leaf the portal created (bound &rarr; booting/ZTP &rarr; config-pushed &rarr; active).</p>
+  <label for="ztp-site-select">Fabric</label>
+  <select id="ztp-site-select" style="max-width:320px"><option value="">All portal fabrics</option></select>
+  <table style="margin-top:12px">
+    <thead><tr><th>Device</th><th>Role</th><th>Site</th><th>Mgmt IP</th><th>Stage</th></tr></thead>
+    <tbody id="ztp-devices"><tr><td colspan="5">Loading&hellip;</td></tr></tbody>
+  </table>
+</div>
+{% endblock %}

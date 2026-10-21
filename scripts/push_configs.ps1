@@ -11,14 +11,13 @@ foreach ($dev in $devices) {
 
     if (Test-Path $configFile) {
         Write-Host "  Loading config on $dev..." -ForegroundColor Yellow
-
-        # Copy config to container's flash
-        Get-Content $configFile | docker exec -i $containerName bash -c "cat > /mnt/flash/startup-config"
-
-        # Apply config using configure replace
-        docker exec $containerName bash -c "Cli -p 15 -c 'configure replace flash:startup-config'" 2>&1 | Out-Null
-
-        Write-Host "  OK: $dev configured" -ForegroundColor Green
+        $cfg = Get-Content -Raw $configFile
+        $out = "configure`n$cfg" | docker exec -i $containerName Cli -p 15 2>&1
+        if ("$out" -match "Invalid input|% Error") {
+            Write-Host "  FAIL: $dev : $out" -ForegroundColor Red
+        } else {
+            Write-Host "  OK: $dev configured" -ForegroundColor Green
+        }
     } else {
         Write-Host "  MISSING: Config file not found: $configFile" -ForegroundColor Red
     }

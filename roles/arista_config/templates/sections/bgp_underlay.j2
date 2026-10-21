@@ -29,12 +29,22 @@ router bgp {{ bgp_asn }}
 {% if bgp_peer_groups is defined and bgp_peer_groups | length > 0 %}
 {% include 'sections/bgp_peer_groups.j2' %}
 {% else %}
-   ! Default peer groups for EVPN fabric
+   ! Default IPv4 underlay peer groups
 {% if device_role == 'spine' %}
    neighbor LEAF_IPV4 peer group
    neighbor LEAF_IPV4 maximum-routes 12000
    neighbor LEAF_IPV4 send-community standard extended
+{% elif device_role == 'leaf' %}
+   neighbor SPINE_IPV4 peer group
+   neighbor SPINE_IPV4 remote-as {{ spine_asn | default(65000) }}
+   neighbor SPINE_IPV4 maximum-routes 12000
+   neighbor SPINE_IPV4 send-community standard extended
+{% endif %}
+{% endif %}
    !
+   ! EVPN overlay peer groups. Always emitted: fabric-underlay config-context
+   ! only defines IPv4 groups, so they would otherwise be empty (Idle/NoIf).
+{% if device_role == 'spine' %}
    neighbor LEAF_EVPN peer group
    neighbor LEAF_EVPN update-source Loopback0
    neighbor LEAF_EVPN ebgp-multihop 3
@@ -42,11 +52,6 @@ router bgp {{ bgp_asn }}
    neighbor LEAF_EVPN maximum-routes 0
    neighbor LEAF_EVPN send-community standard extended
 {% elif device_role == 'leaf' %}
-   neighbor SPINE_IPV4 peer group
-   neighbor SPINE_IPV4 remote-as {{ spine_asn | default(65000) }}
-   neighbor SPINE_IPV4 maximum-routes 12000
-   neighbor SPINE_IPV4 send-community standard extended
-   !
    neighbor SPINE_EVPN peer group
    neighbor SPINE_EVPN remote-as {{ spine_asn | default(65000) }}
    neighbor SPINE_EVPN update-source Loopback0
@@ -54,13 +59,11 @@ router bgp {{ bgp_asn }}
    neighbor SPINE_EVPN maximum-routes 0
    neighbor SPINE_EVPN send-community standard extended
 {% if mlag_domain is defined %}
-   !
    neighbor MLAG_PEER peer group
    neighbor MLAG_PEER remote-as {{ bgp_asn }}
    neighbor MLAG_PEER next-hop-self
    neighbor MLAG_PEER maximum-routes 12000
    neighbor MLAG_PEER send-community standard extended
-{% endif %}
 {% endif %}
 {% endif %}
    !

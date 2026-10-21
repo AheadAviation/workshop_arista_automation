@@ -1,0 +1,160 @@
+/* ==========================================================================
+   AHEAD ZTP Portal — scoped, theme-adaptive styles.
+   Surfaces/text lean on NetBox's Tabler CSS variables so the portal matches
+   the user's light OR dark theme; AHEAD brand colors are used only for accents
+   (topbar gradient, buttons, links, pills, borders). All rules scoped under
+   .ztp-portal so they never touch NetBox chrome.
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+.ztp-portal {
+  --ahead-blue: #009FDC;
+  --ahead-navy: #123A61;
+  --ahead-green: #00B388;
+  --ahead-lblue: #7DC8E8;
+  --ahead-teal: #00827F;
+  --ahead-sky: #BFE3F2;
+
+  /* theme-adaptive surfaces (fall back to sensible light values) */
+  --surface: var(--tblr-bg-surface, var(--tblr-card-bg, #ffffff));
+  --surface-2: var(--tblr-bg-surface-secondary, rgba(127,127,127,.06));
+  --line: var(--tblr-border-color, #d7dee6);
+  --text: var(--tblr-body-color, #1c2b3a);
+  --muted: var(--tblr-secondary-color, #7b8794);
+
+  --gradient: linear-gradient(69deg, var(--ahead-navy), var(--ahead-blue));
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(0,0,0,.10), 0 8px 24px rgba(0,0,0,.08);
+
+  font-family: 'Poppins', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.ztp-portal h1, .ztp-portal h2, .ztp-portal h3 {
+  font-family: 'Poppins', sans-serif; font-weight: 600; margin: 0 0 .4em; color: var(--text);
+}
+.ztp-portal h1 { font-size: 1.5rem; }
+.ztp-portal h2 { font-size: 1.2rem; }
+.ztp-portal h3 { font-size: 1.02rem; }
+.ztp-portal p { margin: 0 0 .8em; }
+.ztp-portal a { color: var(--ahead-blue); text-decoration: none; }
+.ztp-portal a:hover { text-decoration: underline; }
+.ztp-portal .muted { color: var(--muted); }
+.ztp-portal .hidden { display: none !important; }
+.ztp-portal code { background: var(--surface-2); padding: 1px 6px; border-radius: 5px; font-size: .85em; }
+
+/* ---- Topbar / wordmark -------------------------------------------------- */
+.ztp-portal .topbar {
+  display: flex; align-items: center; gap: 16px;
+  background: var(--gradient); color: #fff;
+  padding: 16px 24px; border-radius: var(--radius); box-shadow: var(--shadow);
+  margin-bottom: 20px;
+}
+.ztp-portal .topbar .spacer { flex: 1 1 auto; }
+.ztp-portal .wordmark {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-weight: 700; font-size: 1.35rem; letter-spacing: .04em; color: #fff;
+}
+.ztp-portal .wordmark .dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--ahead-green); box-shadow: 0 0 0 5px rgba(0,179,136,.28);
+  flex: 0 0 auto;
+}
+.ztp-portal .wordmark .wm-light { color: var(--ahead-sky); font-weight: 500; }
+.ztp-portal .topbar .subtitle { color: rgba(255,255,255,.9); font-size: .9rem; font-weight: 500; }
+
+/* ---- Tab nav ------------------------------------------------------------ */
+.ztp-portal .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.ztp-portal .tabs a {
+  display: inline-block; padding: 8px 16px; border-radius: 999px; font-size: .9rem; font-weight: 500;
+  background: var(--surface); border: 1px solid var(--line); color: var(--text);
+}
+.ztp-portal .tabs a:hover { border-color: var(--ahead-blue); color: var(--ahead-blue); text-decoration: none; }
+.ztp-portal .tabs a.active {
+  background: var(--gradient); color: #fff; border-color: transparent;
+}
+
+/* ---- Cards / layout ----------------------------------------------------- */
+.ztp-portal .card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 20px 22px; margin-bottom: 18px;
+}
+.ztp-portal .card > h1:first-child, .ztp-portal .card > h2:first-child, .ztp-portal .card > h3:first-child { margin-top: 0; }
+.ztp-portal .grid { display: grid; gap: 16px; }
+.ztp-portal .grid.two { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.ztp-portal .grid.three { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+
+/* ---- Stat tiles --------------------------------------------------------- */
+.ztp-portal .tile {
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px;
+}
+.ztp-portal .tile small { color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-size: .68rem; font-weight: 600; }
+.ztp-portal .tile .v { font-size: 1.25rem; font-weight: 700; color: var(--ahead-blue); margin-top: 2px; }
+
+/* ---- Forms -------------------------------------------------------------- */
+.ztp-portal label { display: block; font-weight: 500; margin: 12px 0 5px; font-size: .88rem; }
+.ztp-portal input, .ztp-portal select, .ztp-portal textarea {
+  width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px;
+  font: inherit; color: var(--text); background: var(--surface);
+}
+.ztp-portal input:focus, .ztp-portal select:focus, .ztp-portal textarea:focus {
+  outline: none; border-color: var(--ahead-blue); box-shadow: 0 0 0 3px rgba(0,159,220,.22);
+}
+
+/* ---- Buttons ------------------------------------------------------------ */
+.ztp-portal .btn {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  border: 1px solid transparent; border-radius: 8px; padding: 10px 18px;
+  font: inherit; font-weight: 600; color: #fff; background: var(--ahead-blue); transition: filter .15s;
+}
+.ztp-portal .btn:hover { filter: brightness(1.08); text-decoration: none; color: #fff; }
+.ztp-portal .btn.success { background: var(--ahead-green); }
+.ztp-portal .btn.secondary { background: transparent; color: var(--ahead-blue); border-color: var(--ahead-blue); }
+.ztp-portal .btn.secondary:hover { background: rgba(0,159,220,.10); color: var(--ahead-blue); }
+.ztp-portal .btn:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+
+/* ---- Tables ------------------------------------------------------------- */
+.ztp-portal table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.ztp-portal th, .ztp-portal td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.ztp-portal th { color: var(--muted); font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+.ztp-portal tbody tr:hover td { background: var(--surface-2); }
+
+/* ---- Pills / badges ----------------------------------------------------- */
+.ztp-portal .pill { display: inline-block; padding: 3px 11px; border-radius: 999px; font-size: .74rem; font-weight: 600; line-height: 1.4; }
+.ztp-portal .pill.spine { background: rgba(244,67,54,.16); color: #ff8a80; }
+.ztp-portal .pill.leaf { background: rgba(0,159,220,.16); color: var(--ahead-lblue); }
+.ztp-portal .pill.bound { background: rgba(127,127,127,.18); color: var(--muted); }
+.ztp-portal .pill.booting { background: rgba(199,119,0,.18); color: #ffb74d; }
+.ztp-portal .pill.config-pushed { background: rgba(0,159,220,.16); color: var(--ahead-lblue); }
+.ztp-portal .pill.active { background: rgba(0,179,136,.18); color: #4fd8b3; }
+.ztp-portal .badge { padding: 3px 9px; border-radius: 6px; font-size: .78rem; font-weight: 600; }
+.ztp-portal .badge.ok { background: rgba(0,179,136,.18); color: #4fd8b3; }
+.ztp-portal .badge.err { background: rgba(192,57,43,.18); color: #ff8a80; }
+
+/* ---- Progress ----------------------------------------------------------- */
+.ztp-portal .bar { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.ztp-portal .bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--ahead-blue), var(--ahead-green)); }
+
+/* ---- Flow diagram ------------------------------------------------------- */
+.ztp-portal .flow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+.ztp-portal .flow .step {
+  padding: 9px 15px; border-radius: 8px; background: rgba(0,159,220,.12);
+  border: 1px solid var(--line); color: var(--text); font-weight: 600; font-size: .85rem;
+}
+.ztp-portal .flow .arrow { color: var(--ahead-blue); font-weight: 700; font-size: 1.1rem; }
+
+/* ---- Result / status blocks -------------------------------------------- */
+.ztp-portal .result { border-left: 4px solid var(--ahead-blue); padding: 12px 16px; background: var(--surface-2); border-radius: 8px; margin: 10px 0; }
+.ztp-portal .result.ok { border-left-color: var(--ahead-green); }
+.ztp-portal .result.err { border-left-color: #c0392b; }
+
+/* ---- Code blocks -------------------------------------------------------- */
+.ztp-portal pre {
+  background: #0f2438; color: #cfe3f2; padding: 14px 16px; border-radius: 10px; border: 1px solid var(--line);
+  overflow-x: auto; font-family: Consolas, 'SFMono-Regular', monospace; font-size: .82rem; line-height: 1.55;
+}
+.ztp-portal details { margin: 8px 0; }
+.ztp-portal summary { cursor: pointer; color: var(--ahead-blue); font-weight: 500; }

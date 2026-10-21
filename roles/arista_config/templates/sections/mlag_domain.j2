@@ -7,6 +7,7 @@ no spanning-tree vlan-id {{ mlag_domain.peerlink_vlan | default(4094) }}
 !
 interface Port-Channel{{ mlag_domain.peerlink_channel | default(2000) }}
    description {{ mlag_domain.description | default('MLAG PeerLink') }}
+   switchport
    switchport mode trunk
    switchport trunk group MLAG
    no shutdown
@@ -22,6 +23,7 @@ interface {{ eos_name }}
 !
 interface Vlan{{ mlag_domain.peerlink_vlan | default(4094) }}
    description {{ mlag_domain.description | default('MLAG PeerLink') }}
+   no autostate
 {% if (mlag_index | int) == 0 %}
    ip address {{ mlag_domain.peerlink_network | default('169.254.1.0/31') | ansible.utils.ipaddr('net') | ansible.utils.ipaddr(0) }}
 {% else %}
@@ -32,8 +34,8 @@ interface Vlan{{ mlag_domain.peerlink_vlan | default(4094) }}
 mlag configuration
    domain-id {{ mlag_name | default('MLAG-DOMAIN') }}
    local-interface Vlan{{ mlag_domain.peerlink_vlan | default(4094) }}
-   reload-delay mlag 300
-   reload-delay non-mlag 330
+   reload-delay mlag 30
+   reload-delay non-mlag 30
 {% if (mlag_index | int) == 0 %}
    peer-address {{ mlag_domain.peerlink_network | default('169.254.1.0/31') | ansible.utils.ipaddr('net') | ansible.utils.ipaddr(1) | ansible.utils.ipaddr('address') }}
 {% else %}

@@ -1,0 +1,23 @@
+Asset Name,Site,Category,Vendor,Model,Serial,IP Address,OS,Owner,Application,Criticality,Status,Notes
+GVL-PACK-SW01,Greenville Plant 2,Switch,Cisco Meraki,MS120-24P,Q2KD-4F2A-91BC,10.2.99.60,,Tom Brennan,Packing line,High,Active,
+GVL-PACK-AP01,Greenville,Access Point,Cisco Meraki,MR46,Q2MV-77AA-0C31,10.2.99.61,,tom brennan,Packing line Wi-Fi,Medium,In Use,
+GVL-MES-EDGE2,GREENVILLE PLANT 2,Server,Dell,R650,7XK2M93,10.2.10.60,Windows Server 2019,R. Patel,MES edge server,Critical,Active,Replaces edge01
+TUL-HMI-CELL3,Tulsa Plant 3,PC,Dell,OptiPlex 7010,,10.3.100.60,Windows 10,Joanne Kim,Assembly cell 3 HMI,Medium,Active,
+TUL HMI CELL4,Tulsa,PC,Dell,OptiPlex 7010,,10.3.100.61,Win 7,"Kim, Joanne",Assembly cell 4 HMI,Medium,Active,Cannot upgrade - vendor software
+MTY-HMI-PRESS07,Monterey Plant,PC,Generic,OptiPlex 3040,,10.7.100.60,WinXP,Luis H.,Stamping press 7 HMI,High,Active,
+MTY-SRV-ARCHIVE,Monterrey Plant,Server,Dell,PowerEdge R650,3HZ81P2,10.7.10.60,Windows Server 2012 R2,,,,Retired,Nobody remembers what this does
+UKT-FS02,Telford Plant,Server,Dell,PowerEdge R650,9QW44T1,10.9.10.60,Server 2016,Dave (IT),File services,Medium,Active,
+SUZ-PC-LINE2,Suzhou Plant,PC,Dell,OptiPlex 7010,,DHCP,Windows 7 Professional,Wei Zhang,Line 2 inspection,High,Active,
+AKL-SW01-OLD,Auckland Warehouse,Switch,Ubiquiti,USW-Pro-24-PoE,,10.11.99.60,,Aroha Ngata,,Low,Active,
+GVL-MES-EDGE2,Greenville Plant 2,Server,Dell,PowerEdge R650,,10.2.10.61,Windows Server 2019,Raj Patel,MES edge server,Critical,Active,Pasted twice
+COL-CORE-SW9,Columbus,Switch,Cisco,Catalyst 2960-X,FOC1845X0AB,10.1.99.60,,Nora Fields,Core switch,High,Active,
+PLT5-WAP01,Plant 5,Access Point,Cisco Meraki,MR46,,10.12.99.10,,,,,Active,Acquired last year
+GVL-FILE01,Greenville Plant 2,Server,Dell,PowerEdge R650,,10.2.10.11,Windows Server 2019,Tom Brennan,File server,Medium,Active,
+TUL-PRINT01,Tulsa Plant 3,Server,Dell,PowerEdge R650,,10.3.10.300,Windows Server 2016,Nora Fields,Print server,Low,Active,
+MEM-SW02,Memphis DC,Switch,Cisco Meraki,MS120-24P,Q2LB-1D90-7E22,10.4.99.60,,Ken Ito,,Medium,Active,
+MEM-SW03,Memphis Distribution Center,Switch,Cisco Meraki,MS120-24P,Q2LB-5C41-02AF,10.4.99.60,,Ken Ito,,Medium,Active,
+us-plt2-fw01,Greenville Plant 2,Firewall,Cisco Meraki,MX85,,10.2.99.62,,Tom Brennan,,High,Active,
+RNO-SRV01,Reno Distribution Center,Server,Dell,PowerEdge R650,7XK2M93,192.168.1.50,Windows Server 2019,Bea Lopez,Warehouse management,High,Active,
+RNO-LAPTOP-DEMO,Reno Distribution Center,Laptop,Lenovo,ThinkPad T14,,,Windows 10,Bea Lopez,,Low,Active,
+,Columbus,Server,Dell,PowerEdge R650,,10.1.10.60,Windows Server 2019,Nora Fields,,,Active,
+UKT-HMI-TEST,Telford Plant,PC,Dell,OptiPlex 7010,,10.9.100.60,Windows 11,Harry Clarke,Quality station,Medium,TBD,

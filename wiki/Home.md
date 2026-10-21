@@ -84,6 +84,7 @@ netbox_data/fabric_topology.yml
 
 ### Start Here
 - [[Quick Start]] — Complete step-by-step walkthrough from zero to validated fabric
+- [[Workshop 2 Walkthrough]] — Set up the sample manufacturer and run the six ODL acts
 
 ### Understand the System
 - [[Architecture]] — System design, data flow, and component interactions

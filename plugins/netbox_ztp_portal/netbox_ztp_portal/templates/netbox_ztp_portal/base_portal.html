@@ -1,0 +1,28 @@
+{% extends 'base/layout.html' %}
+{% load static %}
+
+{% block title %}AHEAD ZTP Portal{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'netbox_ztp_portal/css/portal.css' %}">
+<div class="ztp-portal">
+
+  <div class="topbar">
+    <span class="wordmark"><span class="dot"></span>AHEAD<span class="wm-light">ZTP</span></span>
+    <span class="spacer"></span>
+    <span class="subtitle">Zero-Touch Provisioning &middot; Arista EVPN/VXLAN</span>
+  </div>
+
+  <div class="tabs">
+    <a href="{% url 'plugins:netbox_ztp_portal:index' %}"{% block tab_index %}{% endblock %}>Overview</a>
+    <a href="{% url 'plugins:netbox_ztp_portal:architect' %}"{% block tab_architect %}{% endblock %}>New Site (Fabric)</a>
+    <a href="{% url 'plugins:netbox_ztp_portal:datacenter' %}"{% block tab_datacenter %}{% endblock %}>New Block (Onboard)</a>
+    <a href="{% url 'plugins:netbox_ztp_portal:tracking' %}"{% block tab_tracking %}{% endblock %}>Fleet Tracking</a>
+  </div>
+
+  {% block portal_body %}{% endblock %}
+
+</div>
+<script src="{% static 'netbox_ztp_portal/js/api.js' %}"></script>
+<script src="{% static 'netbox_ztp_portal/js/portal.js' %}"></script>
+{% endblock %}

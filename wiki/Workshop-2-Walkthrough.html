@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Workshop 2 walkthrough</title>
+<style>
+  body { font: 16px/1.45 Segoe UI, sans-serif; max-width: 920px; margin: 32px auto; padding: 0 20px; color: #1a1a1a; }
+  h1 { font-size: 28px; font-weight: 600; }
+  h2 { font-size: 20px; margin-top: 2em; }
+  code { font: 15px/1.4 Consolas, monospace; }
+  p code, li code, td code { background: #f1f5f9; padding: 0 4px; }
+  .block { background: #0a2554; border-radius: 8px; padding: 8px 8px 10px; margin: 12px 0 20px; }
+  .bar { text-align: right; }
+  .row { display: flex; gap: 8px; align-items: flex-start; padding: 4px 8px; }
+  .row code { color: #e2e8f0; white-space: pre-wrap; }
+  button.copy { flex: none; font: 13px Segoe UI, sans-serif; background: #009fdc; color: white; border: 0; border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+  button.copy.all { background: transparent; color: #94a3b8; }
+  button.copy.done { background: #16a34a; }
+  table { border-collapse: collapse; width: 100%; }
+  td { border-top: 1px solid #e2e8f0; padding: 8px; vertical-align: top; }
+</style>
+</head>
+<body>
+<h1>Workshop 2 Walkthrough</h1>
+<p>The hands-on path for the ODL follow-up. Set the lab up, then run the six acts in order. Follow this page top to bottom.</p>
+<p>For a Copy button on every command, open [Workshop-2-Walkthrough.html](Workshop-2-Walkthrough.html) in a browser. The preview in Cursor cannot copy to the clipboard.</p>
+<p><strong>What you will have at the end of setup:</strong></p>
+<ul><li>NetBox at http://localhost:8888 with the sample manufacturer loaded (11 sites, owners, approvers, circuits)</li>
+<li>Six cEOS switches running, matching NetBox, with a passing test</li>
+<li>No open changes, no open tickets, and one estate report saved as the baseline</li>
+</ul><p><strong>Time:</strong> about 15 minutes to set up when Docker is already up, then about 50 minutes to run the acts.</p>
+<p><strong>Run every command below from the lab repo, not from <code>workshop_arista_automation</code>.</strong> The <code>run.ps1</code> in this repo does not have <code>plants</code>. Running it here prints the usage screen and does nothing.</p>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>cd C:\Users\BrianNelson\Projects\netbox-arista-lab</code></div></section>
+<p>The talk track, quotes, and what to ask them live in <code>wiki\Workshop-2-Demo-Script.md</code> in that same folder. This page is the commands.</p>
+<h2>Prerequisites</h2>
+<ul><li>Docker Desktop running</li>
+<li>The cEOS image imported once: <code>ceos:4.32.0F</code> (see [[Quick Start]])</li>
+<li>The lab repo cloned at <code>C:\Users\BrianNelson\Projects\netbox-arista-lab</code></li>
+</ul><p>Each <code>.\run.ps1</code> command takes 15–20 seconds to start, because it runs inside a container. Talk while it starts.</p>
+<h2>Step 1 — Check NetBox and the switches</h2>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 status</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>docker ps --filter name=clab-netbox-arista-lab</code></div></section>
+<p>NetBox, Postgres, and Redis should say <code>healthy</code>. You want six containers: <code>spine-01</code>, <code>spine-02</code>, <code>leaf-01</code> through <code>leaf-04</code>.</p>
+<p>If NetBox is not running:</p>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 up</code></div></section>
+<p>Wait until <code>.\run.ps1 status</code> shows NetBox healthy. Open http://localhost:8888 and sign in as <code>admin</code> / <code>admin</code>.</p>
+<p>If the six switches are not running:</p>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 deploy</code></div></section>
+<p>That takes about 6 minutes and pushes the configs as well.</p>
+<h2>Step 2 — Rebuild the sample organisation</h2>
+<p>This deletes the sample manufacturer and creates it again. It does not touch the Arista fabric.</p>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-remove --yes</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants</code></div></section>
+<p><code>plants-remove</code> lists what it deleted (sites, devices, circuits, contacts) and ends with <code>0 errors</code>.</p>
+<p><code>plants</code> ends with <strong>Plants Demo add-on ready</strong>. You should see 11 sites created, then 13 saved filters. A second <code>plants</code> without a remove is safe: it reports <code>0 created</code>.</p>
+<h2>Step 3 — Write what the dashboard observed</h2>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-meraki --apply</code></div></section>
+<p>The source line must say <strong>MOCK Meraki API</strong>. It writes firmware, serials, and online/offline into NetBox, and adds a few devices NetBox did not have. Run this after every <code>plants</code>. Without it, the later acts do not match the script.</p>
+<h2>Step 4 — Clear leftover demo state</h2>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change reset --yes</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-alert reset --yes</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-scan all --forget</code></div></section>
+<p>You want <code>0 change record(s)</code>, <code>0 incident(s)</code>, and <code>Deleted 0 address(es)</code> (or however many a previous scan had recorded). After this there is nothing open.</p>
+<h2>Step 5 — Baseline, then prove the fabric</h2>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-report</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 day2 status</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 diff</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 test</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 backup</code></div></section>
+<p><code>diff</code> and <code>test</code> print Ansible warnings about <code>ansible.posix</code> and paramiko. Those are noise. The verdict line is the one that matters.</p>
+<p>Setup is done. Leave this window open.</p>
+<h2>Step 6 — Act 1: One record</h2>
+<p>In the browser, open <strong>Devices</strong>, then the saved filters <strong>Plants: Critical devices</strong>, <strong>Plants: Old operating systems</strong>, and <strong>Plants: Juniper and Ubiquiti</strong>. Open one device and show owner, approver, change window, and the <strong>Changelog</strong> tab. Then open <strong>Circuits</strong>.</p>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-import</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-meraki</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-scan us-plt2</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-audit</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-impact us-hq-sw02</code></div></section>
+<p><code>plants-import</code> and <code>plants-meraki</code> write nothing. The scan is a mock: Greenville has three addresses NetBox has never heard of, two of them on the OT network. <code>plants-impact</code> names the owner, the approvers, the window, and what else goes down with that switch.</p>
+<p>Say this: the spreadsheet and the dashboard load in once. NinjaOne stays the source for PCs.</p>
+<h2>Step 7 — Act 2: A change, then the test</h2>
+<p>Say this before the first command: scheduling the firmware stays a click in Meraki. This is the plan and the test around that click.</p>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change plan us-hq-sw02 --summary &quot;Switch firmware&quot; --at &quot;2026-10-25 14:00&quot;</code></div></section>
+<p>Copy the <code>CHG-...</code> id it prints. Use it in place of <code>CHG</code> below. The plan names four approvers, and 14:00 is outside the Sunday window.</p>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change apply   CHG --as-of &quot;2026-10-25 02:00&quot;</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change approve CHG --by &quot;Dana Ortiz&quot;</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change approve CHG --by &quot;Priya Nair&quot;</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change approve CHG --by &quot;Carla Mendez&quot;</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change approve CHG --by &quot;Elena Petrova&quot;</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change apply   CHG --as-of &quot;2026-10-25 02:00&quot; --simulate-no-clients us-hq-ap03</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change verify  CHG</code></div></section>
+<p>The first <code>apply</code> is refused because nobody has approved. <code>verify</code> is a <strong>FAIL</strong> on purpose: <code>us-hq-ap03</code> had 7 wireless clients and now has none.</p>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change fault us-hq-ap03 --no-clients --clear</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change verify  CHG</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change confirm CHG --by &quot;Nora Fields&quot; --note &quot;DCs and file shares fine&quot;</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change confirm CHG --by &quot;Raj Patel&quot;</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change confirm CHG --by &quot;Elena Petrova&quot;</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change confirm CHG --by &quot;Carla Mendez&quot;</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change verify  CHG</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change show    CHG --evidence</code></div></section>
+<p>One device stays unconfirmed: <code>us-hq-legacy01</code> has no owner. Show the evidence file under <code>output\changes\</code>.</p>
+<h2>Step 8 — Act 3: Level 1, stopped by permissions</h2>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-triage us-plt3-ap02</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-l1 find 10.2.10.11</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-l1 --as demo.helpdesk dhcp us-plt2</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-l1 --as demo.helpdesk dhcp us-hq</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-l1 --as demo.helpdesk reserve-ip us-plt2 100 --for &quot;New label printer&quot;</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-l1 --as demo.helpdesk port-vlan us-plt2-sw02 12 100 --label &quot;Time clock&quot;</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-l1 --as demo.netops port-vlan us-plt2-sw02 12 100 --label &quot;Time clock&quot;</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-l1 --as demo.netops port-vlan mx-plt1-sw02 3 100</code></div></section>
+<p>Greenville VLAN 100 is 98% full. The help desk login is refused the port change. The same command as <code>demo.netops</code> is allowed. The Juniper command records the intent in NetBox and says nothing is pushed to the switch.</p>
+<p>The browser passwords, if you sign in as those users, are <code>PlantsDemo-2026!</code>. This tool cannot clear DHCP leases. The runbook escalates that.</p>
+<h2>Step 9 — Act 4: An alert becomes a ticket</h2>
+<p>Copy each <code>INC-...</code> from the command that created it.</p>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-alert simulate us-hq-ap03</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-alert resolve INC --fix &quot;PoE had tripped on us-hq-sw03 Port 1. Power-cycled the port; AP back in 3 minutes.&quot; --by &quot;Sam Whitaker&quot;</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-alert simulate us-hq-ap03</code></div></section>
+<p>The second ticket has a <strong>Last fix</strong> row, and it points at the change from Act 2. Say this: the text is ready for their ticketing tool. Sending it is one connection, once they choose the tool.</p>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-alert simulate us-plt3-fw01 --type uplink</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-alert poll</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-alert poll --simulate-down mx-plt1-sw01</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-alert list</code></div></section>
+<p>The uplink ticket names the circuit, the provider number, the account, and the SLA. <code>poll</code> opens tickets for the gear Meraki cannot see. The second poll does not open a second ticket for one that is already open. The checks are mocks.</p>
+<h2>Step 10 — Act 5: The fleet, and the OT list</h2>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-report</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-ot</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-ot us-plt2</code></div></section>
+<p>The report&#x27;s totals show the change since the baseline from Step 5. <code>plants-ot</code> is one line per plant. Greenville has items to fix, including the unknown OT devices from Act 1. Say this: the report reads the record. It is not a monitoring product.</p>
+<h2>Step 11 — Act 6: The same idea on the real switches</h2>
+<p>Say this first: their network is Meraki, so this act is the pattern for gear we configure, such as Juniper. It is not a proposal to replace Meraki.</p>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 day2 apply add-vlan</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 generate</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 diff</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 push</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 test</code></div></section>
+<p><code>diff</code> shows the VLAN on the four leaves and nothing else. <code>test</code> passes all 36 checks.</p>
+<p>If there is time, show a failed test and the fix:</p>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 day2 apply bad-asn</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 generate</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 push</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 test</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 day2 revert bad-asn</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 generate</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 push</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 test</code></div></section>
+<p>The first <code>test</code> fails. The second passes. If time is short, stop after the first <code>test</code>.</p>
+<h2>Step 12 — Put the lab back</h2>
+<p>Run this after the call, so the next run starts clean. It does not delete the sample organisation.</p>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-alert reset --yes</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-change reset --yes</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-scan all --forget</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 day2 revert all</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 generate</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 push</code></div>
+<div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 test</code></div></section>
+<p>To remove the sample organisation itself, later:</p>
+<section class="block"><div class="bar"><button type="button" class="copy all">Copy all</button></div><div class="row"><button type="button" class="copy">Copy</button><code>.\run.ps1 plants-remove --yes</code></div></section>
+<h2>If a command fails</h2>
+<table><tr><td><code>.\run.ps1 plants` prints the usage screen</code></td><td>You are in `workshop_arista_automation`. `cd` to the lab repo in Step 1.</td></tr><tr><td><code>Not approved yet</code></td><td>Approve all four names from the plan.</td></tr><tr><td><code>outside the window</code></td><td>Add `--as-of &quot;2026-10-25 02:00&quot;` on `apply`.</td></tr><tr><td><code>verify` still fails after `--clear</code></td><td>The clear was the wrong fault. Use `fault us-hq-ap03 --clear` or `--no-clients --clear`.</td></tr><tr><td><code>poll` opens no circuit or DHCP ticket</code></td><td>One is still open. `.\run.ps1 plants-alert reset --yes` and start Act 4 again.</td></tr><tr><td><code>Statuses look wrong after `plants</code></td><td>Run `.\run.ps1 plants-meraki --apply` again.</td></tr><tr><td><code>test` fails before Act 6</code></td><td>.\run.ps1 diff`, then `.\run.ps1 push`, then wait 30 seconds and run `test` again.</td></tr><tr><td><code>A command hangs on start</code></td><td>docker compose ps`. NetBox must be healthy.</td></tr></table>
+<script>
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    return ok;
+  }
+}
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("button.copy");
+  if (!button) return;
+  const text = button.classList.contains("all")
+    ? [...button.closest(".block").querySelectorAll(".row code")].map((c) => c.textContent).join("\n")
+    : button.nextElementSibling.textContent;
+  const ok = await copyText(text);
+  const previous = button.textContent;
+  button.textContent = ok ? "Copied" : "Failed";
+  button.classList.add("done");
+  setTimeout(() => { button.textContent = previous; button.classList.remove("done"); }, 1200);
+});
+</script>
+</body>
+</html>

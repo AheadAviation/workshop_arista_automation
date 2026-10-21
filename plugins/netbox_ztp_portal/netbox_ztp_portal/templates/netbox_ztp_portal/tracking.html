@@ -1,0 +1,11 @@
+{% extends 'netbox_ztp_portal/base_portal.html' %}
+
+{% block tab_tracking %} class="active"{% endblock %}
+
+{% block portal_body %}
+<div class="card">
+  <h1>Fleet Tracking</h1>
+  <p class="muted">Bring-up progress across every fabric the portal has stood up.</p>
+</div>
+<div id="ztp-fabrics" class="grid two">Loading&hellip;</div>
+{% endblock %}

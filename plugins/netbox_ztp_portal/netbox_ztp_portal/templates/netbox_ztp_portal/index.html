@@ -1,0 +1,46 @@
+{% extends 'netbox_ztp_portal/base_portal.html' %}
+
+{% block tab_index %} class="active"{% endblock %}
+
+{% block portal_body %}
+<div class="card">
+  <h1>AHEAD Zero-Touch Provisioning Portal</h1>
+  <p class="muted">Design and stand up Arista EVPN/VXLAN spine-leaf fabrics from NetBox,
+     then let the workshop pipeline render configs and boot them in ContainerLab.</p>
+  <div id="ztp-health">Checking NetBox&hellip;</div>
+</div>
+
+<div class="card">
+  <h2>The late-binding ZTP flow</h2>
+  <div class="flow">
+    <span class="step">New Site (fabric intent)</span><span class="arrow">&rarr;</span>
+    <span class="step">Write to NetBox</span><span class="arrow">&rarr;</span>
+    <span class="step">Generate configs</span><span class="arrow">&rarr;</span>
+    <span class="step">ZTP boot (cEOS)</span><span class="arrow">&rarr;</span>
+    <span class="step">Active</span>
+  </div>
+  <p class="muted">NetBox is the source of truth. Everything the portal writes is tagged
+     <code>containerlab</code>, so the Ansible dynamic inventory, config generator, and
+     topology generator pick it up with no manual steps.</p>
+</div>
+
+<div class="grid three">
+  <div class="card">
+    <h3>New Site</h3>
+    <p class="muted">An EVPN/VXLAN fabric designer &mdash; pick spines and leaf MLAG pairs
+       and push a complete fabric into NetBox.</p>
+    <a class="btn" href="{% url 'plugins:netbox_ztp_portal:architect' %}">Design a fabric</a>
+  </div>
+  <div class="card">
+    <h3>New Block</h3>
+    <p class="muted">Track the ZTP pipeline for each fabric&rsquo;s spine/leaf devices as they
+       come online.</p>
+    <a class="btn secondary" href="{% url 'plugins:netbox_ztp_portal:datacenter' %}">Open pipeline</a>
+  </div>
+  <div class="card">
+    <h3>Fleet tracking</h3>
+    <p class="muted">Bring-up progress across every portal-built fabric.</p>
+    <a class="btn secondary" href="{% url 'plugins:netbox_ztp_portal:tracking' %}">View fleet</a>
+  </div>
+</div>
+{% endblock %}

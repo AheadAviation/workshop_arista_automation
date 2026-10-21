@@ -19,8 +19,10 @@ services:
   # ==========================================================================
   netbox:
     build:
-      context: ./docker/netbox
-      dockerfile: Dockerfile
+      # Context is the repo root so the image can bundle the local
+      # plugins/netbox_ztp_portal package alongside the pinned plugins.
+      context: .
+      dockerfile: docker/netbox/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,12 +66,19 @@ services:
       - netbox-scripts:/opt/netbox/netbox/scripts
       # Plugin configuration
       - ./docker/netbox/configuration/plugins.py:/etc/netbox/config/plugins.py:ro
+      # ZTP portal plugin source (editable-installed in the image); bind-mounted
+      # so code changes are picked up on container restart without a rebuild.
+      - ./plugins/netbox_ztp_portal/netbox_ztp_portal:/opt/netbox/plugins/netbox_ztp_portal/netbox_ztp_portal:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/"]
       interval: 30s
       timeout: 10s
       retries: 10
       start_period: 180s
+    networks:
+      default:
+        aliases:
+          - netbox
     restart: unless-stopped
 
   # ==========================================================================
@@ -77,8 +86,8 @@ services:
   # ==========================================================================
   netbox-worker:
     build:
-      context: ./docker/netbox
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/netbox/Dockerfile
     depends_on:
       netbox:
         condition: service_healthy
@@ -116,6 +125,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      default:
+        aliases:
+          - postgres
     restart: unless-stopped
 
   # ==========================================================================
@@ -131,6 +144,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      default:
+        aliases:
+          - redis
     restart: unless-stopped
 
   # ==========================================================================
@@ -149,6 +166,11 @@ services:
       ANSIBLE_HOST_KEY_CHECKING: "False"
       ANSIBLE_PYTHON_INTERPRETER: auto_silent
       CEOS_IMAGE: ceos:4.32.0F
+      # Optional: password for the Plants Demo add-on users (lab default if empty)
+      DEMO_USER_PASSWORD: "${DEMO_USER_PASSWORD:-}"
+      # Optional: a real Meraki dashboard for 'plants-meraki --base-url ...' (the built-in mock needs none)
+      MERAKI_API_KEY: "${MERAKI_API_KEY:-}"
+      MERAKI_ORG_ID: "${MERAKI_ORG_ID:-}"
     volumes:
       - ./scripts:/ansible/scripts:ro
       - ./playbooks:/ansible/playbooks:ro
@@ -199,4 +221,4 @@ volumes:
 # =============================================================================
 networks:
   default:
-    name: netbox-lab-network
+    name: netbox-arista-lab

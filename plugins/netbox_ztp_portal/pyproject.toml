@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netbox-ztp-portal"
+version = "0.1.0"
+description = "AHEAD ZTP Portal - self-service Zero-Touch Provisioning for Arista EVPN/VXLAN fabrics in NetBox"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "AHEAD" }]
+license = { text = "Proprietary" }
+
+[tool.setuptools.packages.find]
+include = ["netbox_ztp_portal*"]
+
+[tool.setuptools.package-data]
+netbox_ztp_portal = ["templates/**/*", "static/**/*"]

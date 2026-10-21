@@ -24,6 +24,7 @@
     switch_id: "{{ custom_fields.switch_id | default(1) }}"
     mlag_index: "{{ custom_fields.mlag_index | default(0) }}"
     mlag_name: "{{ custom_fields.mlag_name | default('') }}"
+    fabric_name: "{{ custom_fields.fabric_name | default(fabric_name | default('dc1-fabric')) }}"
   when: custom_fields is defined
 
 - name: Display device information
@@ -86,8 +87,11 @@
     evpn_peers: []
 
 - name: Fetch peer devices for EVPN overlay
+  # Scope the peer query to this device's own fabric (cf_fabric_name) so a
+  # portal-built fabric (e.g. dc2-fabric) never cross-peers with DC1. Falls
+  # back to dc1-fabric for devices seeded without the custom field.
   ansible.builtin.uri:
-    url: "{{ netbox_url }}/api/dcim/devices/?role={{ 'leaf' if device_role == 'spine' else 'spine' }}&limit=100"
+    url: "{{ netbox_url }}/api/dcim/devices/?role={{ 'leaf' if device_role == 'spine' else 'spine' }}&cf_fabric_name={{ fabric_name | default('dc1-fabric') }}&limit=100"
     headers:
       Authorization: "Token {{ netbox_token }}"
     return_content: true
@@ -111,6 +115,7 @@
     - evpn_peer_devices is defined
     - item.custom_fields.router_id is defined
     - item.custom_fields.router_id | default('') | length > 0
+    - item.custom_fields.fabric_name | default('dc1-fabric') == fabric_name | default('dc1-fabric')
 
 - name: Initialize interface IP mapping
   ansible.builtin.set_fact:

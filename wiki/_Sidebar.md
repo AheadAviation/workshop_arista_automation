@@ -5,6 +5,7 @@
 
 ### 🚀 Getting Started
 - [[Quick Start]]
+- [[Workshop 2 Walkthrough]]
 - [[Architecture]]
 
 ### 📖 Code Walkthroughs
@@ -16,6 +17,7 @@
 - [[Template Reference]]
 - [[Troubleshooting]]
 - [[Day 2 Operations]]
+- [[Add-on Plants Demo]]
 
 ---
 
