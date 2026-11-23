@@ -1,0 +1,76 @@
+{% if not audit.ok %}
+  <div class="alert alert-danger">
+    <strong>{{ audit.headline }}</strong>
+    <div class="small mt-1">{{ audit.detail }}</div>
+  </div>
+{% else %}
+  <div class="row mb-3">
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase">Events</div>
+          <div class="h3 mb-0">{{ audit.count }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase">Applied changes</div>
+          <div class="h3 mb-0 text-success">{{ audit.applied }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase">Guarantee</div>
+          <div class="h6 mb-0">append-only</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if not audit.entries %}
+    <p class="text-muted">
+      Nothing recorded yet. Approve a change and it appears here with its approver and the
+      configuration before and after.
+    </p>
+  {% else %}
+    <div class="list-group">
+      {% for e in audit.entries %}
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <span class="badge
+                {% if e.kind == 'applied' %}bg-success
+                {% elif e.kind == 'rejected' %}bg-warning
+                {% elif e.kind == 'pending' %}bg-info
+                {% elif e.kind == 'detected' %}bg-danger
+                {% else %}bg-secondary{% endif %}">{{ e.kind }}</span>
+              <strong class="ms-2">{{ e.summary }}</strong>
+              {% if e.approver %}
+                <div class="small text-success mt-1">Approved by {{ e.approver }}</div>
+              {% endif %}
+            </div>
+            <span class="text-muted small font-monospace">{{ e.at }}</span>
+          </div>
+
+          {% if e.diff_before or e.diff_after %}
+            <details class="mt-2">
+              <summary class="small text-muted">Show the before and after</summary>
+              {% if e.diff_before %}
+                <div class="small text-muted mt-2">Before</div>
+                <pre class="small bg-body-tertiary border rounded p-2 mb-2" style="max-height:14rem;overflow:auto">{{ e.diff_before }}</pre>
+              {% endif %}
+              {% if e.diff_after %}
+                <div class="small text-muted">After</div>
+                <pre class="small bg-body-tertiary border rounded p-2 mb-0" style="max-height:14rem;overflow:auto">{{ e.diff_after }}</pre>
+              {% endif %}
+            </details>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endif %}

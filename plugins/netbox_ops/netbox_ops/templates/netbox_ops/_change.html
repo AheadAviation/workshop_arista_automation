@@ -1,0 +1,80 @@
+{% if not fabric.ok %}
+  <div class="alert alert-danger">
+    <strong>{{ fabric.headline }}</strong>
+    <div class="small mt-1">{{ fabric.detail }}</div>
+  </div>
+{% else %}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <h5 class="card-title">Add VLAN {{ demo_vlan }} ({{ demo_vlan_name }})</h5>
+    <p class="text-muted small mb-3">
+      A new clinical system needs a VLAN on every server trunk. Preview first — nothing reaches
+      a switch until someone puts their name on it. The preview is the real change minus the
+      commit, not an estimate of it.
+    </p>
+
+    <form method="post" action="{% url 'plugins:netbox_ops:change_preview' %}" class="row g-2 align-items-end">
+      {% csrf_token %}
+      <div class="col-auto">
+        <label class="form-label small text-muted" for="device">Switch</label>
+        <select class="form-select form-select-sm" id="device" name="device">
+          {% for device in fabric.devices %}
+            {% if device.role == 'leaf' %}
+              <option value="{{ device.device }}">{{ device.device }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-sm btn-primary" type="submit">Preview change</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <h5 class="card-title">Break it, then fix it</h5>
+    <p class="text-muted small mb-3">
+      Remove an intended VLAN from a live switch. The Devices tab will catch it without being
+      told which switch or what changed. Remediation goes through the same gate.
+    </p>
+    <div class="d-flex gap-2 flex-wrap">
+      <form method="post" action="{% url 'plugins:netbox_ops:drift_inject' %}" class="d-flex gap-2 align-items-end">
+        {% csrf_token %}
+        <div>
+          <label class="form-label small text-muted" for="inject-device">Switch</label>
+          <select class="form-select form-select-sm" id="inject-device" name="device">
+            {% for device in fabric.devices %}
+              {% if device.role == 'leaf' %}<option value="{{ device.device }}">{{ device.device }}</option>{% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-sm btn-outline-warning" type="submit">Inject drift</button>
+      </form>
+
+      <form method="post" action="{% url 'plugins:netbox_ops:drift_remediate' %}" class="d-flex gap-2 align-items-end">
+        {% csrf_token %}
+        <div>
+          <label class="form-label small text-muted" for="remediate-device">Remediate</label>
+          <select class="form-select form-select-sm" id="remediate-device" name="device">
+            {% for device in fabric.devices %}
+              {% if device.role == 'leaf' %}<option value="{{ device.device }}">{{ device.device }}</option>{% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="form-label small text-muted" for="remediate-approver">Approved by</label>
+          <input class="form-control form-control-sm" id="remediate-approver" name="approver"
+                 placeholder="your name" autocomplete="off" required>
+        </div>
+        <button class="btn btn-sm btn-outline-primary" type="submit">Approve &amp; remediate</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div id="change-result"></div>
+
+{% endif %}

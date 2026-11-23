@@ -1,0 +1,39 @@
+{% extends 'base/layout.html' %}
+
+{% block title %}Network Ops{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+  <div class="col">
+    <h1 class="h2 mb-1">Network Ops</h1>
+    <p class="text-muted mb-0">
+      Devices, labs and day-two changes, in one place. NetBox is the source of truth;
+      this page shows what it says, what the devices say, and the difference.
+    </p>
+  </div>
+</div>
+
+<ul class="nav nav-tabs mb-3">
+  {% for key, label, href in tabs %}
+    <li class="nav-item">
+      <a class="nav-link {% if tab == key %}active{% endif %}" href="{{ href }}">{{ label }}</a>
+    </li>
+  {% endfor %}
+</ul>
+
+{% if tab == 'devices' %}
+  {% include 'netbox_ops/_devices.html' with fabric=fabric %}
+{% elif tab == 'labs' %}
+  {% include 'netbox_ops/_labs.html' with lab=lab %}
+{% elif tab == 'lifecycle' %}
+  {% include 'netbox_ops/_lifecycle.html' with lifecycle=lifecycle vendors=vendors drifted=drifted %}
+{% elif tab == 'change' %}
+  {% include 'netbox_ops/_change.html' with demo_vlan=demo_vlan demo_vlan_name=demo_vlan_name %}
+{% elif tab == 'awx' %}
+  {% include 'netbox_ops/_awx.html' with awx=awx templates=templates %}
+{% elif tab == 'tickets' %}
+  {% include 'netbox_ops/_tickets.html' with itsm=itsm tickets=tickets %}
+{% elif tab == 'audit' %}
+  {% include 'netbox_ops/_audit.html' with audit=audit %}
+{% endif %}
+{% endblock %}

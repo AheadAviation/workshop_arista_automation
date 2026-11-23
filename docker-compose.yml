@@ -58,6 +58,13 @@ services:
       CORS_ORIGIN_ALLOW_ALL: "true"
       # Login settings
       LOGIN_REQUIRED: "false"
+      # The workbench engine reads NetBox's own REST API through these. Inside the container
+      # the app listens on 8080 (8888 is only the host-side published port).
+      NETBOX_URL: http://localhost:8080
+      NETBOX_TOKEN: 0123456789abcdef0123456789abcdef01234567
+      # The engine's device driver reaches the lab through the scoped Docker proxy, never a
+      # socket. It shells out to `docker exec`; this tells it which daemon to talk to.
+      DOCKER_HOST: tcp://docker-proxy:2375
     ports:
       - "8888:8080"
     volumes:
@@ -69,6 +76,15 @@ services:
       # ZTP portal plugin source (editable-installed in the image); bind-mounted
       # so code changes are picked up on container restart without a rebuild.
       - ./plugins/netbox_ztp_portal/netbox_ztp_portal:/opt/netbox/plugins/netbox_ztp_portal/netbox_ztp_portal:ro
+      # NetBox Ops plugin and the workbench engine it is a surface on. Bind-mounted for the
+      # same reason: restart, don't rebuild, while iterating.
+      #
+      # The engine is installed editable from /opt/netbox/engine, so mounting the source back
+      # over that same path keeps the install valid AND picks up edits. Mounting it anywhere
+      # else would leave the request path importing a stale copy — which is exactly what
+      # happened once and produced a 500 with nothing in the logs.
+      - ./plugins/netbox_ops/netbox_ops:/opt/netbox/plugins/netbox_ops/netbox_ops:ro
+      - ./workbench:/opt/netbox/engine/workbench:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/"]
       interval: 30s
@@ -184,9 +200,48 @@ services:
       - ./.ansible-lint:/ansible/.ansible-lint:ro
       - ./.yamllint.yml:/ansible/.yamllint.yml:ro
       - ./ansible.cfg:/ansible/ansible.cfg:ro
+      # Dual-DC AVD track. Read-write so eos_designs can emit intended configs.
+      - ./labs/l3ls-dual-dc:/labs/l3ls-dual-dc:rw
     working_dir: /ansible
     stdin_open: true
     tty: true
+
+  # ==========================================================================
+  # Scoped Docker Proxy (INIT-002/SPEC-002)
+  # ==========================================================================
+  # The Ops plugin needs to see the containerlab topology and drive deploy/destroy.
+  # Mounting /var/run/docker.sock into NetBox would give that container root on the host,
+  # which is the single worst thing a hospital CISO could see in a demo. This proxy exposes
+  # only the read endpoints plus container start/stop; there is no exec, no build, no pull.
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.2.0
+    environment:
+      # Read-only view of containers and the daemon.
+      CONTAINERS: 1
+      INFO: 1
+      VERSION: 1
+      EVENTS: 1
+      # Everything else stays closed. Deliberately: no EXEC, no BUILD, no IMAGES, no POST
+      # beyond start/stop, no VOLUMES, no NETWORKS.
+      IMAGES: 0
+      EXEC: 0
+      BUILD: 0
+      POST: 1
+      VOLUMES: 0
+      NETWORKS: 0
+      SYSTEM: 0
+      PLUGINS: 0
+      SWARM: 0
+      ALLOW_START: 1
+      ALLOW_STOP: 1
+      ALLOW_RESTARTS: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      default:
+        aliases:
+          - docker-proxy
+    restart: unless-stopped
 
   # ==========================================================================
   # ContainerLab Runner (Privileged container for full networking)
@@ -201,6 +256,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./clab:/clab/topology:rw
+      - ./labs/l3ls-dual-dc/clab:/clab/dual-dc:rw
       - ./output/configs:/clab/configs:ro
     working_dir: /clab
     stdin_open: true

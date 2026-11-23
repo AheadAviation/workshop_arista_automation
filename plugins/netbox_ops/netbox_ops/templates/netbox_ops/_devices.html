@@ -1,0 +1,106 @@
+{% load helpers %}
+
+{% if not fabric.ok %}
+  <div class="alert alert-danger">
+    <strong>{{ fabric.headline }}</strong>
+    <div class="small mt-1">{{ fabric.detail }}</div>
+    <div class="small mt-2">
+      If NetBox cannot read the switches, run <code>.\run.ps1 workbench-lab</code> to deploy them.
+    </div>
+  </div>
+{% else %}
+
+  <div class="row mb-3">
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase">Devices</div>
+          <div class="h3 mb-0">{{ fabric.device_count }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase">Compliant</div>
+          <div class="h3 mb-0 {% if fabric.drifted_count == 0 %}text-success{% else %}text-warning{% endif %}">
+            {{ fabric.device_count|add:fabric.drifted_count|add:"0" }}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase">Drifted</div>
+          <div class="h3 mb-0 {% if fabric.drifted_count %}text-danger{% else %}text-success{% endif %}">
+            {{ fabric.drifted_count }}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase">Verdict</div>
+          <div class="h6 mb-0">{{ fabric.headline }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    {% for device in fabric.devices %}
+      <div class="col-md-6 col-xl-4 mb-3">
+        <div class="card h-100 border-start border-4
+          {% if device.verdict.state == 'compliant' %}border-success
+          {% elif device.verdict.state == 'notice' %}border-warning
+          {% else %}border-danger{% endif %}">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <h5 class="card-title mb-0">{{ device.device }}</h5>
+                <div class="text-muted small text-uppercase">{{ device.role }}</div>
+              </div>
+              <span class="badge
+                {% if device.verdict.state == 'compliant' %}bg-success
+                {% elif device.verdict.state == 'notice' %}bg-warning
+                {% else %}bg-danger{% endif %}">
+                {{ device.verdict.state }}
+              </span>
+            </div>
+
+            <p class="small mt-2 mb-2
+              {% if device.verdict.state == 'compliant' %}text-success
+              {% elif device.verdict.state == 'notice' %}text-warning
+              {% else %}text-danger{% endif %}">
+              {{ device.verdict.headline }}
+            </p>
+
+            <dl class="row small mb-0">
+              <dt class="col-5 text-muted fw-normal">Intended VLANs</dt>
+              <dd class="col-7 mb-1">
+                {% for v in device.intended.vlans %}{{ v }}{% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}
+              </dd>
+              <dt class="col-5 text-muted fw-normal">On the switch</dt>
+              <dd class="col-7 mb-1">
+                {% for v in device.actual.vlans %}{{ v }}{% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}
+              </dd>
+              <dt class="col-5 text-muted fw-normal">Software</dt>
+              <dd class="col-7 mb-1">{{ device.actual.os_version|default:"unknown" }}</dd>
+            </dl>
+
+            {% if device.findings %}
+              <hr class="my-2">
+              {% for finding in device.findings %}
+                <div class="alert alert-danger py-1 px-2 small mb-1">{{ finding.detail }}</div>
+              {% endfor %}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="col-12"><p class="text-muted">No devices found in NetBox for this fabric.</p></div>
+    {% endfor %}
+  </div>
+{% endif %}

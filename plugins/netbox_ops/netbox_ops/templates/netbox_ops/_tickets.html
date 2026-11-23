@@ -1,0 +1,46 @@
+{% if not itsm.configured %}
+  <div class="alert alert-info">
+    <strong>{{ itsm.headline }}</strong>
+    <div class="small mt-1">{{ itsm.detail }}</div>
+    <div class="small mt-2">
+      Start it with <code>docker compose --profile itsm up -d</code>, then set
+      <code>itsm_url</code> and <code>itsm_token</code> in <code>PLUGINS_CONFIG</code>.
+    </div>
+  </div>
+{% elif not itsm.reachable %}
+  <div class="alert alert-warning">
+    <strong>{{ itsm.headline }}</strong>
+    <div class="small mt-1">{{ itsm.detail }}</div>
+  </div>
+{% else %}
+  <div class="alert alert-success py-2"><strong>{{ itsm.headline }}</strong></div>
+
+  {% if not tickets.ok %}
+    <div class="alert alert-danger">
+      <strong>{{ tickets.headline }}</strong>
+      <div class="small mt-1">{{ tickets.detail }}</div>
+    </div>
+  {% else %}
+    <table class="table table-sm table-hover">
+      <thead>
+        <tr><th>Number</th><th>Title</th><th>State</th><th>Priority</th><th>Opened</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for t in tickets.tickets %}
+          <tr>
+            <td class="font-monospace">{{ t.number }}</td>
+            <td>{{ t.title }}</td>
+            <td><span class="badge bg-secondary">{{ t.state }}</span></td>
+            <td class="small">{{ t.priority }}</td>
+            <td class="small text-muted">{{ t.created_at }}</td>
+            <td>{% if t.url %}<a class="small" href="{{ t.url }}" target="_blank" rel="noopener">Open</a>{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="text-muted">
+            No tickets yet. A day-two change opens one.
+          </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endif %}

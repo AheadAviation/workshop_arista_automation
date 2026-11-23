@@ -1,0 +1,26 @@
+# Packaging for the workbench engine, used ONLY inside the NetBox image.
+#
+# `workbench/` is a plain package in this repo with no packaging of its own — it is run as
+# `python -m workbench.cli` from the repo root, which is all it needs there. Inside the NetBox
+# container it has to be importable from a process the container does not fully control (the
+# Unit-launched worker), and that process does not reliably inherit PYTHONPATH.
+#
+# So it is installed into NetBox's own venv like a normal distribution. This file exists for
+# that reason alone and is not used anywhere else; do not add runtime dependencies here —
+# whatever NetBox already ships is what the engine may use.
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "workbench-engine"
+version = "0.1.0"
+description = "The drift, preview, approval-gate and audit engine behind the NetBox Ops plugin"
+requires-python = ">=3.10"
+
+[tool.setuptools]
+packages = ["workbench"]
+
+[tool.setuptools.package-data]
+workbench = ["static/*"]

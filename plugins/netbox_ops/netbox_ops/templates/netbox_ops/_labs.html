@@ -1,0 +1,61 @@
+{% if not lab.ok %}
+  <div class="alert alert-danger">
+    <strong>{{ lab.headline }}</strong>
+    <div class="small mt-1">{{ lab.detail }}</div>
+  </div>
+{% else %}
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <strong>{{ lab.headline }}</strong>
+      {% if lab.detail %}<div class="text-muted small">{{ lab.detail }}</div>{% endif %}
+    </div>
+    <div class="d-flex gap-2">
+      <form method="post" action="{% url 'plugins:netbox_ops:lab_deploy' %}">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-primary" type="submit">Deploy lab</button>
+      </form>
+      <form method="post" action="{% url 'plugins:netbox_ops:lab_destroy' %}">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-outline-danger" type="submit">Destroy lab</button>
+      </form>
+    </div>
+  </div>
+
+  <table class="table table-sm table-hover">
+    <thead>
+      <tr>
+        <th>Node</th>
+        <th>State</th>
+        <th>Image</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for node in lab.nodes %}
+        <tr>
+          <td class="font-monospace">{{ node.name }}</td>
+          <td>
+            <span class="badge {% if node.up %}bg-success{% else %}bg-danger{% endif %}">
+              {{ node.state }}
+            </span>
+          </td>
+          <td class="text-muted small">{{ node.image }}</td>
+          <td class="text-muted small">{{ node.status }}</td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="4" class="text-muted">
+            No lab containers. Use <strong>Deploy lab</strong> above, or run
+            <code>.\run.ps1 workbench-lab</code>.
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p class="text-muted small">
+    Deploy and destroy run containerlab inside the repo's own <code>clab</code> runner container.
+    NetBox itself has no Docker privileges beyond a read-only proxy.
+  </p>
+{% endif %}

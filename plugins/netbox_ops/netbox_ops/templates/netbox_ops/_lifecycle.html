@@ -1,0 +1,87 @@
+{% if not lifecycle.ok %}
+  <div class="alert alert-danger">
+    <strong>{{ lifecycle.headline }}</strong>
+    <div class="small mt-1">{{ lifecycle.detail }}</div>
+  </div>
+{% else %}
+  <div class="row mb-3">
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase">Devices</div>
+          <div class="h3 mb-0">{{ lifecycle.total }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase">Compliant</div>
+          <div class="h3 mb-0 text-success">{{ lifecycle.compliant }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card text-center">
+        <div class="card-body">
+          <div class="text-muted small text-uppercase">Drifted</div>
+          <div class="h3 mb-0 text-danger">{{ drifted }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <table class="table table-sm table-hover">
+    <thead>
+      <tr>
+        <th>Device</th>
+        <th>Role</th>
+        <th>State</th>
+        <th>Software</th>
+        <th>Target</th>
+        <th>Finding</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in lifecycle.devices %}
+        <tr>
+          <td class="font-monospace">{{ row.device }}</td>
+          <td class="text-muted">{{ row.role }}</td>
+          <td>
+            <span class="badge
+              {% if row.state == 'compliant' %}bg-success
+              {% elif row.state == 'notice' %}bg-warning
+              {% else %}bg-danger{% endif %}">{{ row.state }}</span>
+          </td>
+          <td class="font-monospace small">{{ row.os_version }}</td>
+          <td class="font-monospace small">{{ row.target_os }}</td>
+          <td class="small">{{ row.headline }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p class="text-muted small">{{ lifecycle.note }}</p>
+{% endif %}
+
+{% if vendors.ok %}
+  <hr class="my-4">
+  <h5>One intent, two vendors</h5>
+  <p class="text-muted small">{{ vendors.note }}</p>
+  <div class="row">
+    {% for v in vendors.vendors %}
+      <div class="col-md-6 mb-2">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex justify-content-between">
+              <strong>{{ v.device }}</strong>
+              <span class="text-muted small">{{ v.vendor }}</span>
+            </div>
+            <p class="small mb-1 mt-1">{{ v.headline }}</p>
+            <div class="text-muted small">What works here: {{ v.capability }}</div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}

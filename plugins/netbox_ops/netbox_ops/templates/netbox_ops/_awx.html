@@ -1,0 +1,58 @@
+{% if not awx.configured %}
+  <div class="alert alert-info">
+    <strong>{{ awx.headline }}</strong>
+    <div class="small mt-1">{{ awx.detail }}</div>
+    <div class="small mt-2">
+      Start it with <code>docker compose --profile awx up -d</code>, then set
+      <code>awx_url</code> and <code>awx_token</code> in <code>PLUGINS_CONFIG</code>.
+    </div>
+  </div>
+{% elif not awx.reachable %}
+  <div class="alert alert-warning">
+    <strong>{{ awx.headline }}</strong>
+    <div class="small mt-1">{{ awx.detail }}</div>
+    <div class="small mt-2">AWX can take several minutes to finish starting the first time.</div>
+  </div>
+{% else %}
+  <div class="alert alert-success py-2">
+    <strong>{{ awx.headline }}</strong>
+  </div>
+
+  <h5>Job templates</h5>
+  {% if not templates.ok %}
+    <div class="alert alert-danger">
+      <strong>{{ templates.headline }}</strong>
+      <div class="small mt-1">{{ templates.detail }}</div>
+    </div>
+  {% else %}
+    <table class="table table-sm table-hover">
+      <thead>
+        <tr><th>Template</th><th>Playbook</th><th>Last run</th></tr>
+      </thead>
+      <tbody>
+        {% for t in templates.templates %}
+          <tr>
+            <td><strong>{{ t.name }}</strong>
+              {% if t.description %}<div class="text-muted small">{{ t.description }}</div>{% endif %}
+            </td>
+            <td class="font-monospace small">{{ t.playbook }}</td>
+            <td class="small">
+              {% if t.last_run %}
+                {{ t.last_run }}
+                {% if t.last_status %}<span class="badge bg-danger ms-1">failed</span>
+                {% else %}<span class="badge bg-success ms-1">ok</span>{% endif %}
+              {% else %}
+                <span class="text-muted">never run</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="3" class="text-muted">
+            No job templates yet — the AWX bootstrap may not have finished.
+          </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="text-muted small">{{ templates.detail }}</p>
+  {% endif %}
+{% endif %}

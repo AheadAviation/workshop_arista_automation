@@ -1,0 +1,39 @@
+{% if not result.ok %}
+  <div class="alert alert-danger">
+    <strong>{{ result.headline }}</strong>
+    {% if result.detail %}<div class="small mt-1">{{ result.detail }}</div>{% endif %}
+  </div>
+{% elif result.no_drift %}
+  <div class="alert alert-warning">
+    <strong>{{ result.headline }}</strong>
+    {% if result.detail %}<div class="small mt-1">{{ result.detail }}</div>{% endif %}
+    <div class="small mt-1">Nothing was sent to the switch.</div>
+  </div>
+{% else %}
+  <div class="alert alert-success">
+    <strong>{{ result.headline }}</strong>
+    {% if result.detail %}<div class="small mt-1">{{ result.detail }}</div>{% endif %}
+    {% if result.approver %}
+      <div class="small mt-1">Recorded against <strong>{{ result.approver }}</strong>. See the Audit trail tab.</div>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% if result.diff %}
+  <pre class="small bg-body-tertiary border rounded p-2 mb-3" style="max-height:22rem;overflow:auto">{{ result.diff }}</pre>
+{% endif %}
+
+{# The approve control is only offered for a real, unapplied change. #}
+{% if result.ok and not result.no_drift and not result.applied and device %}
+  <form method="post" action="{% url 'plugins:netbox_ops:change_approve' %}" class="d-flex gap-2 align-items-end mb-3">
+    {% csrf_token %}
+    <input type="hidden" name="device" value="{{ device }}">
+    <div>
+      <label class="form-label small text-muted" for="approver">Approved by</label>
+      <input class="form-control form-control-sm" id="approver" name="approver"
+             placeholder="your name" autocomplete="off" required>
+    </div>
+    <button class="btn btn-sm btn-primary" type="submit">Approve &amp; apply</button>
+    <span class="text-muted small">Nothing is sent to a switch until this is clicked with a name.</span>
+  </form>
+{% endif %}

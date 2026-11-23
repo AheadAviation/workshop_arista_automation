@@ -1,0 +1,255 @@
+"""The Ops plugin's views (INIT-002/SPEC-003).
+
+Thin on purpose. Each view asks `engine.py` for data and renders it; none of them does a
+comparison, touches a device, or decides whether a change is allowed. That logic lives in
+`workbench/` where it is tested, and duplicating it here is how two surfaces start disagreeing
+about whether a switch is compliant.
+
+CSRF: the POST endpoints are called by the plugin's own page with the session cookie, so they
+are CSRF-protected like any NetBox form. The page sends the token.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from django.contrib import messages
+from django.http import Http404, JsonResponse
+from django.shortcuts import redirect, render
+from django.utils.decorators import method_decorator
+from django.views import View
+from django.views.decorators.csrf import csrf_protect
+
+from . import conf, engine
+
+logger = logging.getLogger("netbox_ops")
+
+
+class OpsHomeView(View):
+    """One page with tabs: devices, labs, change, AWX, tickets, audit.
+
+    The tab is a **path component**, not a query string. `{% url %}` cannot reverse a name
+    that includes `?tab=...` — it treats the whole string as a view name and raises
+    `NoReverseMatch`, which breaks the nav on every page in NetBox, not just this one.
+    """
+
+    template_name = "netbox_ops/home.html"
+
+    #: The tab strip: key, label, and the **named route** for that tab. NetBox 4.1 cannot
+    #: reverse a route carrying a query string or an argument from the nav, so each tab is a
+    #: named route of its own.
+    TABS = (
+        ("devices", "Devices", "home"),
+        ("labs", "Container labs", "labs"),
+        ("change", "Day-two change", "change"),
+        ("lifecycle", "Lifecycle", "lifecycle"),
+        ("awx", "AWX jobs", "awx"),
+        ("tickets", "ITSM tickets", "tickets"),
+        ("audit", "Audit trail", "audit"),
+    )
+
+    def get(self, request, tab: str = "devices", *args, **kwargs):
+        allowed = {key: (label, route) for key, label, route in self.TABS}
+        if tab not in allowed:
+            raise Http404(f"unknown tab {tab!r}")
+
+        # Reverse here rather than in the template: a broken route name then fails in the
+        # view where the traceback is readable, not inside template rendering.
+        from django.urls import reverse
+
+        tabs = [
+            (key, label, reverse(f"plugins:netbox_ops:{route}"))
+            for key, label, route in self.TABS
+        ]
+
+        context = {
+            "tab": tab,
+            "tabs": tabs,
+            "demo_vlan": conf.demo_vlan(),
+            "demo_vlan_name": conf.demo_vlan_name(),
+        }
+
+        try:
+            return self._render_tab(request, tab, context)
+        except Exception:
+            # Log the real exception. NetBox's server process reports a 500 with no traceback
+            # in `docker compose logs`, which makes a plugin failure invisible; this is the
+            # only place it will surface, so it must not be silent.
+            logger.exception("netbox_ops: rendering tab %r failed", tab)
+            raise
+
+    def _render_tab(self, request, tab: str, context: dict):
+        # Load only the tab being shown. Each of these can take seconds against real devices,
+        # and loading all six on every request would make the page feel broken.
+        if tab == "devices":
+            context["fabric"] = engine.fabric_overview().to_dict()
+        elif tab == "labs":
+            context["lab"] = engine.lab_status().to_dict()
+        elif tab == "change":
+            context["fabric"] = engine.fabric_overview().to_dict()
+        elif tab == "lifecycle":
+            life = engine.lifecycle().to_dict()
+            context["lifecycle"] = life
+            # Computed here rather than in the template: Django templates cannot subtract,
+            # and an "add" chain to fake it is the kind of thing that silently shows a wrong
+            # number on a slide.
+            total = life.get("total") or 0
+            compliant = life.get("compliant") or 0
+            context["drifted"] = max(total - compliant, 0)
+            context["vendors"] = engine.two_vendors().to_dict()
+        elif tab == "awx":
+            context["awx"] = engine.awx_status().to_dict()
+            context["templates"] = engine.awx_job_templates().to_dict()
+        elif tab == "tickets":
+            context["itsm"] = engine.itsm_status().to_dict()
+            context["tickets"] = engine.itsm_tickets().to_dict()
+        elif tab == "audit":
+            context["audit"] = engine.audit().to_dict()
+
+        return render(request, self.template_name, context)
+
+
+@method_decorator(csrf_protect, name="post")
+class ChangePreviewView(View):
+    """Stage a VLAN change and show its diff. Applies nothing."""
+
+    def post(self, request, *args, **kwargs):
+        device = str(request.POST.get("device") or "").strip()
+        if not device:
+            messages.error(request, "A device is required.")
+            return redirect("plugins:netbox_ops:home")
+
+        result = engine.propose_vlan(device, vlan=conf.demo_vlan())
+        return render(
+            request,
+            "netbox_ops/_change_result.html",
+            {"result": result.to_dict(), "device": device, "demo_vlan": conf.demo_vlan()},
+        )
+
+
+@method_decorator(csrf_protect, name="post")
+class ChangeApproveView(View):
+    """Apply a staged change, with a named approver.
+
+    The approver is required here as well as in the engine's gate. Two locks, deliberately:
+    this is the endpoint a page button reaches, and a missing name must be a refusal at the
+    boundary, not a 500 from the layer below.
+    """
+
+    def post(self, request, *args, **kwargs):
+        device = str(request.POST.get("device") or "").strip()
+        approver = str(request.POST.get("approver") or "").strip()
+
+        if not device:
+            messages.error(request, "A device is required.")
+            return redirect("plugins:netbox_ops:home")
+        if not approver:
+            return render(
+                request,
+                "netbox_ops/_change_result.html",
+                {
+                    "result": {
+                        "ok": False,
+                        "headline": "An approver is required",
+                        "detail": "No change is applied without a named person on the record.",
+                    },
+                    "device": device,
+                    "demo_vlan": conf.demo_vlan(),
+                },
+                status=400,
+            )
+
+        result = engine.approve_vlan(device, approver, vlan=conf.demo_vlan())
+        return render(
+            request,
+            "netbox_ops/_change_result.html",
+            {"result": result.to_dict(), "device": device, "demo_vlan": conf.demo_vlan()},
+        )
+
+
+@method_decorator(csrf_protect, name="post")
+class DriftInjectView(View):
+    """Break a switch on purpose, so the devices view can catch it."""
+
+    def post(self, request, *args, **kwargs):
+        device = str(request.POST.get("device") or "").strip()
+        if not device:
+            messages.error(request, "A device is required.")
+            return redirect("plugins:netbox_ops:home")
+
+        result = engine.inject_drift(device)
+        return render(
+            request,
+            "netbox_ops/_change_result.html",
+            {"result": result.to_dict(), "device": device, "demo_vlan": conf.demo_vlan()},
+        )
+
+
+@method_decorator(csrf_protect, name="post")
+class DriftRemediateView(View):
+    """Put back whatever the device is missing, through the same gate."""
+
+    def post(self, request, *args, **kwargs):
+        device = str(request.POST.get("device") or "").strip()
+        approver = str(request.POST.get("approver") or "").strip()
+
+        if not device or not approver:
+            return render(
+                request,
+                "netbox_ops/_change_result.html",
+                {
+                    "result": {
+                        "ok": False,
+                        "headline": "A device and a named approver are required",
+                        "detail": "No change is applied without a named person on the record.",
+                    },
+                    "device": device,
+                    "demo_vlan": conf.demo_vlan(),
+                },
+                status=400,
+            )
+
+        result = engine.remediate(device, approver)
+        return render(
+            request,
+            "netbox_ops/_change_result.html",
+            {"result": result.to_dict(), "device": device, "demo_vlan": conf.demo_vlan()},
+        )
+
+
+@method_decorator(csrf_protect, name="post")
+class LabDeployView(View):
+    def post(self, request, *args, **kwargs):
+        result = engine.lab_deploy()
+        _report(request, result)
+        return redirect("plugins:netbox_ops:tab", tab="labs")
+
+
+@method_decorator(csrf_protect, name="post")
+class LabDestroyView(View):
+    def post(self, request, *args, **kwargs):
+        result = engine.lab_destroy()
+        _report(request, result)
+        return redirect("plugins:netbox_ops:tab", tab="labs")
+
+
+def _report(request, result) -> None:
+    """Put a lab action's outcome in the message queue, success or failure."""
+    if result.ok:
+        messages.success(request, result.headline)
+    else:
+        messages.error(request, f"{result.headline}: {result.detail}")
+
+
+class StatusJsonView(View):
+    """A machine-readable health check, so a rehearsal script can ask without scraping."""
+
+    def get(self, request, *args, **kwargs):
+        payload = {
+            "plugin": "netbox_ops",
+            "fabric": engine.fabric_overview().to_dict(),
+            "labs": engine.lab_status().to_dict(),
+            "awx": engine.awx_status().to_dict(),
+            "itsm": engine.itsm_status().to_dict(),
+        }
+        return JsonResponse(payload)
