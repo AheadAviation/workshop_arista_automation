@@ -46,6 +46,35 @@ def actual(**kwargs) -> Actual:
 # --------------------------------------------------------------------------- #
 
 
+def test_port_name_forms_are_normalised():
+    """EOS says `Et5` in output and `Ethernet5` in config; both must match."""
+    from workbench.drift import normalise_port
+
+    assert normalise_port("Ethernet5") == "Et5"
+    assert normalise_port("Et5") == "Et5"
+    assert normalise_port("Port-Channel2000") == "Po2000"
+
+
+def test_a_trunk_configured_under_its_short_name_reads_as_compliant():
+    """Found on the live lab: `Et5` vs `Ethernet5` made a perfect switch look empty."""
+    i = intent(vlans=(100, 110), trunks=("Ethernet5",), trunk_allowed={"Ethernet5": (100, 110)})
+    a = actual(vlans=(100, 110), trunk_allowed={"Et5": (100, 110)})
+    assert compute_drift(i, a) == []
+
+
+def test_a_long_name_on_the_device_also_matches():
+    i = intent(vlans=(100,), trunks=("Et5",), trunk_allowed={"Et5": (100,)})
+    a = actual(vlans=(100,), trunk_allowed={"Ethernet5": (100,)})
+    assert compute_drift(i, a) == []
+
+
+def test_find_trunk_distinguishes_absent_from_empty():
+    from workbench.drift import find_trunk
+
+    assert find_trunk({}, "Ethernet5") == (False, ())
+    assert find_trunk({"Et5": ()}, "Ethernet5") == (True, ())
+
+
 def test_matching_device_has_no_drift():
     assert compute_drift(intent(), actual()) == []
 

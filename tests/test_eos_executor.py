@@ -247,18 +247,34 @@ def test_apply_runs_a_preview_first_then_commits():
     assert len(run.seen) == 3, "expected abort, commit, then save-to-startup"
     assert run.seen[0].strip().endswith("abort")
     assert run.seen[1].strip().endswith("commit")
-    assert run.seen[2].strip() == "copy running-config startup-config"
+    assert run.seen[2].strip() == "write memory"
     assert result.changed_lines == 1
 
 
 def test_apply_persists_the_change_to_startup_config():
-    """cEOS runs ZTP with no startup-config and silently reverts an unsaved change.
+    """A change held only in running-config is silently reverted on this image.
 
-    Found on the live lab: the demo appeared to work, then undid itself a minute later.
+    Found on the live lab: the demo appeared to work, then undid itself a minute later and
+    the switch fell back to `localhost`.
     """
     run = device_runner()
     apply_change(plan(), runner=run)
-    assert any("copy running-config startup-config" in s for s in run.seen)
+    assert any("write memory" in s for s in run.seen)
+
+
+def test_a_failed_save_is_raised_not_swallowed():
+    """Reporting success for a change that will not survive is worse than failing."""
+
+    def run(args, stdin):
+        if stdin.strip() == "write memory":
+            return "% Authorization denied for command 'write memory'\n", "", 0
+        header = "--- system:/running-config\n+++ session:/s\n"
+        return header + "+vlan 150\ncommit\n", "", 0
+
+    from workbench.eos_executor import EosApplyError
+
+    with pytest.raises(EosApplyError, match="may be reverted"):
+        apply_change(plan(), runner=run)
 
 
 def test_apply_on_a_matching_device_commits_nothing():

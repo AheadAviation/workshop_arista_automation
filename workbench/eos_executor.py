@@ -222,23 +222,23 @@ def _run_session(
 def _persist_to_startup(device: str, runner: EosRunner, container: str) -> None:
     """Save the running config to startup-config after a commit.
 
-    Found on the live lab: cEOS runs ZTP when there is no `startup-config`, so a change held
-    only in running-config was silently reverted a minute or two later and the switch fell
-    back to `localhost`. Every commit therefore has to be persisted, or the demo appears to
-    work and then undoes itself.
+    `write memory` is the form that works on this cEOS image: on a cleanly deployed switch
+    ZeroTouch is already disabled and this completes without prompting. (The `copy
+    running-config startup-config` form fails when ZeroTouch is enabled, which happens if the
+    lab has been redeployed repeatedly.)
 
     A failure here is reported rather than swallowed: a change that will not survive is worse
     than a change that failed, because the presenter finds out in front of the customer.
     """
     out, err, code = runner(
         _cli_args(container),
-        "copy running-config startup-config\n",
+        "write memory\n",
     )
     blob = f"{out}\n{err}"
-    if code != 0 or "% Invalid" in blob or "% Error" in blob:
+    if code != 0 or "% Invalid" in blob or "% Error" in blob or "% Authorization denied" in blob:
         raise EosApplyError(
-            f"{device} committed the change but could not save it to startup-config, so it "
-            f"may be reverted: {_first_complaint(blob) or blob.strip().splitlines()[:1] or 'no output'}"
+            f"{device} committed the change but could not save it, so it may be reverted: "
+            f"{_first_complaint(blob) or (blob.strip().splitlines() or ['no output'])[0][:200]}"
         )
 
 

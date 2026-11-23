@@ -29,11 +29,25 @@ from workbench.intent_source import BASE_VLANS, DEMO_TRUNKS
 #: The tenant VLANs the trunk must carry, in the fabric's own VLAN set.
 TRUNK_VLANS: tuple[int, ...] = BASE_VLANS
 
+#: Human names for the tenant VLANs, matching the fabric's own CORE tenant.
+VLAN_NAMES: dict[int, str] = {
+    100: "SERVERS",
+    110: "MGMT_SERVERS",
+    120: "STORAGE",
+    130: "BACKUP",
+    140: "VOIP",
+}
+
 TOPOLOGY = "clab/topology-demo.clab.yml"
 
 
 def trunk_plan(device: str) -> Plan:
     """The EOS config that makes `Ethernet5` a trunk carrying the tenant VLANs.
+
+    Declares the VLANs themselves as well as the trunk membership. The rendered fabric config
+    references the tenant VLANs inside the EVPN overlay, but never declares them as VLANs, so
+    `show vlan` had only VLAN 1 — a trunk allowing VLANs that do not exist is not a tenant
+    segment, and the live check caught exactly that.
 
     Declared as `switchport trunk allowed vlan <list>` (a full statement, not `add`) because
     this is the *initial* declaration of the trunk, so it should be authoritative. The demo's
@@ -46,8 +60,10 @@ def trunk_plan(device: str) -> Plan:
         if not PORT_RE.match(port):
             raise ValueError(f"unsafe port name {port!r}")
 
-    vlan_list = ",".join(str(v) for v in TRUNK_VLANS)
     lines: list[str] = []
+    for vlan in TRUNK_VLANS:
+        lines += [f"vlan {vlan}", f"   name {VLAN_NAMES.get(vlan, f'VLAN{vlan}')}"]
+    vlan_list = ",".join(str(v) for v in TRUNK_VLANS)
     for port in ports:
         lines += [
             f"interface {port}",
@@ -79,10 +95,48 @@ def trunk_plan(device: str) -> Plan:
     )
 
 
+def disable_zerotouch(device: str, *, container_prefix: str = "clab-netbox-arista-lab-") -> bool:
+    """Turn ZeroTouch off, so the switch will accept `write memory`.
+
+    A cEOS switch that begins its ZeroTouch cycle before its startup-config lands gets stuck
+    with ZeroTouch "Active", and an active ZeroTouch refuses to save configuration at all
+    ("Cannot copy to startup-config when ZeroTouch is enabled"). The result is a switch that
+    accepts a change, reports success, and silently reverts it minutes later -- which is
+    exactly how the demo appeared to work and then undid itself on the live lab.
+
+    Disabling it is a no-op on a switch where it is already off, so this is safe to run
+    every time. Returns True when the switch reports ZeroTouch disabled afterwards.
+    """
+    import subprocess
+
+    container = f"{container_prefix}{device}"
+    try:
+        proc = subprocess.run(  # noqa: S603 - argument list, no shell
+            ["docker", "exec", "-i", container, "Cli", "-p", "15"],
+            input="configure\nzerotouch disable\nend\nshow zerotouch\n",
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+    blob = f"{proc.stdout or ''}\n{proc.stderr or ''}"
+    return proc.returncode == 0 and "ZeroTouch Mode: Disabled" in blob
+
+
 def configure_trunks(*, verbose: bool = True) -> int:
     """Apply the trunk config to every leaf that has one. Idempotent."""
     failures = 0
     for device in DEMO_TRUNKS:
+        # ZeroTouch has to be off before anything can be saved; see `disable_zerotouch`.
+        if not disable_zerotouch(device):
+            if verbose:
+                print(f"  {device}: WARNING could not confirm ZeroTouch is disabled")
+            failures += 1
+            continue
+
         try:
             plan = trunk_plan(device)
         except ValueError as exc:
@@ -124,7 +178,7 @@ def verify_trunks() -> int:
             failures += 1
             continue
         for port in ports:
-            allowed = actual.trunk_allowed.get(port, ())
+            allowed = _trunk_vlans_for(actual.trunk_allowed, port)
             missing = sorted(set(TRUNK_VLANS) - set(allowed))
             if missing:
                 print(f"  {device}/{port}: MISSING VLANs {missing} (has {allowed or 'none'})")
@@ -132,6 +186,18 @@ def verify_trunks() -> int:
             else:
                 print(f"  {device}/{port}: trunk carries {len(allowed)} VLAN(s)")
     return failures
+
+
+def _trunk_vlans_for(trunk_allowed: dict[str, tuple[int, ...]], port: str) -> tuple[int, ...]:
+    """Find a port's allowed VLANs however the switch spells the name.
+
+    Delegates to the drift engine, which owns the name-normalisation rule, so `verify_trunks`
+    and the page can never disagree about whether a trunk is correct.
+    """
+    from workbench.drift import find_trunk
+
+    _found, vlans = find_trunk(trunk_allowed, port)
+    return vlans
 
 
 def deploy_topology() -> int:

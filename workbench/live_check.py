@@ -38,6 +38,14 @@ def main() -> int:
     print("Live check against the running lab")
     print("=" * 62)
 
+    # 0. Start from a known state, so the check is repeatable.
+    # Without this, a second run finds VLAN 150 already present and reports a false failure.
+    from workbench.demo_lab import configure_trunks, verify_trunks
+
+    if verify_trunks() != 0:
+        print("\n  The demo trunks are not in place. Preparing them...")
+        configure_trunks()
+
     # 1. Read intent and actual from the real world.
     overview = fabric_overview(lab)
     step("netbox intent reads", overview.get("ok") is True, overview.get("headline", ""))
@@ -61,9 +69,15 @@ def main() -> int:
     still = len([d for d in after_preview["devices"] if d["verdict"]["state"] != "compliant"])
     step("preview changed nothing", still == before, f"{still} not-compliant before and after")
 
-    # 3. Approve it for real.
+    # 3. Approve it for real. On a repeat run the switch may already have it, which is a
+    # successful no-op rather than a failure -- that is the idempotency the demo claims.
     applied = approve(lab, "leaf-01", approver="live check")
-    step("apply with an approver", applied.get("applied") is True, applied.get("headline", ""))
+    already = bool(applied.get("no_drift"))
+    step(
+        "apply with an approver",
+        applied.get("applied") is True or already,
+        "already compliant (no-op)" if already else applied.get("headline", ""),
+    )
 
     # 4. The switch should now be compliant.
     after = fabric_overview(lab)
@@ -76,11 +90,12 @@ def main() -> int:
 
     # 5. Prove it on the switch itself, not just in our own data.
     from workbench.device_reader import read_device
+    from workbench.drift import find_trunk
 
     actual = read_device("leaf-01")
     step("VLAN 150 exists on the switch", 150 in actual.vlans, f"vlans={actual.vlans}")
-    trunk = actual.trunk_allowed.get("Ethernet5", ())
-    step("Ethernet5 carries VLAN 150", 150 in trunk, f"allowed={trunk}")
+    found, trunk = find_trunk(actual.trunk_allowed, "Ethernet5")
+    step("Ethernet5 carries VLAN 150", found and 150 in trunk, f"allowed={trunk}")
 
     # 6. Break it, catch it, fix it.
     injected = inject_drift(lab, "leaf-01")
@@ -92,8 +107,15 @@ def main() -> int:
     fixed = remediate(lab, "leaf-01", approver="live check")
     step("remediate through the gate", fixed.get("applied") is True, fixed.get("headline", ""))
 
+    # Check the device we actually remediated. Asserting the whole fabric is compliant would
+    # fail on the other leaves, which the demo deliberately does not touch on one approval.
     healed = fabric_overview(lab)
-    step("compliant again", healed.get("drifted_count") == 0)
+    leaf_after = next((d for d in healed["devices"] if d["device"] == "leaf-01"), None)
+    step(
+        "leaf-01 compliant again",
+        bool(leaf_after) and leaf_after["verdict"]["state"] == "compliant",
+        (leaf_after["verdict"]["headline"] if leaf_after else "missing"),
+    )
 
     # 7. The other views.
     life = lifecycle(lab)

@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from workbench.contracts import Actual, Drift, Intent
 
+__all__ = ["compute_drift", "find_trunk", "normalise_port", "summarise"]
+
 
 # --------------------------------------------------------------------------- #
 # The entry point
@@ -123,6 +125,36 @@ def _compare_vlans(intent: Intent, actual: Actual) -> list[Drift]:
     ]
 
 
+def normalise_port(port: str) -> str:
+    """A port name in its short EOS form, so intent and reality can be compared.
+
+    EOS abbreviates unpredictably: the interface is `Ethernet5` in configuration but `Et5` in
+    `show interfaces trunk`. Comparing the long form against the short form made a correctly
+    configured trunk look empty -- which is exactly how the demo silently "failed" on a switch
+    that was in fact perfect.
+    """
+    name = port.strip()
+    for long, short in (("Ethernet", "Et"), ("Port-Channel", "Po"), ("Management", "Ma")):
+        if name.startswith(long):
+            return short + name[len(long):]
+    return name
+
+
+def find_trunk(
+    trunk_allowed: dict[str, tuple[int, ...]], port: str
+) -> tuple[bool, tuple[int, ...]]:
+    """Look up a port's allowed VLANs, tolerating either name form.
+
+    Returns `(found, vlans)`. `found` distinguishes "the switch does not consider this a trunk"
+    from "it is a trunk carrying nothing", which are different findings.
+    """
+    target = normalise_port(port)
+    for key, vlans in trunk_allowed.items():
+        if normalise_port(key) == target:
+            return True, vlans
+    return False, ()
+
+
 def _compare_trunks(intent: Intent, actual: Actual) -> list[Drift]:
     """Per-port trunk allow-list comparison.
 
@@ -132,9 +164,10 @@ def _compare_trunks(intent: Intent, actual: Actual) -> list[Drift]:
     findings: list[Drift] = []
     for port in intent.trunks:
         wanted = set(intent.trunk_allowed.get(port, intent.vlans))
-        have = set(actual.trunk_allowed.get(port, ()))
+        found, have_tuple = find_trunk(actual.trunk_allowed, port)
+        have = set(have_tuple)
 
-        if port not in actual.trunk_allowed:
+        if not found:
             findings.append(
                 Drift(
                     device=intent.device,
@@ -211,4 +244,4 @@ def summarise(findings: list[Drift]) -> dict[str, object]:
     return {"state": state, "headline": headline, "count": len(findings)}
 
 
-__all__ = ["compute_drift", "summarise"]
+__all__ = ["compute_drift", "find_trunk", "normalise_port", "summarise"]
