@@ -81,6 +81,35 @@ def test_unsafe_session_name_is_refused():
         build_session_script("vlan 1", "s1; reload now", mode="merge", finish="abort")
 
 
+def test_session_names_are_unique_per_attempt():
+    """EOS refuses to re-enter a completed session, so a fixed name breaks every retry.
+
+    Found on the live lab: the second run of a change failed forever with
+    "Cannot enter session workbench_apply_c (already completed)".
+    """
+    from workbench.eos_executor import _unique_session
+
+    names = {_unique_session("workbench_apply") for _ in range(50)}
+    assert len(names) == 50, "each attempt must get its own session name"
+
+
+def test_a_unique_session_name_is_still_cli_safe():
+    from workbench.eos_executor import _unique_session
+
+    name = _unique_session("workbench_apply")
+    assert len(name) <= 32
+    assert all(c.isalnum() or c in "_-" for c in name)
+
+
+def test_apply_runs_two_distinct_sessions():
+    """The preview session and the commit session must not collide."""
+    run = device_runner()
+    apply_change(plan(), runner=run)
+    sessions = [s for s in run.seen if s.startswith("configure session")]
+    assert len(sessions) == 2
+    assert sessions[0] != sessions[1], "the two sessions must have different names"
+
+
 def test_session_name_with_newline_is_refused():
     with pytest.raises(ContractError, match="unsafe session name"):
         build_session_script("vlan 1", "s1\nreload", mode="merge", finish="abort")
@@ -215,10 +244,21 @@ def test_preview_reports_a_timeout_plainly():
 def test_apply_runs_a_preview_first_then_commits():
     run = device_runner()
     result = apply_change(plan(), runner=run)
-    assert len(run.seen) == 2, "expected an abort session then a commit session"
+    assert len(run.seen) == 3, "expected abort, commit, then save-to-startup"
     assert run.seen[0].strip().endswith("abort")
     assert run.seen[1].strip().endswith("commit")
+    assert run.seen[2].strip() == "copy running-config startup-config"
     assert result.changed_lines == 1
+
+
+def test_apply_persists_the_change_to_startup_config():
+    """cEOS runs ZTP with no startup-config and silently reverts an unsaved change.
+
+    Found on the live lab: the demo appeared to work, then undid itself a minute later.
+    """
+    run = device_runner()
+    apply_change(plan(), runner=run)
+    assert any("copy running-config startup-config" in s for s in run.seen)
 
 
 def test_apply_on_a_matching_device_commits_nothing():

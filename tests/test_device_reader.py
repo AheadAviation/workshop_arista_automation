@@ -62,6 +62,31 @@ def test_parse_trunks_reads_only_the_allowed_list():
     assert trunks["Po2000"] == (4094,)
 
 
+def test_parse_trunks_handles_the_ceos_header_wording():
+    """Real cEOS prints `Vlans allowed`, not `Vlans allowed on trunk`.
+
+    Captured from the live lab. The earlier parser only matched the longer wording, so a
+    correctly configured trunk read back as carrying nothing -- the exact symptom that made
+    the live check fail after the change had in fact succeeded.
+    """
+    trunks = parse_trunks(fixture("show_interfaces_trunk_ceos.txt"))
+    assert trunks["Et5"] == (100, 110, 120, 130, 140)
+
+
+def test_parse_trunks_ignores_the_inactive_and_forwarding_blocks_ceos_style():
+    output = """
+Port            Vlans allowed
+Et5             100,110,150
+
+Port            Vlans allowed and active in management domain
+Et5             None
+
+Port            Vlans in spanning tree forwarding state
+Et5             None
+"""
+    assert parse_trunks(output)["Et5"] == (100, 110, 150)
+
+
 def test_parse_trunks_ignores_the_narrower_later_blocks():
     """A VLAN that is allowed but not yet active must still count as on the trunk."""
     output = """

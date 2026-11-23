@@ -37,15 +37,20 @@ NEW_VLAN_NAME = "PHILIPS_MEDICAL"
 
 #: The demo's server-facing trunk layer, per leaf.
 #:
-#: `Ethernet5` is the rack's access trunk and `Ethernet6` the second member of the same
-#: server bond — the "series of trunks" in the customer's story. They are declared here
-#: because the shipped fabric does not model them (every port is a fabric link or an
-#: MLAG peerlink), and inventing them in the demo layer keeps the workshop data intact.
+#: `Ethernet5` is the server trunk created by `clab/topology-demo.clab.yml`, where each
+#: server is dual-homed across an MLAG pair — which is why one VLAN change must land on two
+#: switches, and why "a series of trunks" is literally true here.
+#:
+#: `Ethernet6` is deliberately absent: the shipped fabric gives each leaf only four data
+#: ports (two fabric links, two MLAG peerlink members), so eth5 is the one free port. The
+#: earlier version of this file listed Ethernet6 as well, which made the demo configure an
+#: interface that does not exist — it silently applied to nothing, and the live check caught
+#: it. Do not add a port here without adding it to the topology first.
 DEMO_TRUNKS: Mapping[str, tuple[str, ...]] = {
-    "leaf-01": ("Ethernet5", "Ethernet6"),
-    "leaf-02": ("Ethernet5", "Ethernet6"),
-    "leaf-03": ("Ethernet5", "Ethernet6"),
-    "leaf-04": ("Ethernet5", "Ethernet6"),
+    "leaf-01": ("Ethernet5",),
+    "leaf-02": ("Ethernet5",),
+    "leaf-03": ("Ethernet5",),
+    "leaf-04": ("Ethernet5",),
 }
 
 #: What each of those trunks carries when the fabric is in its intended state.

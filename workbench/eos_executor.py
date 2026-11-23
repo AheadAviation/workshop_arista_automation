@@ -31,6 +31,7 @@ Nothing here builds a shell string. The session script goes to the CLI's stdin.
 from __future__ import annotations
 
 import re
+import uuid
 from dataclasses import dataclass
 from typing import Callable, Literal, Sequence
 
@@ -172,6 +173,18 @@ def _cli_args(container: str) -> list[str]:
     return ["docker", "exec", "-i", container, "Cli", "-p", "15"]
 
 
+def _unique_session(base: str) -> str:
+    """A session name no earlier attempt used.
+
+    EOS keeps a completed session's name reserved, so `configure session X` fails with
+    "already completed" if X was used before. A fixed name therefore makes the second run of
+    any change fail permanently; a short suffix makes each attempt independent.
+    """
+    suffix = uuid.uuid4().hex[:6]
+    stem = re.sub(r"[^A-Za-z0-9_-]", "_", base)[:24]
+    return f"{stem}_{suffix}"
+
+
 def _run_session(
     device: str,
     plan: Plan,
@@ -183,6 +196,10 @@ def _run_session(
     if not SESSION_RE.match(device):
         raise ContractError(f"invalid device name {device!r}")
 
+    # A session name must be unique per attempt. EOS refuses to re-enter a session it has
+    # already completed ("Cannot enter session X (already completed)"), so a fixed name makes
+    # every retry fail forever after the first run -- which is exactly what happened live.
+    session = _unique_session(session)
     container = f"{container_prefix}{device}"
     script = build_session_script(plan.config, session, mode=plan.mode, finish=finish)  # type: ignore[arg-type]
     out, err, code = runner(_cli_args(container), script)
@@ -197,7 +214,32 @@ def _run_session(
         )
 
     diff = clean_diff(out)
+    if finish == "commit":
+        _persist_to_startup(device, runner, container)
     return EosResult(diff=diff, committed=finish == "commit", raw=out)
+
+
+def _persist_to_startup(device: str, runner: EosRunner, container: str) -> None:
+    """Save the running config to startup-config after a commit.
+
+    Found on the live lab: cEOS runs ZTP when there is no `startup-config`, so a change held
+    only in running-config was silently reverted a minute or two later and the switch fell
+    back to `localhost`. Every commit therefore has to be persisted, or the demo appears to
+    work and then undoes itself.
+
+    A failure here is reported rather than swallowed: a change that will not survive is worse
+    than a change that failed, because the presenter finds out in front of the customer.
+    """
+    out, err, code = runner(
+        _cli_args(container),
+        "copy running-config startup-config\n",
+    )
+    blob = f"{out}\n{err}"
+    if code != 0 or "% Invalid" in blob or "% Error" in blob:
+        raise EosApplyError(
+            f"{device} committed the change but could not save it to startup-config, so it "
+            f"may be reverted: {_first_complaint(blob) or blob.strip().splitlines()[:1] or 'no output'}"
+        )
 
 
 def _first_complaint(blob: str) -> str:
@@ -281,9 +323,9 @@ def _apply_or_abort(
         return Preview(device=plan.device, diff="", changed_lines=0)
 
     # It would change something, so commit it — a second, identical session that ends
-    # in `commit` instead of `abort`.
-    commit_session = f"{session}_c"[:32]
-    second = _run_session(plan.device, plan, commit_session, "commit", runner, container_prefix)
+    # in `commit` instead of `abort`. The name is derived from the preview's, and both
+    # get their own unique suffix inside `_run_session`.
+    second = _run_session(plan.device, plan, session, "commit", runner, container_prefix)
     return Preview(
         device=plan.device,
         diff=second.diff or first.diff,

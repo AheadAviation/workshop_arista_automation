@@ -1,0 +1,98 @@
+# =============================================================================
+# ContainerLab Topology - DEMO VARIANT (INIT-001)
+# =============================================================================
+# Same six-switch fabric as topology-docker.clab.yml, plus two dual-homed servers.
+#
+# Why this exists: the shipped topology gives every leaf exactly four data ports
+# (eth1/eth2 to the spines, eth3/eth4 as the MLAG peerlink). There is no server-facing
+# port, so there is no trunk carrying tenant VLANs — and the demo's whole story is
+# "add a VLAN across a series of trunks", which is the change a hospital actually faces
+# when a new clinical system arrives.
+#
+# Each server is dual-homed to both members of an MLAG pair on eth5, which is how a real
+# DC server attaches: a bond with one leg on each leaf. That is also why one VLAN has to
+# land on two switches, not one — the point the demo is making.
+#
+# Deploy with:
+#   .\run.ps1 workbench-lab
+#
+# The core workshop's own topology file is untouched by this.
+# =============================================================================
+
+name: netbox-arista-lab
+mgmt:
+  network: netbox-arista-lab_mgmt
+  ipv4-subnet: 172.30.30.0/24
+topology:
+  kinds:
+    ceos:
+      image: ceos:4.32.0F
+      image-pull-policy: never
+    linux:
+      image: alpine:3.20
+  nodes:
+    leaf-01:
+      kind: ceos
+      startup-config: /clab/configs/leaf-01.cfg
+      mgmt-ipv4: 172.30.30.21
+    leaf-02:
+      kind: ceos
+      startup-config: /clab/configs/leaf-02.cfg
+      mgmt-ipv4: 172.30.30.22
+    leaf-03:
+      kind: ceos
+      startup-config: /clab/configs/leaf-03.cfg
+      mgmt-ipv4: 172.30.30.23
+    leaf-04:
+      kind: ceos
+      startup-config: /clab/configs/leaf-04.cfg
+      mgmt-ipv4: 172.30.30.24
+    spine-01:
+      kind: ceos
+      startup-config: /clab/configs/spine-01.cfg
+      mgmt-ipv4: 172.30.30.11
+    spine-02:
+      kind: ceos
+      startup-config: /clab/configs/spine-02.cfg
+      mgmt-ipv4: 172.30.30.12
+
+    # The Philips clinical system: dual-homed to the leaf-01/leaf-02 MLAG pair.
+    philips-01:
+      kind: linux
+      mgmt-ipv4: 172.30.30.51
+      exec:
+        - ip link set eth1 up
+        - ip link set eth2 up
+
+    # A second server on the other MLAG pair, so the fabric view is not one-sided.
+    philips-02:
+      kind: linux
+      mgmt-ipv4: 172.30.30.52
+      exec:
+        - ip link set eth1 up
+        - ip link set eth2 up
+
+  links:
+    # ---- fabric: spines to leaves (unchanged from the shipped topology) ----
+    - endpoints: ["spine-01:eth1", "leaf-01:eth1"]
+    - endpoints: ["spine-01:eth2", "leaf-02:eth1"]
+    - endpoints: ["spine-01:eth3", "leaf-03:eth1"]
+    - endpoints: ["spine-01:eth4", "leaf-04:eth1"]
+    - endpoints: ["spine-02:eth1", "leaf-01:eth2"]
+    - endpoints: ["spine-02:eth2", "leaf-02:eth2"]
+    - endpoints: ["spine-02:eth3", "leaf-03:eth2"]
+    - endpoints: ["spine-02:eth4", "leaf-04:eth2"]
+
+    # ---- MLAG peerlinks (unchanged) ----
+    - endpoints: ["leaf-01:eth3", "leaf-02:eth3"]
+    - endpoints: ["leaf-01:eth4", "leaf-02:eth4"]
+    - endpoints: ["leaf-03:eth3", "leaf-04:eth3"]
+    - endpoints: ["leaf-03:eth4", "leaf-04:eth4"]
+
+    # ---- server trunks (the demo's addition) ----
+    # eth5 on each leaf is the server-facing trunk. Each server is dual-homed across an
+    # MLAG pair, so one VLAN change has to reach two switches.
+    - endpoints: ["philips-01:eth1", "leaf-01:eth5"]
+    - endpoints: ["philips-01:eth2", "leaf-02:eth5"]
+    - endpoints: ["philips-02:eth1", "leaf-03:eth5"]
+    - endpoints: ["philips-02:eth2", "leaf-04:eth5"]

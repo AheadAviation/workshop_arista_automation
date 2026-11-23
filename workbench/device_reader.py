@@ -211,15 +211,15 @@ def parse_trunks(output: str) -> dict[str, tuple[int, ...]]:
         Port        Vlans allowed and active in management domain
         Et5         100,110,120,130,140
 
-    The later blocks are narrower views (`and active`, `not pruned`) and would silently
-    overwrite the real allow-list, which is exactly the bug this function was written
-    to avoid: a VLAN that is allowed but not yet active would vanish from the answer.
-
-    Note `Port-Channel2000` starts with "Port", so header detection compares the whole
-    first token rather than using a prefix test.
+    The block header varies by EOS version: this lab prints `Vlans allowed`, while other
+    releases print `Vlans allowed on trunk`. Both are matched, and the later, narrower blocks
+    (`and active in management domain`, `in spanning tree forwarding state`) are ignored
+    because they are filtered views -- a VLAN present in the allow-list but not yet active
+    would otherwise appear to be missing.
     """
     allowed: dict[str, tuple[int, ...]] = {}
     in_allowed_block = False
+    saw_allowed_header = False
 
     for raw in output.splitlines():
         line = raw.strip()
@@ -227,22 +227,25 @@ def parse_trunks(output: str) -> dict[str, tuple[int, ...]]:
             continue
 
         lowered = line.lower()
-        if "vlans allowed on trunk" in lowered:
-            in_allowed_block = True
-            continue
-
         first = line.split()[0]
-        # A section header is a line whose first token is the literal word "Port".
-        # Anything else with a port-shaped first token is data.
+
+        # A section header is the literal word "Port" as the first token. `Port-Channel2000`
+        # also starts with "Port", so the test must be the whole token, not a prefix.
         if first.lower() == "port":
-            if in_allowed_block and allowed:
-                break  # the allow-list block has ended; later blocks are narrower
+            if "vlans allowed" in lowered and "active" not in lowered and "forwarding" not in lowered:
+                in_allowed_block = True
+                saw_allowed_header = True
+            elif in_allowed_block:
+                # Any other header ends the allow-list block.
+                in_allowed_block = False
             continue
 
         if in_allowed_block and PORT_RE.match(first):
             parts = line.split(None, 1)
             allowed[first] = parse_vlan_list(parts[1] if len(parts) > 1 else "")
 
+    if not saw_allowed_header:
+        return {}
     return allowed
 
 
