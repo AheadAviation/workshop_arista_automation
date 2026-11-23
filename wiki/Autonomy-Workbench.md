@@ -110,6 +110,25 @@ That last half-sentence matters more than the demo. Do not skip it.
 
 Say these plainly if asked. A demo that overclaims is worse than a smaller honest one.
 
+### One lab limitation you must know about
+
+On this cEOS image, **ZeroTouch is enabled and blocks persisting the configuration**
+(`Cannot copy to startup-config when ZeroTouch is enabled`). The consequence: a change
+applied during the demo lives in running-config and will be silently reverted after a few
+minutes, and the switch returns to hostname `localhost`.
+
+**What this means for tomorrow:**
+
+- Do the whole demo inside one sitting. The change holds while you're talking; it will not
+  survive lunch.
+- If you need to re-run, redeploy the lab (`.\run.ps1 workbench-lab`) and start again.
+- `workbench live_check` will tell you the truth before you present.
+
+The workbench now **raises** rather than reporting success when the save fails, so you'll
+see it in the rehearsal rather than discovering it mid-sentence. Fixing it properly means
+disabling ZeroTouch and adjusting the authorization policy on the cEOS image — a lab-image
+change, not a workbench one, and not yet done.
+
 - **It does not replace ServiceNow.** It reads and writes configuration intent; your CMDB
   stays your CMDB.
 - **It does not replace Infoblox.** It is not an IPAM authority. NetBox can hold prefixes;
@@ -119,9 +138,8 @@ Say these plainly if asked. A demo that overclaims is worse than a smaller hones
   does not today and it will not pretend to.
 - **It is a lab.** Not a customer network, and it says so in the footer.
 - **The trunk layer is a lab overlay.** The shipped fabric has no server-facing trunks, so
-  the demo declares its own (`workbench/intent_source.py`, `DEMO_TRUNKS`) rather than
-  rewriting the workshop's fabric data. That is stated here because it is the one place the
-  demo is a model of a network rather than the network.
+  the demo adds one real server trunk per leaf (`Ethernet5`, in
+  `clab/topology-demo.clab.yml`) rather than rewriting the workshop's fabric data.
 
 ---
 
