@@ -20,16 +20,21 @@ talking and Q&A.
 
 ```powershell
 .\run.ps1 up                     # the NetBox stack
-.\run.ps1 deploy                 # the six cEOS switches
-.\run.ps1 apply                  # push the generated configs
-.\run.ps1 workbench-walk         # proves the demo flow, needs no lab (start here)
-.\run.ps1 workbench-check        # the rehearsal against the real lab — must say READY
+.\run.ps1 workbench-lab          # deploy the switches AND prepare the trunk layer
+.\run.ps1 workbench-live         # the real rehearsal — must say PASS
 .\run.ps1 workbench              # the page
 ```
 
-`workbench-walk` is the one to run first, and again if anything feels wrong: it walks all
-sixteen steps of the demo against a stand-in fabric, so it separates "the demo logic is
-broken" from "the lab is down". `workbench-check` is the one that answers "is the lab up".
+`workbench-lab` is the important one: it deploys the demo topology (which adds a real
+server-facing port on each leaf) and prepares the trunk layer, including the ZeroTouch
+setting without which a switch will not save its configuration.
+
+`workbench-live` then walks the whole demo against the actual switches and tells you the
+truth: 14 steps, including breaking a switch on purpose and fixing it again. It is
+idempotent, so you can run it as often as you like.
+
+If `workbench-live` says PASS, you are ready. If it says anything else, it names the step
+that failed.
 
 Open <http://127.0.0.1:8099>. Leave it on the **Fabric** tab.
 
@@ -110,25 +115,6 @@ That last half-sentence matters more than the demo. Do not skip it.
 
 Say these plainly if asked. A demo that overclaims is worse than a smaller honest one.
 
-### One lab limitation you must know about
-
-On this cEOS image, **ZeroTouch is enabled and blocks persisting the configuration**
-(`Cannot copy to startup-config when ZeroTouch is enabled`). The consequence: a change
-applied during the demo lives in running-config and will be silently reverted after a few
-minutes, and the switch returns to hostname `localhost`.
-
-**What this means for tomorrow:**
-
-- Do the whole demo inside one sitting. The change holds while you're talking; it will not
-  survive lunch.
-- If you need to re-run, redeploy the lab (`.\run.ps1 workbench-lab`) and start again.
-- `workbench live_check` will tell you the truth before you present.
-
-The workbench now **raises** rather than reporting success when the save fails, so you'll
-see it in the rehearsal rather than discovering it mid-sentence. Fixing it properly means
-disabling ZeroTouch and adjusting the authorization policy on the cEOS image — a lab-image
-change, not a workbench one, and not yet done.
-
 - **It does not replace ServiceNow.** It reads and writes configuration intent; your CMDB
   stays your CMDB.
 - **It does not replace Infoblox.** It is not an IPAM authority. NetBox can hold prefixes;
@@ -139,7 +125,7 @@ change, not a workbench one, and not yet done.
 - **It is a lab.** Not a customer network, and it says so in the footer.
 - **The trunk layer is a lab overlay.** The shipped fabric has no server-facing trunks, so
   the demo adds one real server trunk per leaf (`Ethernet5`, in
-  `clab/topology-demo.clab.yml`) rather than rewriting the workshop's fabric data.
+  `clab/topology-demo.clab.yml`) with a server dual-homed across each MLAG pair.
 
 ---
 
