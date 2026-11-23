@@ -1,0 +1,16 @@
+! Command: show vlan
+! Device: leaf-01 (vEOS-lab, EOS-4.32.0F)
+!
+! NOTE: This output is formatted for readability
+!
+VLAN  Name                             Status    Ports
+----- -------------------------------- --------- -------------------------------
+1     default                          active    Et1, Et2
+100   SERVERS                          active    Et5, Et6
+110   MGMT_SERVERS                     active    Et5, Et6
+120   STORAGE                          active    Et5, Et6
+130   BACKUP                           active    Et5, Et6
+140   VOIP                             active    Et5, Et6
+4080  IBGP_UNDERLAY                    active
+4081  IBGP_CORE                        active
+4094  MLAG_PEER                        active    Po2000

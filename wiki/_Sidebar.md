@@ -17,6 +17,7 @@
 - [[Template Reference]]
 - [[Troubleshooting]]
 - [[Day 2 Operations]]
+- [[Autonomy Workbench]]
 - [[Add-on Plants Demo]]
 
 ---

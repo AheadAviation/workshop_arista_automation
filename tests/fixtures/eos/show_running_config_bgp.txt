@@ -1,0 +1,13 @@
+! Command: show running-config section router bgp
+! Device: leaf-01 (vEOS-lab, EOS-4.32.0F)
+!
+router bgp 65001
+   router-id 10.255.0.11
+   update wait-install
+   maximum-paths 8 ecmp 16
+   no bgp default ipv4-unicast
+   neighbor SPINE_IPV4 peer group
+   neighbor 10.0.0.0 peer group SPINE_IPV4
+   neighbor 10.0.0.0 remote-as 65000
+   address-family ipv4
+      neighbor SPINE_IPV4 activate

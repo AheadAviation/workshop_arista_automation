@@ -80,3 +80,7 @@ output/changes/
 output/alerts/
 output/reports/*.md
 
+
+# Workbench runtime output (INIT-001). The audit record is per-machine runtime
+# state, not source: it accumulates every change made during a demo on this host.
+output/workbench/

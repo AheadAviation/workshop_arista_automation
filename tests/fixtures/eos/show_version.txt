@@ -1,0 +1,18 @@
+! Command: show version
+! Device: leaf-01 (vEOS-lab, EOS-4.32.0F)
+!
+Arista vEOS-lab
+Hardware version:    
+Serial number:       
+System MAC address:  0c:00:a5:11:22:33
+
+Software image version: 4.32.0F
+Architecture:           i386
+Internal build version: 4.32.0F-35633150.4320F
+Internal build ID:      f0f0f0f0-1111-2222-3333-444455556666
+Image format version:   3.0
+Image optimization:     None
+
+Uptime:                 1 hour and 12 minutes
+Total memory:           2048000 kB
+Free memory:            1200000 kB

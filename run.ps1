@@ -62,6 +62,13 @@ Day 2 Operations:
   rollback    Restore each switch from that saved config
   pipeline    Run full pipeline (generate + deploy)
 
+Optional add-on - Autonomy Workbench (executive demo; see wiki/Autonomy-Workbench.md):
+  workbench          Start the browser page on http://127.0.0.1:8099
+  workbench-walk     Prove the whole demo flow with no lab running (start here)
+  workbench-check    The morning rehearsal: is the lab ready? (under ten minutes)
+  workbench-reset    Put the lab back to intended state (the audit log is kept)
+  workbench-status   The fabric in the terminal, for a quick smoke test
+
 Optional add-on - Plants Demo (multi-site, owners, approvers; see wiki/Add-on-Plants-Demo.md):
   plants        Create the sample organisation  (extra args pass through, e.g. --link-fabric)
   plants-audit  Ownership & lifecycle report    (e.g. --scope all, --json, --fail-on-gaps)
@@ -231,6 +238,38 @@ for cfg in sorted(Path('output/configs').glob('*.cfg')):
         docker compose run --rm ansible ansible-playbook playbooks/full_pipeline.yml
     }
     
+    # Optional add-on: Autonomy Workbench (executive demo). Runs on the host, because
+    # it talks to the running containers and to NetBox from outside them.
+    "workbench" {
+        Write-Host "Starting the Autonomy Workbench on http://127.0.0.1:8099 ..." -ForegroundColor Cyan
+        Write-Host "Press Ctrl+C to stop." -ForegroundColor Yellow
+        python -m workbench.cli serve
+        exit $LASTEXITCODE
+    }
+
+    "workbench-check" {
+        Write-Host "Rehearsing the Autonomy Workbench demo..." -ForegroundColor Cyan
+        python -m workbench.cli check @Rest
+        exit $LASTEXITCODE
+    }
+
+    "workbench-walk" {
+        Write-Host "Walking the whole demo with no lab running..." -ForegroundColor Cyan
+        python -m workbench.cli walkthrough
+        exit $LASTEXITCODE
+    }
+
+    "workbench-reset" {
+        Write-Host "Returning the demo fabric to intended state (audit log is kept)..." -ForegroundColor Cyan
+        python -m workbench.cli reset @Rest
+        exit $LASTEXITCODE
+    }
+
+    "workbench-status" {
+        python -m workbench.cli overview @Rest
+        exit $LASTEXITCODE
+    }
+
     # Optional add-on: Plants Demo (never touches the Arista fabric data)
     "plants" {
         Write-Host "Creating Plants Demo sample organisation..." -ForegroundColor Cyan

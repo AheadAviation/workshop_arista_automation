@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NetBox Automation Workbench</title>
+  <link rel="stylesheet" href="/static/workbench.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>Network Automation Workbench</h1>
+        <p class="subtle">What the network should be &middot; what it is &middot; the difference</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span id="fabric-state" class="pill pill-unknown">checking&hellip;</span>
+      <button id="refresh" class="btn btn-ghost" type="button">Refresh</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab is-active" data-panel="fabric" role="tab" type="button">Fabric</button>
+    <button class="tab" data-panel="change" role="tab" type="button">Day-two change</button>
+    <button class="tab" data-panel="lifecycle" role="tab" type="button">Lifecycle</button>
+    <button class="tab" data-panel="vendors" role="tab" type="button">Two vendors</button>
+    <button class="tab" data-panel="audit" role="tab" type="button">Audit trail</button>
+  </nav>
+
+  <main>
+    <p id="banner" class="banner" hidden></p>
+
+    <!-- ============================== FABRIC ============================== -->
+    <section id="panel-fabric" class="panel is-active" role="tabpanel">
+      <div class="section-head">
+        <div>
+          <h2>Intended versus actual</h2>
+          <p class="subtle">
+            NetBox is the source of truth. Each card compares what it says should be
+            true against what the switch reports, right now.
+          </p>
+        </div>
+        <button id="propose-preview" class="btn" type="button">
+          Preview the Philips VLAN
+        </button>
+      </div>
+      <div id="fabric-summary" class="stat-row"></div>
+      <div id="fabric-grid" class="grid"></div>
+    </section>
+
+    <!-- ============================== CHANGE ============================== -->
+    <section id="panel-change" class="panel" role="tabpanel">
+      <div class="section-head">
+        <div>
+          <h2>Add a VLAN across the trunks</h2>
+          <p class="subtle">
+            A new clinical system arrives and needs VLAN&nbsp;150 on every server trunk.
+            Preview it first: nothing reaches a switch until someone approves.
+          </p>
+        </div>
+      </div>
+
+      <div class="card form-card">
+        <div class="field-row">
+          <label class="field">
+            <span>Switch</span>
+            <select id="change-device"></select>
+          </label>
+          <label class="field">
+            <span>VLAN</span>
+            <input id="change-vlan" type="number" value="150" min="1" max="4094">
+          </label>
+          <button id="change-preview" class="btn" type="button">Preview change</button>
+        </div>
+      </div>
+
+      <div id="change-result" class="result" hidden></div>
+
+      <div class="card form-card" id="drift-card">
+        <div class="section-head tight">
+          <div>
+            <h3>Break it on purpose, then fix it</h3>
+            <p class="subtle">
+              Show the loop closing: inject real drift on the switch, watch the fabric
+              view turn red, then remediate it through the same gate.
+            </p>
+          </div>
+        </div>
+        <div class="field-row">
+          <button id="inject" class="btn btn-warn" type="button">Inject drift</button>
+          <button id="remediate" class="btn btn-ghost" type="button">Remediate drift</button>
+        </div>
+        <div id="drift-result" class="result" hidden></div>
+      </div>
+    </section>
+
+    <!-- ============================ LIFECYCLE ============================ -->
+    <section id="panel-lifecycle" class="panel" role="tabpanel">
+      <div class="section-head">
+        <div>
+          <h2>Compliance and operating system, per device</h2>
+          <p class="subtle">
+            The picture to start a CVE or upgrade conversation from, instead of a
+            spreadsheet.
+          </p>
+        </div>
+        <button id="lifecycle-refresh" class="btn btn-ghost" type="button">Refresh</button>
+      </div>
+      <div id="lifecycle-summary" class="stat-row"></div>
+      <div id="lifecycle-table" class="table-wrap"></div>
+      <p id="lifecycle-note" class="note"></p>
+    </section>
+
+    <!-- ============================ TWO VENDORS =========================== -->
+    <section id="panel-vendors" class="panel" role="tabpanel">
+      <div class="section-head">
+        <div>
+          <h2>One intent, two vendors</h2>
+          <p class="subtle">
+            The same intent and the same approval gate against an Arista switch and an
+            FRRouting router. The vendor label on the box stops mattering.
+          </p>
+        </div>
+        <button id="vendors-refresh" class="btn btn-ghost" type="button">Refresh</button>
+      </div>
+      <div id="vendors-list" class="grid"></div>
+      <p id="vendors-note" class="note"></p>
+    </section>
+
+    <!-- ============================== AUDIT ============================== -->
+    <section id="panel-audit" class="panel" role="tabpanel">
+      <div class="section-head">
+        <div>
+          <h2>Who approved what</h2>
+          <p class="subtle">
+            Every change, with the person who approved it and what the switch looked like
+            before and after. Append-only; a demo reset does not erase it.
+          </p>
+        </div>
+        <button id="audit-refresh" class="btn btn-ghost" type="button">Refresh</button>
+      </div>
+      <div id="audit-summary" class="stat-row"></div>
+      <div id="audit-list" class="audit-list"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Lab demo. Not a live customer network.</span>
+    <span id="footer-audit" class="subtle"></span>
+  </footer>
+
+  <script src="/static/workbench.js"></script>
+</body>
+</html>
