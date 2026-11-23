@@ -51,24 +51,28 @@ The one line that matters most for this audience:
 
 ## Handover to Brian Nelson — where the deck starts
 
-The deck (`wiki/fmol-briefing.md`, rendered to `output/fmol-briefing.{html,pptx}`) picks up
-exactly here. Slide order:
+The deck is `wiki/fmol-briefing.md`, rendered to `output/fmol-briefing.pptx` (14 slides).
+It is built on **AHEAD's own frameworks**, not invented ones — the four categories and the
+read-only → assisted → automated progression are Brian's, from the Takeda roadmap and
+Ryan Alt's workshop deck. Slide order:
 
-1. **From spreadsheets to a source of truth** — title
-2. **Why we're here** — validate their network, then name the real problem
-3. **The distinction that matters** — CMDB vs configuration source of truth ← *the slide that
-   earns the meeting; it's what stops the CISO thinking we're competing with ServiceNow*
-4. **Automation has four stages** — the framework Brian defined on the call ← *Ben and Chris
-   explicitly asked for this, so do not skip it*
-5. **Where your pain actually sits** — names their situation back to them
-6. **Let me show you, not tell you** — divider
-7. **The lab, honestly** — the disclaimer, again, deliberately
-8. **The change you have today** — the Philips quote, verbatim
-9. **What you'll see in the next ten minutes** — set the expectation
-10. **What this does not do** — the honesty slide ← *CISO credibility is won or lost here*
-11. **Demo** — divider, then switch to the browser
-12. **Six weeks to value**
-13. **What we'd ask for**
+1. **Network Automation** — title
+2. **Where we are on the journey** — current 96%, future 57%, **automation 1%** ← *uses their
+   real project numbers; opens with credibility instead of a pitch*
+3. **Configuration problem, not change-management** — ServiceNow vs source of truth ← *the
+   slide that stops the CISO thinking we compete with their CMDB*
+4. **Automation is a journey, not a product** — the four categories ← *Ben and Chris explicitly
+   asked for this on the call*
+5. **Read-only → assisted → automated** — the gated progression ← *the most important slide in
+   the deck; it is why a security-conscious audience can say yes*
+6. **Let me show you** — divider, then switch to the browser
+7. **The change you are making right now** — the Philips quote, verbatim
+8. **What you will see** — sets expectations
+9. **The lifecycle half** — the CVE conversation
+10. **What this changes about your switch refresh** — ties to their Q1 2027 refresh
+11. **What this is not** — the honesty slide
+12. **Six weeks to something real** — the plan
+13. **What we would ask for**
 14. **Questions**
 
 ### The demo itself
@@ -92,22 +96,32 @@ flow. Say so and move to the six-week slide. Do not debug a container in front o
 
 **"Are you replacing ServiceNow?"**
 No. It stays your change system of record. NetBox holds configuration intent — what a device
-should be, per port. Different question, different data.
+should be, per port. Different question, different data. Slide 3 is this answer.
 
 **"Are you replacing Infoblox?"**
-No. Infoblox stays the IPAM authority. We integrate. NetBox can hold prefixes; nobody is asking
-you to move yours.
+No. Infoblox stays the IPAM authority. We integrate. Nobody is asking you to move yours.
 
 **"How long until we see value?"**
-Six weeks to 80% of the estate modelled and one real change automated. The last 20% is the hard
+Six weeks to 80% of the estate modeled and one real change automated. The last 20% is the hard
 part and we won't pretend otherwise.
 
 **"What about our firewalls?"**
-Palo Alto fits the same pattern — intent, approval, audit. We're not demoing it today because
-90 minutes is 90 minutes.
+Palo Alto fits the same pattern — intent, approval, audit. Not demoed today; 90 minutes is 90
+minutes.
 
 **"Who owns the data?"**
-You do. It lives in your NetBox, in your Git, under your change control.
+You do. In your NetBox, your Git, your change control.
+
+### Two they may not ask, but you should raise
+
+**"When does anything act on its own?"**
+Not until you approve the gates. Slide 5 is the answer: read-only first, then assisted (the
+system proposes, a human approves), and automated only inside a change path you have signed
+off. That is deliberate, and it is the reason a CISO can say yes.
+
+**"We're already mid-refresh. Does this wait?"**
+No — it runs alongside. Your switch refresh starts Q1 2027, and a refresh done without a model
+just replaces old drift with new drift (slide 10).
 
 ---
 

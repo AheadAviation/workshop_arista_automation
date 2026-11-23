@@ -3,131 +3,151 @@ marp: true
 theme: default
 paginate: true
 size: 16:9
-backgroundColor: #0f1419
-color: #e6edf3
+backgroundColor: #ffffff
+color: #1a1a1a
 style: |
   section {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    padding: 48px 64px;
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+    padding: 44px 60px 64px 60px;
+    font-size: 20px;
+    background-color: #ffffff;
   }
-  h1 { color: #ffffff; font-size: 2.1em; letter-spacing: -0.02em; }
-  h2 { color: #ffffff; font-size: 1.55em; letter-spacing: -0.01em; }
-  h3 { color: #93a1b0; font-size: 1.05em; font-weight: 500; }
-  strong { color: #4da3ff; }
-  em { color: #93a1b0; }
-  table { font-size: 0.78em; }
-  th { color: #93a1b0; border-bottom: 1px solid #2a3644; }
-  td { border-bottom: 1px solid #1d2733; }
+  h1 { color: #0E2E51; font-size: 2.0em; letter-spacing: -0.02em; margin: 0 0 8px; }
+  h2 { color: #0E2E51; font-size: 1.42em; letter-spacing: -0.01em; margin: 0 0 6px; }
+  h3 { color: #005DA8; font-size: 1.0em; font-weight: 600; margin: 0 0 4px; }
+  strong { color: #005DA8; }
+  em { color: #5a6b7d; font-style: normal; }
+  table { font-size: 0.76em; border-collapse: collapse; width: 100%; }
+  th { background: #0E2E51; color: #fff; text-align: left; padding: 8px 10px; font-weight: 600; }
+  td { padding: 7px 10px; border-bottom: 1px solid #dde3ea; vertical-align: top; }
+  tr:nth-child(even) td { background: #f5f8fb; }
   blockquote {
-    border-left: 3px solid #4da3ff;
-    color: #93a1b0;
-    font-style: normal;
-    padding-left: 18px;
-    margin: 18px 0;
+    border-left: 4px solid #009FDC; background: #f0f7fc;
+    color: #33475b; padding: 12px 18px; margin: 16px 0;
+    font-size: 0.92em;
   }
-  .lead { text-align: center; }
-  .lead h1 { font-size: 2.4em; }
-  .lead p { color: #93a1b0; font-size: 1.15em; }
-  .small { font-size: 0.72em; color: #93a1b0; }
-  .cols { display: flex; gap: 40px; }
+  ul { margin: 6px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  .lead { text-align: center; justify-content: center; }
+  .lead h1 { font-size: 2.5em; }
+  .small { font-size: 0.66em; color: #7a8899; }
+  .cols { display: flex; gap: 34px; }
   .cols > div { flex: 1; }
-  section.divider { justify-content: center; text-align: center; }
-  section.divider h2 { font-size: 2em; }
-  .tag {
-    display: inline-block; background: #1d2733; color: #4da3ff;
-    border-radius: 4px; padding: 1px 7px; font-size: 0.62em;
-    vertical-align: middle; margin-left: 8px; letter-spacing: 0.03em;
+  section.divider {
+    justify-content: center;
+    text-align: center;
+    background-color: #0E2E51 !important;
   }
+  section.divider h1, section.divider h2 { color: #ffffff; }
+  section.divider p { color: #9fc4e0; }
+  section.divider::after { color: #6f8ba6; }
+  section::after {
+    content: "Confidential — Proprietary to AHEAD  ·  " attr(data-marpit-pagination) " / " attr(data-marpit-pagination-total);
+    font-size: 11px; color: #8a99a8;
+  }
+  .stage { display: flex; gap: 10px; margin-top: 14px; }
+  .stage div {
+    flex: 1; background: #f0f7fc; border-top: 3px solid #009FDC;
+    padding: 10px 12px; font-size: 0.74em; color: #33475b;
+  }
+  .stage div b { display: block; color: #0E2E51; font-size: 1.08em; margin-bottom: 3px; }
+  .kicker { color: #009FDC; font-size: 0.78em; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 6px; }
 ---
 
 <!-- _class: lead -->
 
-# From spreadsheets to a source of truth
+# Network Automation
 
-### What network automation actually looks like, and where the value lands
+### From strategy to execution — and what "done" looks like
 
-<p class="small">AHEAD · Network Automation Practice &nbsp;|&nbsp; with NetBox Labs</p>
-
----
-
-## Why we're here
-
-Your network is **well architected and well executed**. This isn't a rescue.
-
-The problem is narrower, and harder:
-
-> Doing changes fast, and keeping them accurate — across three vendors, a hospital's
-> change calendar, and an audit trail.
-
-That is a **configuration** problem, not a **change-management** problem.
+<p class="small" style="margin-top:26px">
+AHEAD Network Automation Practice &nbsp;·&nbsp; with NetBox Labs<br>
+Executive briefing &nbsp;·&nbsp; November 2026
+</p>
 
 ---
 
-## The distinction that matters
+## Where we are on the journey
+
+<p class="kicker">FMOLHS Network Modernization</p>
+
+| Workstream | Status |
+| --- | --- |
+| Current State | **96% complete** |
+| Future State | 57% complete |
+| Transition State | 22% complete |
+| **Automation** | **1% — the work in front of us** |
+
+We have spent four months building the picture. This session is about what we *do* with it.
+
+> The strategy closes 12/31. The delivery portfolio — wireless, switch refresh, SD-WAN —
+> runs through 2027+. **Automation is the thread that connects them.**
+
+---
+
+## This is a configuration problem, not a change-management problem
 
 <div class="cols">
 <div>
 
-### A CMDB
-- Answers *what changed, and who approved it*
+### ServiceNow
+Answers *what changed, and who approved it*
+
 - Change records, incidents, workflow
 - Holds **process** state
+- **You already have this, and it stays**
 
 </div>
 <div>
 
-### A configuration source of truth
-- Answers *what should this device be*
-- Holds **intended** state, per port, per VLAN
-- Machines can read it and render from it
+### Network source of truth
+Answers *what should this device be*
+
+- Intended state, per port, per VLAN
+- Machines can read it and build from it
+- **This is the missing piece**
 
 </div>
 </div>
 
-> You already have the first. The second is what automation needs, and it's the one
-> nobody owns today.
+> We are not proposing to replace your CMDB or your IPAM. We are proposing the thing
+> automation needs to read — and the integration that keeps all three honest.
 
-<p class="small">This is why NetBox is complementary to ServiceNow and Infoblox — not a replacement for either.</p>
+<p class="small">AHEAD's position: the source of truth must integrate with the CMDB, not compete with it.</p>
 
 ---
 
-## Automation has four stages
+## Automation is a journey, not a product
 
-<div class="cols">
-<div>
+<p class="kicker">Voice of AHEAD</p>
 
-**1. Day zero — build**
-Zero-touch provisioning. A device arrives, comes online, configured from intent.
+Four categories of automation work. Four different processes. **One shared source of truth.**
 
-**2. Day two — operate**
-The change you're making today: a new VLAN, a new system, a new port.
-
-</div>
-<div>
-
-**3. Lifecycle — sustain**
-Upgrades and CVEs. Proving an image won't break the clinic before you push it.
-
-**4. Troubleshooting — recover**
-Something broke. Isolate, remediate, find root cause.
-
-</div>
+<div class="stage">
+<div><b>1 · Zero Day</b>Build. New hardware, new sites, zero-touch provisioning.</div>
+<div><b>2 · Day 2</b>Operate. The day-to-day change: VLANs, ports, policy.</div>
+<div><b>3 · Lifecycle</b>Sustain. Upgrades, CVEs, staying current.</div>
+<div><b>4 · Troubleshooting</b>Recover. Detect, isolate, remediate.</div>
 </div>
 
-> Four different processes. Four different payoffs. **One shared source of truth.**
+> You cannot do any of them well until the network's intent lives somewhere a machine
+> can read it. That is why every automation program starts at the same place.
 
 ---
 
-## Where your pain actually sits
+## Every category starts read-only, and earns the right to act
 
-| Stage | Your situation |
-| --- | --- |
-| Day zero | Not the problem — you're not greenfield |
-| **Day two** | **The Philips VLAN. Trunks, ClearPass, "just go."** |
-| **Lifecycle** | **Ten-year-old gear, CVEs you can't see, no outage window** |
-| Troubleshooting | Real, but you asked about change speed |
+<p class="kicker">The progression we recommend — and it is deliberate</p>
 
-Focus today: **day two and lifecycle** — the two Brian flagged.
+| Category | Read-only | Assisted | Automated *(only after gates)* |
+| --- | --- | --- | --- |
+| **Lifecycle** | Compare NetBox, ServiceNow, and the network | Review mismatches and candidates | Update CMDB or lifecycle workflow after the owners approve |
+| **Day 2** | Report compliance and drift | Review diffs and proposed remediation | Automate only within an approved change path |
+| **Zero Day** | Validate generated template output | Engineer reviews the proposed config | Deploy approved templates after a Standard change qualifies |
+| **Troubleshooting** | Collect read-only evidence | Enrich the ticket; suggest checks | Automate diagnostics once triggers are validated |
+
+> Nobody starts at "automated." You start by **proving the data**, then by **proposing**
+> a change, then — only once the change path is approved — by acting.
 
 ---
 
@@ -135,102 +155,120 @@ Focus today: **day two and lifecycle** — the two Brian flagged.
 
 ## Let me show you, not tell you
 
-<p class="small" style="color:#93a1b0">Everything from here is running, live, in a lab.</p>
+<p>Day 2 and Lifecycle, running live, in a lab</p>
 
 ---
 
-## The lab, honestly
+## The change you are making right now
 
-- Six Arista switches in software, real EOS, running now
-- NetBox as the source of truth
-- A web console — **no terminal on screen**, because a CLI demo proves nothing to a CTO
+> *"They're bringing in a new Philips system. It connects to the wireless, and they need to
+> reallocate a new VLAN — across a series of trunks, to a trunk with a bunch of other VLANs
+> on it already."*
 
-> This is a lab. It is not a copy of your network. We're showing the method,
-> not a running system in your estate.
+**Today:** a change request, a window, several switches, and hoping nobody missed one.
 
----
+**What we will show:** the change declared once, the tooling works out the rest, and a
+page proves it landed on every device.
 
-## The change you have today
-
-> *"They need to reallocate a new VLAN across a series of trunks. Switch port VLAN add,
-> to a trunk with a bunch of other VLANs on it already."*
-
-**Today:** a change request, a window, four or five switches, and hoping someone didn't
-miss one.
-
-**What we'll show instead:** one object in the source of truth, the tools work out
-the rest, and the page proves it landed.
+<p class="small">This is real. It is the same pattern whether the vendor is Philips, a new imaging suite, or a badge system.</p>
 
 ---
 
-## What you'll see in the next ten minutes
+## What you will see
 
-| You'll see | What it proves |
-| --- | --- |
-| The fabric as intended vs actual | Intent is a thing a machine can read |
-| A new VLAN previewed, not applied | Change is reviewable before it's real |
-| A named approval to push it | Nothing happens without a human |
-| A switch broken on purpose, then fixed | Drift is *detected*, not discovered later |
-| Every change on an audit record | Your CISO gets her documentation |
-| The same intent, two vendors | The label on the box stops mattering |
+<div class="stage">
+<div><b>Intent</b>What the network should be, from the source of truth.</div>
+<div><b>Drift</b>Where the devices disagree with it — right now.</div>
+<div><b>Preview</b>Exactly what would change. Nothing applied.</div>
+<div><b>Approval</b>A named human, on the record.</div>
+<div><b>Proof</b>The device confirms it took.</div>
+</div>
 
-<p class="small">Then a short version of the same thing for CVE and upgrade work.</p>
+Then the same loop again, on a switch we break on purpose.
 
----
-
-## What this does not do
-
-Being straight about the edges, because we'd rather you trust the small claim:
-
-- **No IPAM replacement.** Infoblox stays. We integrate.
-- **No CMDB replacement.** ServiceNow stays. We complement it.
-- **No firewall demo today.** Palo Alto is where your security budget sits, and it fits
-  this pattern — we're just not showing it in 90 minutes.
-- **No magic.** Getting 80% of your estate into a trustworthy model is a six-week job.
-  The last 20% is the hard part, and nobody who tells you otherwise has done it.
+<p class="small" style="margin-top:14px">No terminal on screen. This is what your team would use.</p>
 
 ---
 
-<!-- _class: divider -->
+## And the lifecycle half
 
-## Demo
+<p class="kicker">The CVE and upgrade conversation</p>
 
-<p class="small" style="color:#93a1b0">Fabric · Day-two change · Lifecycle · Two vendors · Audit trail</p>
+The same source of truth answers a second question: **which devices are not doing what we
+said, and what are they running?**
+
+- Compliance state per device, not a spreadsheet exercise
+- Software version read from the switch, not from a document
+- Set a target version → this becomes your upgrade worklist
+
+> This is the front half of the lifecycle problem: **knowing what you have.** The back half —
+> zero-downtime upgrades — is a platform decision, and it is already on our roadmap.
 
 ---
 
-## After the demo — what a first six weeks looks like
+## What this changes about your switch refresh
+
+Your refresh starts Q1 2027. The order matters more than the date.
+
+<div class="stage">
+<div><b>Before</b>Model the estate. Agree VLANs, addressing, standards.</div>
+<div><b>During</b>Render every device from that model. Zero-touch the build.</div>
+<div><b>After</b>Prove compliance on day one, not month six.</div>
+</div>
+
+> A refresh done without a source of truth just replaces old drift with new drift.
+> **The model is what makes the refresh stick.**
+
+---
+
+## What this is not
+
+Being straight about the edges, because the small claim is the one you can trust.
+
+- **Not an IPAM replacement.** Infoblox remains the authority. We integrate.
+- **Not a CMDB replacement.** ServiceNow remains the system of record. We complement it.
+- **Not a firewall demo today.** Palo Alto fits the same pattern. We are not showing it in 90 minutes.
+- **Not a quick win.** Getting 80% of the estate modeled is roughly six weeks. The last 20% is the hard part, and nobody who tells you otherwise has done it.
+- **Not production.** This is a lab. Same method, not your network.
+
+---
+
+## Six weeks to something real
 
 <div class="cols">
 <div>
 
 **Weeks 1–2**
-Current state. Discovery, reconciliation, the parts that disagree.
+Reconcile. Catalyst Center, Aruba Central, ServiceNow, spreadsheets — against each other.
 
 **Weeks 3–4**
-The model. Sites, racks, devices, circuits, VLANs — in NetBox, agreed.
+The model. Sites, racks, devices, circuits, VLANs. Agreed, not assumed.
 
 </div>
 <div>
 
 **Weeks 5–6**
-The first automation. Start where the pain is: day-two VLAN changes.
+The first use case. Day-2 VLAN and port change, through the gate.
 
 **Then**
-Lifecycle and CVE reporting on top of data you now trust.
+Lifecycle visibility, then Zero Day. Each on a foundation that already works.
 
 </div>
 </div>
+
+> This runs **in parallel** with the automation workshop already scheduled through 12/04 —
+> not instead of it. We would rather build the plan with your team than present one to you.
 
 ---
 
-## What we'd ask for
+## What we would ask for
 
-1. **Access** to the current-state data you have — Catalyst Center, Aruba Central, your spreadsheets.
-2. **A named owner** on your side for the model, so it reflects reality.
-3. **One real change** — the Philips VLAN is a perfect candidate — to prove the loop.
+1. **Access** to the current-state data you already have — Catalyst Center, Aruba Central, the spreadsheets.
+2. **A named owner** on your side, so the model reflects reality rather than our assumptions.
+3. **One real change** — the Philips VLAN is the obvious candidate — to prove the loop.
+4. **Agreement on the gates** — what has to be true before anything acts on its own.
 
-> We can start small and still show something real in six weeks.
+> Start with one change, done properly. It is the only way anyone believes the second one.
 
 ---
 
@@ -238,5 +276,8 @@ Lifecycle and CVE reporting on top of data you now trust.
 
 # Questions
 
-<p class="small">Brian Nelson · Principal Consultant, Network Automation<br/>
-Brian Bradley · Network Advisory</p>
+<p class="small" style="margin-top:22px">
+Brian Nelson &nbsp;·&nbsp; Principal Consultant, Network Automation<br>
+Brian Bradley &nbsp;·&nbsp; Network Advisory<br><br>
+Running lab, NetBox, and source references available on request.
+</p>
