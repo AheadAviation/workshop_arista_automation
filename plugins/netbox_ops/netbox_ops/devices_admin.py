@@ -99,10 +99,35 @@ def import_fabric() -> dict[str, Any]:
 
     if code != 0:
         raise BootstrapError(f"import failed: {out[-300:]}")
+
+    # Assign the config template to the devices that now exist. On a brand-new database the
+    # bootstrap ran before any device did, so it created the template with nothing to assign it
+    # to; this is where it gets picked up. Without this, "Render Config" still says no template
+    # is assigned after a fresh import — which is exactly the state that made it look broken.
+    template_note = ""
+    try:
+        installer = Path("/opt/netbox/templates/install.py")
+        if installer.exists():
+            render_out, render_code = _run(
+                ["python", "/opt/netbox/netbox/manage.py", "shell", "-c",
+                 f"exec(open('{installer}').read())"],
+                timeout=180,
+            )
+            if render_code == 0:
+                for line in render_out.splitlines():
+                    if "Assigned to" in line:
+                        template_note = line.strip()
+            else:
+                template_note = "template assignment failed; Render Config may be empty"
+        else:
+            template_note = "template installer not found in the image"
+    except BootstrapError as exc:
+        template_note = f"template assignment skipped: {exc}"
+
     return {
         "ok": True,
         "headline": f"Imported the fabric — {after} devices in NetBox (was {before})",
-        "detail": "",
+        "detail": template_note,
         "before": before,
         "after": after,
     }

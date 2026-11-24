@@ -45,6 +45,17 @@ RUN /opt/netbox/venv/bin/pip install --no-cache-dir -e /opt/netbox/engine
 # than the first page load in front of a customer.
 RUN /opt/netbox/venv/bin/python -c "import workbench, workbench.contracts, workbench.drift; print('engine ok')"
 
+# --- Seed templates ---
+# The NetBox ConfigTemplate that makes the native "Render Config" tab work, plus the bootstrap
+# that imports the fabric and assigns it. Baked into the image so the `netbox-bootstrap`
+# one-shot service runs them with no manual step — a fresh `docker compose up` renders configs.
+COPY docker/configs/templates /opt/netbox/templates
+
+# --- Importer dependencies ---
+# The bootstrap runs the repo's own `scripts/full_import.py`, which needs these. NetBox's venv
+# already has rich, yaml, requests and netaddr; pynetbox and python-dotenv it does not.
+RUN /opt/netbox/venv/bin/pip install --no-cache-dir pynetbox python-dotenv
+
 # Pre-place the plugin's static assets into the served static root. The runner's
 # startup collectstatic doesn't reliably pick up bind-mounted plugin static, and
 # without this the portal loads with no CSS/JS (looks unstyled). During dev, after

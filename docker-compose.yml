@@ -97,7 +97,12 @@ services:
       # rendering runs in the ansible container and the plugin only ever reads the result.
       - ./output/configs:/opt/netbox/configs:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/"]
+      # `/login/`, not `/api/`. The API endpoint now returns 403 to an unauthenticated request
+      # (it did not before the plugin's views were locked down), so a `curl -f` against it made a
+      # perfectly healthy NetBox report "unhealthy" and blocked anything waiting on it — which is
+      # how the bootstrap service failed. `/login/` answers 200 without credentials and proves
+      # what a healthcheck should prove: the app is up and serving.
+      test: ["CMD", "curl", "-f", "-s", "-o", "/dev/null", "http://localhost:8080/login/"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -135,6 +140,54 @@ services:
       SECRET_KEY: changeme_this_is_not_secure_for_demo_only_1234567890
     command: /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py rqworker
     restart: unless-stopped
+
+  # ==========================================================================
+  # NetBox Bootstrap (one-shot, runs after NetBox is healthy)
+  # ==========================================================================
+  # Installs the NetBox ConfigTemplate that makes the native "Render Config" tab work, and
+  # assigns it to the Arista devices.
+  #
+  # Why a separate one-shot service rather than doing it inside the plugin: a Django app must not
+  # write database rows at import time — it runs on every worker and would race itself. A
+  # container that runs once, after the app is up, is the right shape.
+  #
+  # Idempotent, so it is safe on every `up`. This is what makes "delete everything and it just
+  # works" true: no manual step, no template to import by hand.
+  netbox-bootstrap:
+    build:
+      context: .
+      dockerfile: docker/netbox/Dockerfile
+    depends_on:
+      netbox:
+        condition: service_healthy
+    # A plain Python entrypoint, not `manage.py shell`: this script imports the fabric first
+    # (via the repo's own importer) and only then installs the template, because a template
+    # created before any device exists has nothing to assign itself to. That ordering was the
+    # actual bug — `Render Config` said "no template assigned" on a fresh stack.
+    entrypoint: ["/opt/netbox/venv/bin/python", "/opt/netbox/templates/bootstrap.py"]
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: netbox
+      DB_USER: netbox
+      DB_PASSWORD: netbox
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SECRET_KEY: changeme_this_is_not_secure_for_demo_only_1234567890
+      ALLOWED_HOSTS: "*"
+      # The importer talks to NetBox over its own API, from inside the network.
+      NETBOX_URL: http://netbox:8080
+      NETBOX_TOKEN: 0123456789abcdef0123456789abcdef01234567
+    volumes:
+      # The repo, so the importer and its data files are available.
+      - .:/opt/netbox/repo:ro
+      - ./plugins/netbox_ops/netbox_ops:/opt/netbox/plugins/netbox_ops/netbox_ops:ro
+      - ./workbench:/opt/netbox/engine/workbench:ro
+    networks:
+      default:
+        aliases:
+          - netbox-bootstrap
+    restart: "no"
 
   # ==========================================================================
   # PostgreSQL Database
