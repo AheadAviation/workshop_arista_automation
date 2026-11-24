@@ -93,6 +93,19 @@ def itsm_token() -> str:
     return str(get_setting("itsm_token", "") or "")
 
 
+def itsm_customer_id() -> int:
+    """The Zammad user the demo's tickets are opened for.
+
+    Zero means "work it out from the token" — see `itsm._customer_id`. Setting this explicitly
+    is the right thing on a real site, where tickets should be attributed to a service desk
+    customer rather than to the API user.
+    """
+    try:
+        return int(get_setting("itsm_customer_id", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def demo_vlan() -> int:
     try:
         return int(get_setting("demo_vlan", 150))
@@ -166,6 +179,7 @@ __all__ = [
     "eapi_username",
     "get_setting",
     "itsm_public_url",
+    "itsm_customer_id",
     "itsm_token",
     "itsm_url",
     "lab_runner_url",

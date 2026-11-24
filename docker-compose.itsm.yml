@@ -85,25 +85,35 @@ services:
       # demo shows), so without this the railsserver blocks forever on
       # 'waiting for elasticsearch server to be ready'.
       ELASTICSEARCH_ENABLED: "false"
-      # Create the admin on first boot with a known password, so the demo does not depend on
-      # clicking through a setup wizard.
-      AUTOWIZARD_JSON: |
-        {
-          "admin_user": {
-            "login": "admin@example.com",
-            "firstname": "Network",
-            "lastname": "Ops",
-            "email": "admin@example.com",
-            "password": "admin"
-          },
-          "organization": { "name": "AHEAD Demo" },
-          "system": { "url": "http://localhost:8090" }
-        }
     networks:
       default:
         aliases:
           - zammad-init
     restart: "no"
+
+  # ==========================================================================
+  # Zammad first-run setup lives in `scripts/zammad_setup.py`, not here.
+  # ==========================================================================
+  # It was tried as a one-shot service in this file and it races: on a cold database it can
+  # start while `zammad-init` is still migrating, find no schema, and give up. Depending on
+  # timing it either fails immediately or appears to succeed against a half-built database.
+  #
+  # Running it from the host against the long-lived railsserver removes that race, because the
+  # retry loop waits for the schema instead of assuming it. `docker compose` cannot express
+  # "wait until this service's database has tables"; a loop can.
+  #
+  # Also note why AUTOWIZARD_JSON is not used, since it looks like the obvious tool:
+  #
+  #   * It must be **base64**. The entrypoint runs `base64 -d <<< "$VAR"` and only writes the
+  #     wizard file if that succeeds, so plain JSON is skipped silently. The stack comes up
+  #     healthy, migrations run, and the UI still shows "Set up a new system" -- which is
+  #     exactly what happened here.
+  #   * It only runs when the database has no users at all, so it can never repair an install
+  #     that booted once without it.
+  #   * Even on success it does not set `system_init_done`; that is done by a *web* endpoint the
+  #     browser calls, so the wizard stays on screen regardless.
+  #
+  # Use `.\run.ps1 itsm`, which brings the stack up and then runs the setup.
 
   zammad-railsserver:
     image: ghcr.io/zammad/zammad:6.4.1

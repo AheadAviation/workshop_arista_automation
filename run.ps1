@@ -303,8 +303,14 @@ for cfg in sorted(Path('output/configs').glob('*.cfg')):
         # plugin expects to find it.
         Write-Host "Starting the ITSM stack (Zammad) on http://localhost:8090 ..." -ForegroundColor Cyan
         docker compose -f docker-compose.yml -f docker-compose.itsm.yml --profile itsm up -d @Rest
-        Write-Host "First start takes several minutes (database migrations)." -ForegroundColor Yellow
-        Write-Host "Login: admin@example.com / admin" -ForegroundColor Green
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+        # Then finish Zammad's first-run setup. A stock Zammad shows a "Set up a new system"
+        # wizard, has no admin, no API token and no `system_init_done` flag, so the Tickets tab
+        # cannot work until this runs. It waits for the schema rather than assuming it.
+        Write-Host "`nConfiguring Zammad (first run takes a few minutes)..." -ForegroundColor Cyan
+        python scripts/zammad_setup.py
+        exit $LASTEXITCODE
     }
 
     "itsm-down" {

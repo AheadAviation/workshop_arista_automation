@@ -131,17 +131,35 @@
               <pre class="cmd"><code>.\run.ps1 itsm</code></pre>
               <p class="step-note">
                 Zammad, on <span class="mono">{{itsm}}</span>. This is the one command that
-                is easy to get wrong if you type it by hand, so use the wrapper:
+                is easy to get wrong if you type it by hand, so use the wrapper. It does
+                three things in order:
               </p>
-              <pre class="cmd"><code>docker compose -f docker-compose.yml -f docker-compose.itsm.yml --profile itsm up -d</code></pre>
+              <ol class="substeps">
+                <li>Starts the stack with <strong>both</strong> compose files.</li>
+                <li>Waits for the database schema to exist.</li>
+                <li>Creates the admin, the group, the API token and the settings, then
+                  proves the token works from inside NetBox.</li>
+              </ol>
               <p class="step-note">
-                <strong>Both files, in that order.</strong> Zammad lives in its own compose
-                file, so <span class="mono">--profile itsm</span> against the main file
-                starts nothing; and starting it with the ITSM file <em>alone</em> puts
+                <strong>Both compose files, in that order.</strong> Zammad lives in its own
+                compose file, so <span class="mono">--profile itsm</span> against the main
+                file starts nothing; and starting it with the ITSM file <em>alone</em> puts
                 Zammad on a different Docker network from NetBox, where the plugin cannot
                 reach it. The ticket tab then says ITSM is not configured while Zammad is
                 plainly running at <span class="mono">{{itsm}}</span>. First start takes
                 several minutes because it runs its migrations.
+              </p>
+              <p class="step-class-good">
+                <strong>Good:</strong> the last lines say
+                <span class="mono">me 200 admin@example.com</span>,
+                <span class="mono">setup_done True</span>, and
+                <span class="mono">ITSM ready</span>.
+              </p>
+              <p class="step-class-fail">
+                <strong>"ITSM is not configured" on the Tickets tab</strong> means NetBox
+                cannot resolve <span class="mono">zammad-nginx</span> — the two stacks are on
+                different networks. Re-run <span class="mono">.\run.ps1 itsm</span>; do not
+                try to fix it by hand.
               </p>
               <p class="step-note">
                 Log in as <span class="mono">admin@example.com / admin</span>. If you are
@@ -678,7 +696,19 @@
             </tr>
             <tr>
               <td>Tickets tab says ITSM is not configured</td>
-              <td>Zammad is not running, or it is running on the <em>wrong network</em>. Restart it with <span class="mono">.\run.ps1 itsm</span>, which passes both compose files.</td>
+              <td>NetBox cannot reach <span class="mono">zammad-nginx</span>: the stacks are on different networks. Re-run <span class="mono">.\run.ps1 itsm</span>, which passes both compose files.</td>
+            </tr>
+            <tr>
+              <td>Zammad shows "Set up a new system"</td>
+              <td>The setup step has not run. <span class="mono">python scripts\zammad_setup.py</span> finishes it and keeps any existing data.</td>
+            </tr>
+            <tr>
+              <td>Tickets tab: 401 on a valid token</td>
+              <td>The token in <span class="mono">plugins.py</span> is stale. <span class="mono">python scripts\zammad_setup.py</span> rewrites it and restarts NetBox.</td>
+            </tr>
+            <tr>
+              <td>Ticket creation fails with 403</td>
+              <td>The Zammad user has no <em>group</em> access. Roles alone are not enough; the setup script sets it. Re-run it.</td>
             </tr>
             <tr>
               <td>Ticket links are dead</td>

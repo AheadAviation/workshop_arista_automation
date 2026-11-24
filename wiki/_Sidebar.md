@@ -18,7 +18,9 @@
 - [[Troubleshooting]]
 - [[Day 2 Operations]]
 - [[Autonomy Workbench]]
+- [[ITSM Zammad]]
 - [[Add-on Plants Demo]]
+- [[Dual-DC L3LS]]
 
 ---
 

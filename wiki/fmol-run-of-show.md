@@ -143,9 +143,13 @@ just replaces old drift with new drift (slide 10).
 .\run.ps1 up                     # NetBox stack
 .\run.ps1 deploy                 # the switches
 .\run.ps1 apply                  # push configs
+.\run.ps1 itsm                   # Zammad, if you are showing tickets
 .\run.ps1 workbench-walk         # proves the flow, no lab needed
 .\run.ps1 workbench-check        # the real rehearsal — must say READY
 .\run.ps1 workbench              # leave this open on the Fabric tab
 ```
 
 Open the deck in another window. Test screen-share with both. Then close everything you don't need.
+
+The step-by-step version of all of this, with what to click and what to say, is the presenter
+guide at <http://127.0.0.1:8099/guide> (`.\run.ps1 guide`).

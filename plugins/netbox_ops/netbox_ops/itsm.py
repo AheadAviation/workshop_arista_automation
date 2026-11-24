@@ -42,6 +42,42 @@ def _session_and_base():
     return session, base
 
 
+def _customer_id(session, base: str) -> int:
+    """Who the demo's tickets are opened *for*.
+
+    Zammad requires a `customer_id` on every ticket. The obvious value, `1`, is not a customer:
+    it is Zammad's internal system user, whose login is `-` and whose email is empty, so a
+    ticket opened by it shows a blank customer in the UI. That is a small thing that looks
+    careless in front of a customer who runs service management for a living.
+
+    Resolution order:
+
+    1. `itsm_customer_id`, if config names one — a real site plugs its own directory in here.
+    2. The authenticated API user. On this lab the token belongs to the admin, so the change is
+       attributed to a named person with a real email.
+    3. `1`, as a last resort so a misconfigured install still gets a ticket rather than a 422.
+
+    Never raises: a lookup failure must degrade to *a ticket was opened*, not to *no ticket*.
+    """
+    configured = conf.itsm_customer_id()
+    if configured:
+        return configured
+
+    try:
+        response = session.get(f"{base}/api/v1/users/me", timeout=15)
+        if response.status_code == 200:
+            me = response.json()
+            user_id = me.get("id")
+            # Zammad's system user is id 1 and has no usable identity; if the token is somehow
+            # owned by it, fall through rather than opening tickets as a dash.
+            if user_id and int(user_id) != 1:
+                return int(user_id)
+    except Exception:
+        # Any failure here is a reason to try the fallback, never a reason to fail the change.
+        pass
+    return 1
+
+
 def _get(path: str, timeout: float = 15.0) -> Any:
     import requests
 
@@ -157,9 +193,11 @@ def create_change_ticket(
         "article": {"body": body, "type": "note", "internal": False},
         "group": group,
         "type": "Change",
-        # Zammad requires a customer on every ticket. The demo uses the API user as the
-        # customer, because a lab has no customer directory to look one up in.
-        "customer_id": 1,
+        # Zammad requires a customer on every ticket. This used to be hardcoded to id 1, which
+        # on a stock install is Zammad's *system* user (login "-", no email) — so every change
+        # ticket was opened by a customer whose name renders as a bare dash. Resolved properly
+        # by `_customer_id()` instead.
+        "customer_id": _customer_id(session, base),
     }
     try:
         response = session.post(f"{base}/api/v1/tickets", json=payload, timeout=20)
