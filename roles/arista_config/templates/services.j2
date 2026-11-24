@@ -26,7 +26,40 @@ management api http-commands
       no shutdown
 !
 ! Logging
-logging buffered 10000
-logging console informational
+{% set baseline = netbox_config_context.standard_baseline | default({}) %}
+logging buffered {{ baseline.syslog_buffer_bytes | default(10000) }} informational
+logging console {{ 'warnings' if baseline else 'informational' }}
+{% if baseline %}
+logging format timestamp high-resolution
+logging vrf {{ mgmt_vrf }} host {{ baseline.syslog_host | default(clab_mgmt_gateway) }} {{ baseline.syslog_port | default(514) }}
+logging vrf {{ mgmt_vrf }} source-interface Management0
+!
+! Timezone & DNS Domain
+clock timezone {{ baseline.timezone | default('UTC') }}
+dns domain {{ baseline.domain_name | default('dc1.lab.local') }}
+ip domain lookup vrf {{ mgmt_vrf }} source-interface Management0
+!
+! SNMP
+snmp-server contact {{ baseline.snmp_contact | default('netops@dc1.lab.local') }}
+snmp-server location {{ baseline.snmp_location | default('DC1-EVPN-Fabric') }}
+snmp-server community {{ baseline.snmp_community | default('FABRIC-RO') }} ro
+snmp-server vrf {{ mgmt_vrf }}
+{% if baseline.snmp_trap_host %}
+snmp-server host {{ baseline.snmp_trap_host }} vrf {{ mgmt_vrf }} version 2c {{ baseline.snmp_community | default('FABRIC-RO') }}
+{% endif %}
+snmp-server enable traps
+!
+! LLDP & L2 Protection
+lldp run
+lldp timer {{ baseline.lldp_timer | default(30) }}
+lldp hold-time {{ baseline.lldp_hold_time | default(120) }}
+errdisable recovery cause bpduguard
+errdisable recovery interval {{ baseline.errdisable_interval | default(300) }}
+!
+! Console Hardening
+management console
+   idle-timeout {{ baseline.console_idle_timeout | default(15) }}
+{% else %}
 logging vrf {{ mgmt_vrf }} host {{ clab_mgmt_gateway }}
+{% endif %}
 

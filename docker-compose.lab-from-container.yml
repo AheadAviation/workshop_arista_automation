@@ -30,3 +30,20 @@ services:
       - ${HOST_REPO}/output/configs:/clab/configs:ro
       # Keep the socket, which is how containerlab reaches the daemon at all.
       - /var/run/docker.sock:/var/run/docker.sock
+
+  # Ansible runner mounts rewritten to host paths for nested `docker compose run --rm ansible`
+  # invoked from lab-runner (INIT-004/SPEC-001).
+  ansible:
+    volumes:
+      - ${HOST_REPO}/scripts:/ansible/scripts:ro
+      - ${HOST_REPO}/playbooks:/ansible/playbooks:ro
+      - ${HOST_REPO}/roles:/ansible/roles:ro
+      - ${HOST_REPO}/inventory:/ansible/inventory:ro
+      - ${HOST_REPO}/group_vars:/ansible/group_vars:ro
+      - ${HOST_REPO}/netbox_data:/ansible/netbox_data:ro
+      - ${HOST_REPO}/filter_plugins:/ansible/filter_plugins:ro
+      - ${HOST_REPO}/clab:/ansible/clab:rw
+      - ${HOST_REPO}/output:/ansible/output:rw
+      - ${HOST_REPO}/.ansible-lint:/ansible/.ansible-lint:ro
+      - ${HOST_REPO}/.yamllint.yml:/ansible/.yamllint.yml:ro
+      - ${HOST_REPO}/ansible.cfg:/ansible/ansible.cfg:ro

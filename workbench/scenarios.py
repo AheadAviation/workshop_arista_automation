@@ -126,9 +126,17 @@ def fabric_overview(lab: Lab, *, new_vlan: int | None = None) -> dict[str, Any]:
             "devices": [],
         }
 
+    from concurrent.futures import ThreadPoolExecutor
+
+    ordered = sorted(intended.items())
+    if len(ordered) > 1:
+        with ThreadPoolExecutor(max_workers=min(len(ordered), 6)) as pool:
+            actuals = list(pool.map(lambda pair: lab.read_actual(pair[0]), ordered))
+    else:
+        actuals = [lab.read_actual(name) for name, _ in ordered]
+
     cards: list[dict[str, Any]] = []
-    for name, intent in sorted(intended.items()):
-        actual = lab.read_actual(name)
+    for (name, intent), actual in zip(ordered, actuals):
         findings = compute_drift(intent, actual)
         cards.append(
             {

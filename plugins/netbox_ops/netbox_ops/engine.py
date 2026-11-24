@@ -380,36 +380,24 @@ def resolve_operation(operation_key: str, values: dict[str, Any]) -> OpsResult:
 
 
 def plan_operation(operation_key: str, values: dict[str, Any]) -> OpsResult:
-    """Resolve an operation and preview what it would do, on every switch it touches."""
-    from workbench import operations_resolve, scenarios
+    """Resolve an operation and preview what it would do in NetBox and on every switch."""
+    from netbox_ops import day2_ops
 
-    def run() -> dict[str, Any]:
-        resolved = operations_resolve.resolve(operation_key=operation_key, values=values)
-
-        lab = _engine_lab()
-        if resolved.operation.kind == "retire":
-            return scenarios.plan_retirement(lab, vid=resolved.vlan_vid)
-        return scenarios.plan_service_change(
-            lab,
-            service_key=_service_key_for(resolved.vlan_vid),
-            scope="all-leaves" if len(resolved.devices) == 4 else "mlag-pair",
-            pair=_pair_for(resolved.devices),
-        )
-
-    return _wrap(run)
+    return _wrap(day2_ops.plan, operation_key, values)
 
 
-def apply_operation(operation_key: str, values: dict[str, Any], approver: str, change_id: str) -> OpsResult:
-    """Apply a previewed operation, on the recorded approval."""
-    from workbench import scenarios
+def apply_operation(
+    operation_key: str,
+    values: dict[str, Any],
+    approver: str,
+    change_id: str,
+    *,
+    netbox_only: bool = False,
+) -> OpsResult:
+    """Apply a previewed Day 2 operation (NetBox only, or NetBox first then eAPI, verify, and audit)."""
+    from netbox_ops import day2_ops
 
-    def run() -> dict[str, Any]:
-        lab = _engine_lab()
-        if operation_key == "retire_service":
-            return scenarios.approve_retirement(lab, change_id=change_id, approver=approver)
-        return scenarios.approve_service_change(lab, change_id=change_id, approver=approver)
-
-    return _wrap(run)
+    return _wrap(day2_ops.apply, change_id, approver, netbox_only=netbox_only)
 
 
 def _service_key_for(vid: int) -> str:
@@ -439,6 +427,115 @@ def _pair_for(devices: list[str]) -> str:
     return list(catalogue.MLAG_PAIRS)[0]
 
 
+# --------------------------------------------------------------------------- #
+# Workshop Quick Start & Day-2 Operations (INIT-004/SPEC-002)
+# --------------------------------------------------------------------------- #
+
+
+def workshop_status() -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.workshop_status)
+
+
+def workshop_clean(*, clear_netbox: bool = True) -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.clean_slate, clear_netbox=clear_netbox)
+
+
+def workshop_import() -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.import_netbox)
+
+
+def workshop_generate_topology() -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.generate_topology)
+
+
+def workshop_generate_configs() -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.generate_configs)
+
+
+def workshop_deploy() -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.deploy_workshop_lab)
+
+
+def workshop_destroy() -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.destroy_workshop_lab)
+
+
+def workshop_push_configs() -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.push_full_configs)
+
+
+def workshop_verify() -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.verify_fabric)
+
+
+def workshop_validate(*, quick: bool = False) -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.run_validation, quick=quick)
+
+
+def workshop_backup() -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.backup_configs)
+
+
+def workshop_rollback() -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.rollback_configs)
+
+
+def workshop_diffs() -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.config_diffs)
+
+
+def workshop_read_topology() -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.read_topology)
+
+
+def workshop_read_config(device: str) -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.read_config, device)
+
+
+def workshop_preview_standard_config(params: dict[str, Any] | None = None) -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.preview_standard_baseline, params)
+
+
+def workshop_apply_standard_config(
+    params: dict[str, Any] | None = None, *, netbox_only: bool = False
+) -> OpsResult:
+    from netbox_ops import workshop
+
+    return _wrap(workshop.apply_standard_baseline, params, netbox_only=netbox_only)
+
+
 __all__ = [
     "OpsResult",
     "apply_operation",
@@ -460,4 +557,21 @@ __all__ = [
     "remediate",
     "resolve_operation",
     "two_vendors",
+    "workshop_apply_standard_config",
+    "workshop_backup",
+    "workshop_clean",
+    "workshop_deploy",
+    "workshop_destroy",
+    "workshop_diffs",
+    "workshop_generate_configs",
+    "workshop_generate_topology",
+    "workshop_import",
+    "workshop_preview_standard_config",
+    "workshop_push_configs",
+    "workshop_read_config",
+    "workshop_read_topology",
+    "workshop_rollback",
+    "workshop_status",
+    "workshop_validate",
+    "workshop_verify",
 ]

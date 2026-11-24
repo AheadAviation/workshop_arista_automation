@@ -1,5 +1,7 @@
 # Day 2 Operations
 
+> **Run Day 2 operations from NetBox (no CLI required):** Open **Network Ops → Workshop** (`http://localhost:8888/plugins/ops/workshop/`) and use the **Day 2 Operations** panel to edit Devices/Config Contexts, Regenerate Configs, Diff against Running Config, Backup, Push, Validate, and Rollback.
+
 This page covers how to make changes in NetBox and push them to the running lab.
 
 ## The Source of Truth Workflow

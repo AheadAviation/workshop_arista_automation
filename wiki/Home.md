@@ -98,6 +98,7 @@ netbox_data/fabric_topology.yml
 - [[Template Reference]] — All Jinja2 config templates explained
 - [[Troubleshooting]] — Common issues and their solutions
 - [[Day 2 Operations]] — Making changes and pushing updates to a running fabric
+- [[Dual-DC L3LS]] — Separate AVD track: two fabrics, EVPN gateway, FRR between them (`.\run.ps1 dualdc`)
 
 ---
 

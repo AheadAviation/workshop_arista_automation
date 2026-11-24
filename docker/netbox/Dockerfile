@@ -65,8 +65,11 @@ RUN mkdir -p /opt/netbox/netbox/static/netbox_ztp_portal && \
           /opt/netbox/netbox/static/netbox_ztp_portal/ && \
     chown -R unit:root /opt/netbox/netbox/static/netbox_ztp_portal
 
-# Create static directory for topology views plugin images
-RUN mkdir -p /opt/netbox/netbox/static/netbox_topology_views/img && \
+# Pre-place netbox-topology-views static assets (JS, CSS, SVG role icons) into the served static
+# root. Without this, `/static/netbox_topology_views/js/app.js` 404s and the topology canvas is blank.
+RUN mkdir -p /opt/netbox/netbox/static/netbox_topology_views && \
+    cp -r /opt/netbox/venv/lib/python3.12/site-packages/netbox_topology_views/static/netbox_topology_views/* \
+          /opt/netbox/netbox/static/netbox_topology_views/ && \
     chown -R unit:root /opt/netbox/netbox/static/netbox_topology_views
 
 # --- The workbench audit log directory ---

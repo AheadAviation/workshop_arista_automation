@@ -1,74 +1,58 @@
-"""The day-two operation catalogue: what a network team is actually asked to do (INIT-005).
+"""Real-world Arista EVPN/VXLAN Day 2 operation catalogue (INIT-005/SPEC-001).
 
-**The problem this solves, stated as the user did.** The day-two page was a form: pick a switch,
-type a VLAN number, type a VLAN name, click three times. That is CLI thinking wearing a GUI, and
-it makes the operator the integration layer — they must know which VLAN a service uses, and which
-switches it belongs on. Worse, the VLAN and name were **free text**, so nothing tied the change to
-IPAM. You could type VLAN 150 / PHILIPS_MEDICAL against a NetBox that had no such VLAN, and the
-page would happily configure a switch with an object the source of truth had never heard of.
+Six genuine Day 2 operations on a NetBox-driven EVPN/VXLAN leaf-spine fabric:
 
-**The shape that replaces it.** An **operation** names a *kind of work* — "add a storage array",
-"change a jack port", "retire a service". Choosing one reconfigures the form: each operation
-declares the **fields** it needs, and those fields are populated from live NetBox data, not typed.
-The VLAN list comes from `ipam.vlan`. The device list comes from `dcim.device`. The jack list comes
-from the cable plant.
+1. `provision_vlan`            — Provision a new Tenant VLAN / VNI (L2 + optional L3 SVI in VRF CORE)
+2. `configure_port`            — Configure or reassign a server-facing leaf switch port (access/trunk/MTU/state)
+3. `provision_mlag_portchannel`— Provision a dual-homed server/storage MLAG Port-Channel across an MLAG pair (with real MTU)
+4. `update_fabric_services`    — Add or remove an NTP or DNS server across all 6 fabric switches
+5. `retire_vlan`               — Decommission a Tenant VLAN / VNI across all leaves and NetBox
+6. `remediate_drift`           — Detect and remediate live switch drift against NetBox intent
 
-**Why operations rather than one clever form.** Different work has genuinely different inputs. A
-storage array needs a service and an MTU; a jack change needs a building, a room and a port; a
-retirement needs a service and nothing else. Forcing those into one form is what produced the
-switch+VLAN+name triple that fitted none of them well. A declared operation with declared fields
-is the smallest structure that fits all three, and it is data — adding a fourth operation is a
-list entry, not a template edit.
-
-**Where this stops, deliberately.** An operation *prepares* a change; it does not apply one. Every
-operation resolves to the same three things the existing gate already understands — a VLAN, a set
-of devices, and a set of plans — so the approval, the audit record, the ticket and the IPAM
-write-back are the machinery that already exists and is already proved. This module adds the
-front door, not a second road.
+Every operation is Source-of-Truth-first: inputs naming network objects come live from NetBox,
+Preview shows both the NetBox update and exact per-switch EOS CLI diff, and Approve & Apply
+updates NetBox first, pushes over eAPI, verifies live state, and writes an audit entry.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any
 
-#: What an operation is fundamentally doing, which decides what the engine runs.
 OPERATION_KINDS: tuple[str, ...] = (
-    "deliver",   # add a VLAN to trunks
-    "retire",    # remove a VLAN from trunks
-    "reconfigure",  # change an attribute of something that already exists
+    "provision_vlan",
+    "configure_port",
+    "provision_mlag_portchannel",
+    "update_fabric_services",
+    "retire_vlan",
+    "remediate_drift",
 )
 
-#: How a field gets its value. `choice` fields are populated from NetBox; `number` and `text` are
-#: typed, and are deliberately rare — a field is only ever free text when no system knows the
-#: answer, which for this demo means "never" for anything that reaches a switch.
 FIELD_SOURCES: tuple[str, ...] = (
-    "ipam.vlan",      # every VLAN in IPAM, with vid + name + tenant
-    "dcim.device",    # devices in the fabric, by role
-    "dcim.site",      # sites
-    "mlag.pair",      # the fabric's MLAG pairs, from the catalogue
-    "static",         # a fixed list declared here (e.g. MTU sizes)
+    "ipam.vlan",          # VLANs from NetBox IPAM merged with tenant-core config context
+    "dcim.leaf",          # Leaf switches from NetBox (leaf-01..leaf-04)
+    "dcim.interface",     # Server-facing interfaces on leaf switches (filtered by selected device)
+    "mlag.pair",          # Fabric MLAG pairs (MLAG-PAIR-1, MLAG-PAIR-2)
+    "static",             # Fixed validated choices (MTU, mode, admin state, service type)
+    "text",               # Validated text input (new VLAN name, description, SVI CIDR, NTP/DNS IP)
+    "number",             # Validated integer input (new VLAN ID, Port-Channel ID)
 )
 
 
 @dataclass(frozen=True)
 class Field:
-    """One input an operation needs.
-
-    `source` is the load-bearing part: it says **where the answer comes from**. A field whose
-    source is `ipam.vlan` can only ever hold a VLAN that actually exists in NetBox, which is the
-    whole point — the operator chooses, they do not invent.
-    """
+    """One input an operation requires."""
 
     key: str
     label: str
     source: str
     help: str = ""
     required: bool = True
-    #: For `static` sources, the choices themselves.
     choices: tuple[tuple[str, str], ...] = ()
-    #: For `number` sources only.
     default: str = ""
+    placeholder: str = ""
+    #: Optional parent field key (e.g. `device`) when choices depend on another field.
+    depends_on: str = ""
 
     def __post_init__(self) -> None:
         if self.source not in FIELD_SOURCES:
@@ -84,28 +68,22 @@ class Field:
             "help": self.help,
             "required": self.required,
             "default": self.default,
+            "placeholder": self.placeholder,
+            "depends_on": self.depends_on,
             "choices": [{"value": v, "label": lbl} for v, lbl in self.choices],
         }
 
 
 @dataclass(frozen=True)
 class Operation:
-    """A kind of day-two work, and the inputs it needs.
-
-    `kind` decides what the engine does with the resolved values; `fields` decide what the page
-    asks for. The two are deliberately separate: several operations share `kind: deliver` and
-    therefore share every downstream safety property, while still presenting different questions.
-    """
+    """A real-world Day 2 operation and its declared inputs."""
 
     key: str
     name: str
     kind: str
     summary: str
-    #: The sentence shown once the inputs resolve, with `{placeholders}` filled from the values.
     sentence: str
     fields: tuple[Field, ...] = field(default_factory=tuple)
-    #: Which of the resolved values identifies the VLAN. Usually a field sourced from
-    #: `ipam.vlan`; `retire` needs one too, and nothing else.
     vlan_field: str = ""
 
     def __post_init__(self) -> None:
@@ -125,126 +103,250 @@ class Operation:
         }
 
 
-#: The operations the page offers. Written in the language a hospital's network team would use —
-#: "add a storage array", not "modify tagged_vlans" — because the point is that the person asking
-#: does not need to know how the network models it.
 OPERATIONS: tuple[Operation, ...] = (
     Operation(
-        key="deliver_service",
-        name="Give a service its network",
-        kind="deliver",
-        summary="Put an existing VLAN on the trunks a service's servers are attached to.",
-        sentence="Deliver {vlan} to {place}.",
-        vlan_field="vlan",
+        key="provision_vlan",
+        name="Provision Tenant VLAN / VNI",
+        kind="provision_vlan",
+        summary="Create a new EVPN/VXLAN tenant VLAN across all 4 leaves (VLAN, Vxlan1 VNI, optional Anycast SVI in VRF CORE) and record it in NetBox.",
+        sentence="Provision VLAN {vlan_id} ({vlan_name}, VNI {vni}) across all 4 leaves{svi_note}.",
         fields=(
             Field(
-                key="vlan",
-                label="Which network?",
-                source="ipam.vlan",
-                help="Every VLAN below is a real object in IPAM. Nothing here is typed.",
+                key="vlan_id",
+                label="VLAN ID",
+                source="number",
+                placeholder="e.g. 150",
+                help="Unused VLAN ID between 2 and 4000 (VNI defaults to 10000 + VLAN ID).",
             ),
             Field(
-                key="scope",
-                label="Where?",
-                source="static",
-                help="A dual-homed server needs the VLAN on both switches in its pair.",
-                choices=(
-                    ("mlag-pair", "One MLAG pair (a dual-homed server)"),
-                    ("all-leaves", "Every leaf (the whole estate)"),
-                ),
+                key="vlan_name",
+                label="VLAN Name",
+                source="text",
+                placeholder="e.g. APP_TIER",
+                help="Short alphanumeric/underscore name (max 32 chars, no spaces).",
             ),
             Field(
-                key="pair",
-                label="Which pair?",
-                source="mlag.pair",
-                help="Only used when the scope is a single pair.",
+                key="svi_ip",
+                label="Anycast Gateway IP/Prefix (optional)",
+                source="text",
                 required=False,
-            ),
-        ),
-    ),
-    Operation(
-        key="add_storage_array",
-        name="Add a storage array",
-        kind="deliver",
-        summary="A new array arrives: its network, on both legs of the pair, at the right MTU.",
-        sentence="Give the new storage array {vlan} on {place}, at MTU {mtu}.",
-        vlan_field="vlan",
-        fields=(
-            Field(
-                key="vlan",
-                label="Which network does the array live on?",
-                source="ipam.vlan",
-                help="Storage arrays normally sit on the storage VLAN, not a clinical one.",
-            ),
-            Field(
-                key="pair",
-                label="Which pair is the array cabled to?",
-                source="mlag.pair",
-                help="A storage array is dual-homed: one leg per switch, or half its traffic has "
-                     "nowhere to go.",
+                placeholder="e.g. 10.100.150.1/24",
+                help="Leave blank for L2-only VXLAN, or enter an IPv4/prefix to create an Anycast SVI in VRF CORE.",
             ),
             Field(
                 key="mtu",
-                label="Frame size",
+                label="SVI MTU",
                 source="static",
-                help="Jumbo frames are the usual cause of a storage array that 'works' but is slow.",
+                default="9000",
+                help="MTU applied to the Vlan interface when an SVI is created.",
                 choices=(
-                    ("9214", "9214 (jumbo, 9000 payload)"),
+                    ("9000", "9000 (jumbo)"),
                     ("1500", "1500 (standard)"),
                 ),
+            ),
+        ),
+    ),
+    Operation(
+        key="configure_port",
+        name="Configure / Reassign Switch Port",
+        kind="configure_port",
+        summary="Configure a real server-facing leaf interface from NetBox: access or trunk mode, VLAN, description, MTU, and admin state.",
+        sentence="Configure {device} {interface} ({mode}, VLAN {vlan}, MTU {mtu}, {admin_state}).",
+        vlan_field="vlan",
+        fields=(
+            Field(
+                key="device",
+                label="Leaf Switch",
+                source="dcim.leaf",
+                help="Live leaf switches from NetBox DCIM.",
+            ),
+            Field(
+                key="interface",
+                label="Server-Facing Interface",
+                source="dcim.interface",
+                depends_on="device",
+                help="Downlink ports on the selected leaf (uplinks & MLAG peer-links are protected).",
+            ),
+            Field(
+                key="mode",
+                label="Switchport Mode",
+                source="static",
+                default="access",
+                help="Access port for a single VLAN, or 802.1Q trunk.",
+                choices=(
+                    ("access", "Access (single VLAN)"),
+                    ("trunk", "Trunk (tagged VLAN)"),
+                ),
+            ),
+            Field(
+                key="vlan",
+                label="VLAN",
+                source="ipam.vlan",
+                help="Populated live from NetBox IPAM and tenant-core config context.",
+            ),
+            Field(
+                key="mtu",
+                label="Interface MTU",
+                source="static",
                 default="9214",
+                choices=(
+                    ("9214", "9214 (jumbo)"),
+                    ("1500", "1500 (standard)"),
+                ),
+            ),
+            Field(
+                key="admin_state",
+                label="Admin State",
+                source="static",
+                default="up",
+                choices=(
+                    ("up", "Enabled (no shutdown)"),
+                    ("down", "Shutdown (administratively down)"),
+                ),
+            ),
+            Field(
+                key="description",
+                label="Port Description",
+                source="text",
+                required=False,
+                placeholder="e.g. ESXi-01 NIC0",
+                help="Written to both the NetBox interface and switch interface description.",
             ),
         ),
     ),
     Operation(
-        key="change_jack",
-        name="Change what a jack delivers",
-        kind="deliver",
-        summary="A wall port needs a different network — an office becomes a clinical space.",
-        sentence="Change {jack} to deliver {vlan}.",
+        key="provision_mlag_portchannel",
+        name="Provision Dual-Homed MLAG Port-Channel",
+        kind="provision_mlag_portchannel",
+        summary="Turn up a dual-homed server or storage LACP Port-Channel across both leaves of an MLAG pair with real MTU and trunk VLAN.",
+        sentence="Provision Port-Channel{po_id} (MLAG {po_id}) on {pair_label} using {member_interface}, VLAN {vlan}, MTU {mtu}.",
         vlan_field="vlan",
         fields=(
             Field(
-                key="building",
-                label="Building",
-                source="static",
-                help="Where the jack is. In this lab the choices are the modelled locations.",
-                choices=(
-                    ("main-hospital", "Main Hospital"),
-                    ("east-wing", "East Wing (clinical)"),
-                ),
+                key="pair",
+                label="MLAG Pair",
+                source="mlag.pair",
+                help="Both leaves in the selected pair are configured symmetrically.",
             ),
             Field(
-                key="jack",
-                label="Jack",
+                key="po_id",
+                label="Port-Channel / MLAG ID",
+                source="number",
+                default="10",
+                placeholder="e.g. 10",
+                help="Port-Channel and MLAG ID (1–1999; 2000 is reserved for the MLAG peer-link).",
+            ),
+            Field(
+                key="member_interface",
+                label="Member Interface (same port on both leaves)",
                 source="static",
-                help="The wall port, as the facilities team labels it.",
+                default="Ethernet5",
+                help="Server-facing downlink port on each leaf in the MLAG pair.",
                 choices=(
-                    ("MH-1-0142", "MH-1-0142 (Main Hospital, floor 1)"),
-                    ("EW-2-0031", "EW-2-0031 (East Wing, floor 2)"),
+                    ("Ethernet5", "Ethernet5"),
+                    ("Ethernet6", "Ethernet6"),
+                    ("Ethernet7", "Ethernet7"),
+                    ("Ethernet8", "Ethernet8"),
                 ),
             ),
             Field(
                 key="vlan",
-                label="What should it deliver?",
+                label="Allowed Tenant VLAN",
                 source="ipam.vlan",
-                help="Choose the network this port should provide.",
+                help="VLAN allowed on the dual-homed trunk Port-Channel.",
+            ),
+            Field(
+                key="mtu",
+                label="Frame Size (MTU)",
+                source="static",
+                default="9214",
+                help="Applied directly to the Port-Channel and member interfaces on both leaves.",
+                choices=(
+                    ("9214", "9214 (jumbo — storage / VMware)"),
+                    ("1500", "1500 (standard)"),
+                ),
+            ),
+            Field(
+                key="description",
+                label="Server / Array Name",
+                source="text",
+                required=False,
+                placeholder="e.g. PURE-ARRAY-01",
+                help="Applied as description on Port-Channel and member interfaces in NetBox and EOS.",
             ),
         ),
     ),
     Operation(
-        key="retire_service",
-        name="Retire a network",
-        kind="retire",
-        summary="A service is decommissioned: take its VLAN off every trunk.",
-        sentence="Retire {vlan} from every leaf.",
+        key="update_fabric_services",
+        name="Update Fabric Services (NTP / DNS)",
+        kind="update_fabric_services",
+        summary="Add or remove an NTP or DNS server in NetBox fabric-global and push to all 6 spine/leaf switches.",
+        sentence="{action_word} {service_type} server {server_ip} in VRF MGMT across all 6 fabric switches.",
+        fields=(
+            Field(
+                key="service_type",
+                label="Service",
+                source="static",
+                default="ntp",
+                choices=(
+                    ("ntp", "NTP Server (VRF MGMT)"),
+                    ("dns", "DNS Name Server (VRF MGMT)"),
+                ),
+            ),
+            Field(
+                key="action",
+                label="Action",
+                source="static",
+                default="add",
+                choices=(
+                    ("add", "Add server"),
+                    ("remove", "Remove server"),
+                ),
+            ),
+            Field(
+                key="server_ip",
+                label="Server IPv4 Address",
+                source="text",
+                placeholder="e.g. 172.30.30.10",
+                help="IPv4 address reachable from VRF MGMT.",
+            ),
+        ),
+    ),
+    Operation(
+        key="retire_vlan",
+        name="Retire Tenant VLAN / VNI",
+        kind="retire_vlan",
+        summary="Decommission an existing tenant VLAN across all 4 leaves (remove SVI, Vxlan1 VNI mapping, VLAN) and remove it from NetBox.",
+        sentence="Retire VLAN {vlan} from all 4 leaves and NetBox.",
         vlan_field="vlan",
         fields=(
             Field(
                 key="vlan",
-                label="Which network?",
+                label="Tenant VLAN to Retire",
                 source="ipam.vlan",
-                help="Pick the network being retired. It is removed from every leaf trunk.",
+                help="Select an existing tenant VLAN from NetBox. Infrastructure MLAG VLANs (4080+) are protected.",
+            ),
+        ),
+    ),
+    Operation(
+        key="remediate_drift",
+        name="Detect & Remediate Config Drift",
+        kind="remediate_drift",
+        summary="Compare live running VLANs and trunks on the fabric against NetBox intent and remediate any drifted leaf switch.",
+        sentence="Check and remediate live configuration drift against NetBox intent ({target_label}).",
+        fields=(
+            Field(
+                key="target",
+                label="Target Scope",
+                source="static",
+                default="all-leaves",
+                help="Inspect all 4 leaves, all 6 fabric switches (including spines for NTP/DNS), or a single MLAG pair.",
+                choices=(
+                    ("all-leaves", "All 4 leaf switches (leaf-01..leaf-04)"),
+                    ("all-fabric", "All 6 fabric switches (spines + leaves)"),
+                    ("pair-1", "MLAG Pair 1 (leaf-01, leaf-02)"),
+                    ("pair-2", "MLAG Pair 2 (leaf-03, leaf-04)"),
+                ),
             ),
         ),
     ),
@@ -254,7 +356,7 @@ BY_KEY: dict[str, Operation] = {op.key: op for op in OPERATIONS}
 
 
 class UnknownOperation(ValueError):
-    """An operation that is not in the catalogue. Names the valid ones."""
+    """An operation that is not in the catalogue."""
 
 
 def operation(key: str) -> Operation:

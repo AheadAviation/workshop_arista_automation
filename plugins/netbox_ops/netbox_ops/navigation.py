@@ -24,10 +24,10 @@ _VIEW = ["dcim.view_device"]
 _CHANGE = ["dcim.change_device"]
 
 _menu_items = (
-    PluginMenuItem(link="plugins:netbox_ops:home", link_text="Devices", permissions=_VIEW),
+    PluginMenuItem(link="plugins:netbox_ops:workshop", link_text="Workshop", permissions=_VIEW),
+    PluginMenuItem(link="plugins:netbox_ops:devices", link_text="Devices", permissions=_VIEW),
     PluginMenuItem(link="plugins:netbox_ops:actions", link_text="Day-two actions", permissions=_CHANGE),
     PluginMenuItem(link="plugins:netbox_ops:live", link_text="Live config", permissions=_VIEW),
-    PluginMenuItem(link="plugins:netbox_ops:change", link_text="Change (classic)", permissions=_CHANGE),
     PluginMenuItem(link="plugins:netbox_ops:labs", link_text="Container labs", permissions=_CHANGE),
     PluginMenuItem(link="plugins:netbox_ops:lifecycle", link_text="Lifecycle", permissions=_VIEW),
     PluginMenuItem(link="plugins:netbox_ops:awx", link_text="AWX jobs", permissions=_VIEW),

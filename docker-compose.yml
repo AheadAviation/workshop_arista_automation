@@ -137,6 +137,8 @@ services:
       # Rendered configs, so the plugin can push one to a device and prove it took. Read-only:
       # rendering runs in the ansible container and the plugin only ever reads the result.
       - ./output/configs:/opt/netbox/configs:ro
+      # Generated ContainerLab topology, read-only so the Workshop tab can inspect it (INIT-004/SPEC-001).
+      - ./clab:/opt/netbox/clab:ro
     healthcheck:
       # `/login/`, not `/api/`. The API endpoint now returns 403 to an unauthenticated request
       # (it did not before the plugin's views were locked down), so a `curl -f` against it made a

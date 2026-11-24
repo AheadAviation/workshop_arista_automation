@@ -125,5 +125,36 @@ def install() -> None:
         # this is a state, not a failure.
         print("(no devices yet — the template will be assigned after the fabric is imported)")
 
+    # Configure netbox-topology-views defaults so both the sidebar link and "View Topology Map"
+    # draw the fabric immediately with switch icons instead of an empty canvas.
+    try:
+        from django.contrib.auth import get_user_model
+        from django.contrib.contenttypes.models import ContentType
+        from dcim.models import DeviceRole
+        from netbox_topology_views.models import IndividualOptions, RoleImage
+
+        for user in get_user_model().objects.all():
+            opts, _ = IndividualOptions.objects.get_or_create(user_id=user.id)
+            opts.draw_default_layout = True
+            opts.show_cables = True
+            opts.show_unconnected = True
+            opts.show_neighbors = True
+            opts.save()
+
+        ct = ContentType.objects.get_for_model(DeviceRole)
+        for slug, img in (
+            ("spine", "netbox_topology_views/img/core-router.svg"),
+            ("leaf", "netbox_topology_views/img/access-switch.svg"),
+            ("border", "netbox_topology_views/img/distribution-switch.svg"),
+        ):
+            role = DeviceRole.objects.filter(slug=slug).first()
+            if role:
+                RoleImage.objects.update_or_create(
+                    content_type=ct, object_id=role.id, defaults={"image": img}
+                )
+        print("Configured netbox-topology-views default layout and role icons")
+    except Exception as exc:
+        print(f"Skipped topology-views defaults: {exc}")
+
 
 install()

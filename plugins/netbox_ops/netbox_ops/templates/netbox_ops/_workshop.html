@@ -1,0 +1,466 @@
+{% comment %}
+Guided Workshop Quick Start (Steps 1–9) & Day 2 Operations tab (INIT-004/SPEC-003).
+Runs the entire `wiki/Quick-Start.md` and `wiki/Day-2-Operations.md` from inside NetBox.
+{% endcomment %}
+
+<div class="row mb-3">
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-2">
+        <div class="text-muted small text-uppercase">NetBox Devices</div>
+        <div id="kpi-netbox-count" class="h4 mb-0 {% if workshop.netbox_count == 6 %}text-success{% else %}text-warning{% endif %}">
+          {{ workshop.netbox_count }} / 6
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-2">
+        <div class="text-muted small text-uppercase">Topology File</div>
+        <div id="kpi-topology" class="h4 mb-0 {% if workshop.topology_exists %}text-success{% else %}text-muted{% endif %}">
+          {% if workshop.topology_exists %}Ready{% else %}Missing{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-2">
+        <div class="text-muted small text-uppercase">Rendered Configs</div>
+        <div id="kpi-configs" class="h4 mb-0 {% if workshop.config_files|length == 6 %}text-success{% else %}text-warning{% endif %}">
+          {{ workshop.config_files|length }} / 6
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center">
+      <div class="card-body py-2">
+        <div class="text-muted small text-uppercase">Running Switches</div>
+        <div id="kpi-switches" class="h4 mb-0 {% if workshop.ceos_running == 6 %}text-success{% else %}text-warning{% endif %}">
+          {{ workshop.ceos_running }} / 6
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <div>
+      <strong>Quick Start Walkthrough (Day Zero — Steps 1 to 10)</strong>
+      <span class="text-muted small ms-2">Run top to bottom from a blank slate to a verified, production-hardened EVPN/VXLAN fabric.</span>
+    </div>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'plugins:netbox_ops:topology' %}" target="_blank">
+      View Topology Map
+    </a>
+  </div>
+
+  <div class="list-group list-group-flush">
+
+    {# Step 1 — Clean Slate #}
+    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <span class="badge bg-secondary text-white me-2">Step 1</span>
+        <strong>Clean Slate (Start Over)</strong>
+        <div class="text-muted small">
+          Destroy any running ContainerLab topology, delete generated configs &amp; topology file, and wipe the 6 fabric devices, cables, IPs, and config contexts from NetBox.
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <form method="post" action="{% url 'plugins:netbox_ops:workshop_clean' %}" class="workshop-action-form"
+              onsubmit="return confirm('Destroy running lab containers, delete generated files, and clear the 6 fabric devices & config contexts from NetBox?');">
+          {% csrf_token %}
+          <input type="hidden" name="clear_netbox" value="1">
+          <button class="btn btn-sm btn-outline-danger" type="submit">Clean Slate (Full Reset)</button>
+        </form>
+        <form method="post" action="{% url 'plugins:netbox_ops:workshop_clean' %}" class="workshop-action-form"
+              onsubmit="return confirm('Destroy running lab containers and delete generated files (keeping NetBox data)?');">
+          {% csrf_token %}
+          <input type="hidden" name="clear_netbox" value="0">
+          <button class="btn btn-sm btn-outline-secondary" type="submit">Reset Lab &amp; Files Only</button>
+        </form>
+      </div>
+    </div>
+
+    {# Step 2 — Start NetBox #}
+    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <span class="badge bg-success text-dark me-2">Step 2</span>
+        <strong>Start NetBox</strong>
+        <div class="text-muted small">NetBox is running and healthy.</div>
+      </div>
+      <span class="badge bg-success text-dark">Ready</span>
+    </div>
+
+    {# Step 3 — Import Network Data into NetBox #}
+    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <span id="step-badge-3" class="badge {% if workshop.netbox_count == 6 %}bg-success{% else %}bg-primary{% endif %} text-dark me-2">Step 3</span>
+        <strong>Import Network Data into NetBox</strong>
+        <div class="text-muted small">
+          Runs <code>scripts/full_import.py</code> to populate site DC1, 6 devices, interfaces, IPs, 12 cables, custom fields, tags, and 8 config contexts.
+          ({{ workshop.netbox_count }}/6 devices currently in NetBox)
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-sm btn-outline-secondary" href="/dcim/devices/" target="_blank">Browse Devices</a>
+        <form method="post" action="{% url 'plugins:netbox_ops:workshop_import' %}" class="workshop-action-form">
+          {% csrf_token %}
+          <button class="btn btn-sm btn-primary" type="submit">Run Full Import</button>
+        </form>
+      </div>
+    </div>
+
+    {# Step 4 — Generate ContainerLab Topology #}
+    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <span id="step-badge-4" class="badge {% if workshop.topology_exists %}bg-success{% else %}bg-primary{% endif %} text-dark me-2">Step 4</span>
+        <strong>Generate ContainerLab Topology</strong>
+        <div class="text-muted small">
+          Queries NetBox devices &amp; cables and writes <code>clab/topology-docker.clab.yml</code>.
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        {% if workshop.topology_exists %}
+          <a class="btn btn-sm btn-outline-secondary" href="{% url 'plugins:netbox_ops:workshop_topology_view' %}">
+            Inspect Topology YAML
+          </a>
+        {% endif %}
+        <form method="post" action="{% url 'plugins:netbox_ops:workshop_topology_gen' %}" class="workshop-action-form">
+          {% csrf_token %}
+          <button class="btn btn-sm btn-primary" type="submit">Generate Topology</button>
+        </form>
+      </div>
+    </div>
+
+    {# Step 5 — Generate Device Configurations #}
+    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <span id="step-badge-5" class="badge {% if workshop.config_files|length == 6 %}bg-success{% else %}bg-primary{% endif %} text-dark me-2">Step 5</span>
+        <strong>Generate Device Configurations</strong>
+        <div class="text-muted small">
+          Runs <code>ansible-playbook playbooks/generate_configs.yml</code> from NetBox dynamic inventory to render all 6 EOS configs.
+        </div>
+        {% if workshop.config_files %}
+          <div class="mt-1 d-flex flex-wrap gap-1">
+            {% for dev in workshop.fabric_devices %}
+              <a class="badge text-bg-light border text-decoration-none"
+                 href="{% url 'plugins:netbox_ops:workshop_config_view' dev %}">
+                {{ dev }}.cfg
+              </a>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+      <form method="post" action="{% url 'plugins:netbox_ops:workshop_configs_gen' %}" class="workshop-action-form">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-primary" type="submit">Generate Configs</button>
+      </form>
+    </div>
+
+    {# Step 6 — Deploy the Lab #}
+    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <span id="step-badge-6" class="badge {% if workshop.ceos_running == 6 %}bg-success{% else %}bg-primary{% endif %} text-dark me-2">Step 6</span>
+        <strong>Deploy the Lab (6 cEOS Switches)</strong>
+        <div class="text-muted small">
+          Runs <code>containerlab deploy --topo topology-docker.clab.yml</code> via the scoped <code>lab-runner</code> sidecar. Wait ~60s after deploy for EOS to finish booting.
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <form method="post" action="{% url 'plugins:netbox_ops:workshop_deploy' %}" class="workshop-action-form">
+          {% csrf_token %}
+          <button class="btn btn-sm btn-primary" type="submit">Deploy Fabric</button>
+        </form>
+        <form method="post" action="{% url 'plugins:netbox_ops:workshop_destroy' %}" class="workshop-action-form"
+              onsubmit="return confirm('Destroy the running ContainerLab fabric?');">
+          {% csrf_token %}
+          <button class="btn btn-sm btn-outline-danger" type="submit">Destroy Fabric</button>
+        </form>
+      </div>
+    </div>
+
+    {# Step 7 — Push Configurations #}
+    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <span id="step-badge-7" class="badge {% if workshop.push_done %}bg-success{% else %}bg-primary{% endif %} text-dark me-2">Step 7</span>
+        <strong>Push Full Configurations</strong>
+        <div class="text-muted small">
+          Loads each generated <code>output/configs/&lt;device&gt;.cfg</code> onto all 6 cEOS switches (BGP underlay, MLAG, VXLAN/EVPN, tenant VLANs) and saves startup-config.
+        </div>
+      </div>
+      <form method="post" action="{% url 'plugins:netbox_ops:workshop_push' %}" class="workshop-action-form">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-primary" type="submit">Push Full Configs</button>
+      </form>
+    </div>
+
+    {# Step 8 — Verify Configs on the Devices #}
+    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <span id="step-badge-8" class="badge {% if workshop.verify_done %}bg-success{% else %}bg-primary{% endif %} text-dark me-2">Step 8</span>
+        <strong>Verify Configs on Devices (Live eAPI Checks)</strong>
+        <div class="text-muted small">
+          Checks spine BGP peers, leaf MLAG Active status, VXLAN/VNI, EVPN BGP summary, tenant VLANs &amp; VRF CORE routes, and cross-fabric loopback pings.
+        </div>
+      </div>
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'plugins:netbox_ops:workshop_verify' %}">
+        Run Live Fabric Checks
+      </a>
+    </div>
+
+    {# Step 9 — Run Full Validation Suite #}
+    <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <span id="step-badge-9" class="badge {% if workshop.validate_done %}bg-success{% else %}bg-primary{% endif %} text-dark me-2">Step 9</span>
+        <strong>Run Full Validation Suite</strong>
+        <div class="text-muted small">
+          Runs <code>ansible-playbook -i inventory/hosts.yml playbooks/test_all.yml</code> across all 6 test categories (Reachability, BGP, MLAG, Routing, Pings, VXLAN).
+        </div>
+      </div>
+      <form method="post" action="{% url 'plugins:netbox_ops:workshop_validate' %}" class="workshop-action-form">
+        {% csrf_token %}
+        <input type="hidden" name="quick" value="0">
+        <button class="btn btn-sm btn-success" type="submit">Run Full Validation</button>
+      </form>
+    </div>
+
+    {# Step 10 — Apply Standard Fabric Baseline Config #}
+    <div class="list-group-item">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+        <div>
+          <span id="step-badge-10" class="badge {% if workshop.standard_config_done or workshop.standard_baseline_saved %}bg-success{% else %}bg-primary{% endif %} text-dark me-2">Step 10</span>
+          <strong>Apply Standard Fabric Config (Production Baseline)</strong>
+          <div class="text-muted small">
+            Applies the standard network-architect baseline across all 6 switches (<code>spine-01..02</code>, <code>leaf-01..04</code>) and saves it to NetBox <code>fabric-global</code>:
+            <strong>Syslog</strong> (buffered + high-res timestamps + VRF MGMT host), <strong>SNMP</strong> (community, contact, location, traps over MGMT),
+            <strong>NTP &amp; DNS</strong> (VRF MGMT + domain + timezone), <strong>LLDP</strong> timers, <strong>Errdisable</strong> BPDU-guard recovery,
+            <strong>SSH / Console</strong> idle-timeout hardening, and an authorized-use <strong>Login Banner</strong>.
+          </div>
+        </div>
+        {% if workshop.standard_config_done %}
+          <span class="badge bg-success text-dark">Applied to 6 Switches</span>
+        {% elif workshop.standard_baseline_saved %}
+          <span class="badge bg-success text-dark">Saved in NetBox</span>
+        {% endif %}
+      </div>
+
+      <form method="post" action="{% url 'plugins:netbox_ops:workshop_standard_config' %}" class="workshop-action-form" id="standard-config-form">
+        {% csrf_token %}
+        <input type="hidden" name="mode" id="std-cfg-mode" value="apply">
+        <div class="row g-2 mb-3">
+          <div class="col-md-3">
+            <label class="form-label form-label-sm mb-0 small text-muted">Syslog Server (VRF MGMT)</label>
+            <input type="text" class="form-control form-control-sm font-monospace" name="syslog_host"
+                   value="{{ workshop.standard_baseline.syslog_host|default:'172.30.30.10' }}" required>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label form-label-sm mb-0 small text-muted">SNMP Community (RO)</label>
+            <input type="text" class="form-control form-control-sm font-monospace" name="snmp_community"
+                   value="{{ workshop.standard_baseline.snmp_community|default:'FABRIC-RO' }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label form-label-sm mb-0 small text-muted">SNMP Trap Host (optional)</label>
+            <input type="text" class="form-control form-control-sm font-monospace" name="snmp_trap_host"
+                   value="{{ workshop.standard_baseline.snmp_trap_host|default:'172.30.30.10' }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label form-label-sm mb-0 small text-muted">SNMP Location</label>
+            <input type="text" class="form-control form-control-sm" name="snmp_location"
+                   value="{{ workshop.standard_baseline.snmp_location|default:'DC1-EVPN-Fabric' }}" required>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label form-label-sm mb-0 small text-muted">SNMP Contact</label>
+            <input type="text" class="form-control form-control-sm" name="snmp_contact"
+                   value="{{ workshop.standard_baseline.snmp_contact|default:'netops@dc1.lab.local' }}" required>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label form-label-sm mb-0 small text-muted">NTP Servers (comma-separated)</label>
+            <input type="text" class="form-control form-control-sm font-monospace" name="ntp_servers"
+                   value="{{ workshop.standard_baseline.ntp_servers_csv|default:'172.30.30.1' }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label form-label-sm mb-0 small text-muted">DNS Servers (comma-separated)</label>
+            <input type="text" class="form-control form-control-sm font-monospace" name="dns_servers"
+                   value="{{ workshop.standard_baseline.dns_servers_csv|default:'172.30.30.1' }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label form-label-sm mb-0 small text-muted">DNS Domain Name</label>
+            <input type="text" class="form-control form-control-sm font-monospace" name="domain_name"
+                   value="{{ workshop.standard_baseline.domain_name|default:'dc1.lab.local' }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label form-label-sm mb-0 small text-muted">Clock Timezone</label>
+            <input type="text" class="form-control form-control-sm font-monospace" name="timezone"
+                   value="{{ workshop.standard_baseline.timezone|default:'UTC' }}" required>
+          </div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          <button class="btn btn-sm btn-outline-primary" type="submit"
+                  onclick="document.getElementById('std-cfg-mode').value='preview'">
+            Preview Standard Config &amp; Diff
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" type="submit"
+                  onclick="document.getElementById('std-cfg-mode').value='netbox_only'">
+            Save to NetBox Only (Show Drift)
+          </button>
+          <button class="btn btn-sm btn-primary" type="submit"
+                  onclick="document.getElementById('std-cfg-mode').value='apply'">
+            Apply Standard Config (All 6 Switches)
+          </button>
+          <span class="text-muted small ms-1">
+            Also includes: LLDP (30s/120s), Errdisable BPDU-guard recovery (300s), SSH/Console timeouts, Login Banner.
+          </span>
+        </div>
+      </form>
+    </div>
+
+  </div>
+</div>
+
+{# ===================== Day 2 Operations ===================== #}
+<div class="card mb-3">
+  <div class="card-header">
+    <strong>Day 2 Operations (Edit in NetBox &rarr; Regenerate &rarr; Diff &rarr; Backup &rarr; Push &rarr; Validate &rarr; Rollback)</strong>
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">
+      All changes start in NetBox. Edit a device description, custom field (e.g., BGP ASN), or config context (e.g., add a VLAN in <code>tenant-core</code> or NTP server in <code>fabric-global</code>), then propagate and verify below.
+    </p>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <a class="btn btn-sm btn-outline-secondary" href="/dcim/devices/" target="_blank">1. Edit Devices in NetBox</a>
+      <a class="btn btn-sm btn-outline-secondary" href="/extras/config-contexts/" target="_blank">1b. Edit Config Contexts</a>
+
+      <form method="post" action="{% url 'plugins:netbox_ops:workshop_configs_gen' %}" class="workshop-action-form">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-outline-primary" type="submit">2. Regenerate Configs</button>
+      </form>
+
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'plugins:netbox_ops:workshop_diff' %}">
+        3. Diff vs. Running Config
+      </a>
+
+      <form method="post" action="{% url 'plugins:netbox_ops:workshop_backup' %}" class="workshop-action-form">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-outline-secondary" type="submit">4. Backup Switches</button>
+      </form>
+
+      <form method="post" action="{% url 'plugins:netbox_ops:workshop_push' %}" class="workshop-action-form">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-primary" type="submit">5. Push Configs</button>
+      </form>
+
+      <form method="post" action="{% url 'plugins:netbox_ops:workshop_validate' %}" class="workshop-action-form">
+        {% csrf_token %}
+        <input type="hidden" name="quick" value="1">
+        <button class="btn btn-sm btn-outline-success" type="submit">6. Quick Validate</button>
+      </form>
+
+      <form method="post" action="{% url 'plugins:netbox_ops:workshop_rollback' %}" class="workshop-action-form"
+            onsubmit="return confirm('Restore flash:backup.cfg on all 6 switches via configure replace?');">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-outline-danger" type="submit">Rollback to Backup</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var STATUS_URL = "{% url 'plugins:netbox_ops:workshop_status_json' %}";
+
+  // Never restore a frozen "Running..." button or stale 0/6 counts from browser Back/Forward cache.
+  window.addEventListener('pageshow', function(e) {
+    if (e.persisted) {
+      window.location.reload();
+      return;
+    }
+    document.querySelectorAll('.workshop-action-form button[type="submit"]').forEach(function(btn) {
+      if (btn.dataset.origText) {
+        btn.disabled = false;
+        btn.textContent = btn.dataset.origText;
+      }
+    });
+  });
+
+  // Show live elapsed seconds on the active button so non-coders can see work progressing.
+  document.querySelectorAll('.workshop-action-form').forEach(function(form) {
+    form.addEventListener('submit', function(e) {
+      var btn = e.submitter || form.querySelector('button[type="submit"]');
+      if (btn) {
+        var orig = btn.textContent.trim();
+        var started = Date.now();
+        setTimeout(function() {
+          btn.disabled = true;
+          btn.dataset.origText = orig;
+          btn.textContent = 'Running...';
+          var timer = setInterval(function() {
+            var secs = Math.floor((Date.now() - started) / 1000);
+            btn.textContent = 'Running... (' + secs + 's)';
+          }, 1000);
+          window.addEventListener('pagehide', function() { clearInterval(timer); }, { once: true });
+        }, 0);
+      }
+    });
+  });
+
+  function setBadge(id, done) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('bg-success', 'bg-primary');
+    el.classList.add(done ? 'bg-success' : 'bg-primary');
+  }
+
+  function refreshWorkshopStatus() {
+    if (document.hidden) return;
+    fetch(STATUS_URL, { credentials: 'same-origin', cache: 'no-store' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (!data || !data.ok) return;
+        var nb = Number(data.netbox_count || 0);
+        var cfgs = (data.config_files || []).length;
+        var sw = Number(data.ceos_running || 0);
+        var topo = Boolean(data.topology_exists);
+
+        var kpiNb = document.getElementById('kpi-netbox-count');
+        if (kpiNb) {
+          kpiNb.textContent = nb + ' / 6';
+          kpiNb.className = 'h4 mb-0 ' + (nb === 6 ? 'text-success' : 'text-warning');
+        }
+        var kpiTopo = document.getElementById('kpi-topology');
+        if (kpiTopo) {
+          kpiTopo.textContent = topo ? 'Ready' : 'Missing';
+          kpiTopo.className = 'h4 mb-0 ' + (topo ? 'text-success' : 'text-muted');
+        }
+        var kpiCfg = document.getElementById('kpi-configs');
+        if (kpiCfg) {
+          kpiCfg.textContent = cfgs + ' / 6';
+          kpiCfg.className = 'h4 mb-0 ' + (cfgs === 6 ? 'text-success' : 'text-warning');
+        }
+        var kpiSw = document.getElementById('kpi-switches');
+        if (kpiSw) {
+          kpiSw.textContent = sw + ' / 6';
+          kpiSw.className = 'h4 mb-0 ' + (sw === 6 ? 'text-success' : 'text-warning');
+        }
+
+        setBadge('step-badge-3', nb === 6);
+        setBadge('step-badge-4', topo);
+        setBadge('step-badge-5', cfgs === 6);
+        setBadge('step-badge-6', sw === 6);
+        setBadge('step-badge-7', Boolean(data.push_done));
+        setBadge('step-badge-8', Boolean(data.verify_done));
+        setBadge('step-badge-9', Boolean(data.validate_done));
+        setBadge('step-badge-10', Boolean(data.standard_config_done || data.standard_baseline_saved));
+      })
+      .catch(function() {});
+  }
+
+  // Live-poll every 5 seconds so the page always reflects real fabric state with zero manual refresh.
+  setInterval(refreshWorkshopStatus, 5000);
+})();
+</script>

@@ -1,12 +1,21 @@
-"""A two-verb HTTP wrapper around containerlab (INIT-002/SPEC-002).
+"""A scoped HTTP wrapper around ContainerLab and Workshop automation (INIT-002/SPEC-002, INIT-004/SPEC-001).
 
-Exposes exactly `POST /deploy` and `POST /destroy`, nothing else. NetBox calls this instead of
-holding Docker access, which keeps the plugin's security posture intact: the only service with
-the Docker socket is this one, and the worst it can be asked to do is start or stop the demo
-topology.
+Exposes fixed, parameter-free endpoints only:
+  * Legacy demo endpoints (unchanged): `POST /deploy`, `POST /destroy`
+  * Workshop Quick Start & Day-2 endpoints (`INIT-004/SPEC-001`):
+      - `POST /workshop/clean`           — destroy wiki lab + remove generated configs & topology
+      - `POST /workshop/topology`        — run `scripts/generate_clab_topology_docker.py`
+      - `POST /workshop/generate-configs`— run `playbooks/generate_configs.yml`
+      - `POST /workshop/deploy`          — deploy `/clab/topology/topology-docker.clab.yml`
+      - `POST /workshop/destroy`         — destroy `/clab/topology/topology-docker.clab.yml`
+      - `POST /workshop/push-configs`    — apply full rendered configs to all 6 cEOS switches
+      - `POST /workshop/backup`          — save `running-config` to `flash:backup.cfg` on all 6 switches
+      - `POST /workshop/rollback`        — `configure replace flash:backup.cfg` on all 6 switches
+      - `POST /workshop/validate`        — run `playbooks/test_all.yml`
+      - `POST /workshop/validate-quick`  — run `playbooks/test_all.yml --tags quick`
 
-Deliberately not a general command runner. There is no path parameter, no shell, and no way to
-name a different topology — the arguments are fixed here, and the topology is the demo's.
+NetBox calls this instead of holding Docker access, keeping the plugin's security posture intact:
+there is no path parameter, no shell interpolation, and no arbitrary command execution.
 """
 
 from __future__ import annotations
@@ -15,42 +24,28 @@ import json
 import os
 import subprocess
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 
-#: The topology, addressed by the path the **daemon** can see. The repo is bind-mounted at
-#: /compose here, and the clab sidecar gets ./clab mounted at /clab/topology.
+#: The demo topology (INIT-002), addressed by the path the clab sidecar sees.
 TOPOLOGY = "/clab/topology/topology-demo.clab.yml"
 
-#: Where the repo is mounted, so `docker compose` finds the compose file.
+#: The wiki Quick Start topology generated from NetBox (INIT-004/SPEC-001).
+WORKSHOP_TOPOLOGY = "/clab/topology/topology-docker.clab.yml"
+
+#: Where the repo is mounted read-only inside this container.
 COMPOSE_DIR = "/compose"
 
-#: The SAME repo, but by its path on the *host*.
-#:
-#: This is not a duplicate — it is the docker-out-of-docker path problem. Compose resolves
-#: relative bind mounts (`./clab:/clab/topology`) against the host filesystem, not against this
-#: container's view of it. Running compose with `--project-directory /compose` made it look for
-#: `/compose/clab` *on the host*, which does not exist, so containerlab reported
-#: "Stat /clab/topology/topology-demo.clab.yml: no such file or directory".
-#:
-#: It is resolved at run time by asking the daemon where this container's `/compose` mount came
-#: from (see `host_project_dir`), rather than configured — a hardcoded path breaks the moment
-#: someone clones the repo somewhere else, and an env var is one more thing to get wrong.
-COMPOSE_DIR = "/compose"
+#: Fixed allowlist of the six Arista cEOS fabric devices.
+FABRIC_DEVICES = ("spine-01", "spine-02", "leaf-01", "leaf-02", "leaf-03", "leaf-04")
+
+#: Container name prefix used by ContainerLab for this fabric.
+CONTAINER_PREFIX = "clab-netbox-arista-lab-"
 
 TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "900"))
 
 
 def restore_host_project_dir() -> str:
-    """The repo's path as the HOST sees it — needed for compose's bind mounts.
-
-    Compose resolves relative bind mounts to absolute paths and hands them to the *daemon*, which
-    runs on the host. The host does not have `/compose`; it has `C:\\Users\\...\\workshop_arista_automation`.
-    So a nested `docker compose run` must be given host paths, and the only reliable way to learn
-    them is to ask the daemon where this container's own `/compose` bind came from.
-
-    This was the first thing tried, then abandoned in favour of the container path — which was
-    wrong for the mounts and right only for locating the compose file. Both are needed: the file
-    by its container path, the mounts by their host path.
-    """
+    """The repo's path as the HOST sees it — needed for compose's bind mounts."""
     cached = getattr(restore_host_project_dir, "_cached", "")
     if cached:
         return cached
@@ -81,63 +76,311 @@ def restore_host_project_dir() -> str:
 
 
 def host_project_dir() -> str:
-    """The project directory to hand `docker compose` — the **container's** path, for `-f`.
-
-    Resolves the opposite way to `restore_host_project_dir`, and both are needed: compose is told
-    where the compose *file* is by its container path, and the file's mounts are rewritten to host
-    paths by the override file below.
-    """
+    """The project directory to hand `docker compose` — the container's path, for `-f`."""
     return COMPOSE_DIR
 
 
-def run_clab(verb: str) -> dict:
-    """Run `containerlab <verb>` through the repo's own clab runner container."""
-    if verb not in ("deploy", "destroy"):
-        return {"ok": False, "error": f"unknown verb {verb!r}"}
+def restore_compose_project_name() -> str:
+    """Read this container's `com.docker.compose.project` label so nested compose runs share the
+    exact same Compose project and network (where `http://netbox:8080` lives)."""
+    cached = getattr(restore_compose_project_name, "_cached", "")
+    if cached:
+        return cached
 
-    # Compose is pointed at the compose FILE by its container path, and at the override file that
-    # rewrites the clab service's mounts to HOST paths. Both are required: compose runs here and
-    # reads the file here, but hands mount sources to the daemon, which runs on the host.
+    container = os.environ.get("HOSTNAME", "")
+    try:
+        proc = subprocess.run(  # noqa: S603 - argument list, no shell
+            [
+                "docker",
+                "inspect",
+                container,
+                "--format",
+                "{{index .Config.Labels \"com.docker.compose.project\"}}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return ""
+
+    if proc.returncode == 0:
+        found = (proc.stdout or "").strip()
+        if found and found != "<no value>":
+            restore_compose_project_name._cached = found  # type: ignore[attr-defined]
+            return found
+    return ""
+
+
+def _compose_base() -> tuple[list[str], dict[str, str]]:
+    """Build the base `docker compose` argument list and environment with host mount override."""
     host_repo = restore_host_project_dir()
-    args = [
-        "docker", "compose",
-        "--project-directory", COMPOSE_DIR,
-        "-f", f"{COMPOSE_DIR}/docker-compose.yml",
+    project_name = restore_compose_project_name()
+    args = ["docker", "compose"]
+    if project_name:
+        args += ["-p", project_name]
+    args += [
+        "--project-directory",
+        COMPOSE_DIR,
+        "-f",
+        f"{COMPOSE_DIR}/docker-compose.yml",
     ]
     if host_repo:
         args += ["-f", f"{COMPOSE_DIR}/docker-compose.lab-from-container.yml"]
     env = dict(os.environ, HOST_REPO=host_repo)
+    return args, env
 
+
+def _run_subprocess(
+    args: list[str],
+    *,
+    action: str,
+    env: dict[str, str] | None = None,
+    input_text: str | None = None,
+    timeout: int | None = None,
+    tail_lines: int = 60,
+) -> dict:
+    """Run a fixed subprocess command and return a structured JSON-safe dict."""
+    limit = timeout if timeout is not None else TIMEOUT
+    try:
+        proc = subprocess.run(  # noqa: S603 - fixed argument list, no shell
+            args,
+            input=input_text,
+            capture_output=True,
+            text=True,
+            timeout=limit,
+            check=False,
+            env=env,
+        )
+    except FileNotFoundError as exc:
+        return {"ok": False, "action": action, "error": f"command not available: {exc}", "output": ""}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "action": action, "error": f"{action} exceeded {limit}s", "output": ""}
+
+    output = f"{proc.stdout or ''}\n{proc.stderr or ''}".strip()
+    lines = output.splitlines()
+    return {
+        "ok": proc.returncode == 0,
+        "action": action,
+        "returncode": proc.returncode,
+        "output": "\n".join(lines[-tail_lines:]),
+    }
+
+
+def run_clab(verb: str, *, topology: str = TOPOLOGY) -> dict:
+    """Run `containerlab <verb>` through the repo's own clab runner container."""
+    if verb not in ("deploy", "destroy"):
+        return {"ok": False, "error": f"unknown verb {verb!r}"}
+
+    args, env = _compose_base()
     args += ["run", "--rm", "clab", "containerlab", verb]
     if verb == "deploy":
         args.append("--reconfigure")
     else:
         args.append("--cleanup")
-    args += ["--topo", TOPOLOGY]
+    args += ["--topo", topology]
 
-    try:
-        proc = subprocess.run(  # noqa: S603 - fixed argument list, no shell
-            args,
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT,
-            check=False,
-            env=env,
+    result = _run_subprocess(args, action=f"containerlab {verb}", env=env, tail_lines=40)
+    result["verb"] = verb
+    return result
+
+
+def run_ansible_action(action: str, service_cmd: list[str], *, tail_lines: int = 80) -> dict:
+    """Run a fixed command inside the `ansible` compose service without starting dependencies."""
+    args, env = _compose_base()
+    args += ["run", "--rm", "--no-deps", "ansible", *service_cmd]
+    return _run_subprocess(args, action=action, env=env, tail_lines=tail_lines)
+
+
+def workshop_clean() -> dict:
+    """Tear down any running workshop or demo lab and remove generated configs & topology file."""
+    destroy_workshop = run_clab("destroy", topology=WORKSHOP_TOPOLOGY)
+    destroy_demo = run_clab("destroy", topology=TOPOLOGY)
+    clean_files_cmd = [
+        "python",
+        "-c",
+        (
+            "import glob, os, shutil; "
+            "removed = []; "
+            "[os.remove(p) or removed.append(p) for p in glob.glob('/ansible/output/configs/*.cfg')]; "
+            "topo = '/ansible/clab/topology-docker.clab.yml'; "
+            "os.path.exists(topo) and (os.remove(topo) or removed.append(topo)); "
+            "[shutil.rmtree(d, ignore_errors=True) or removed.append(d) "
+            "for d in glob.glob('/ansible/clab/clab-*') if os.path.isdir(d)]; "
+            "print(f'Removed {len(removed)} generated file(s)/lab state dir(s)')"
+        ),
+    ]
+    files_res = run_ansible_action("clean generated files", clean_files_cmd, tail_lines=20)
+    combined = "\n".join(
+        part
+        for part in (
+            destroy_workshop.get("output", ""),
+            destroy_demo.get("output", ""),
+            files_res.get("output", ""),
         )
-    except FileNotFoundError as exc:
-        return {"ok": False, "error": f"docker is not available: {exc}"}
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "error": f"containerlab {verb} exceeded {TIMEOUT}s"}
-
-    output = f"{proc.stdout or ''}\n{proc.stderr or ''}".strip()
+        if part
+    )
     return {
-        "ok": proc.returncode == 0,
-        "verb": verb,
-        "returncode": proc.returncode,
-        # The tail, because the useful line (a failure reason) is at the end, and the whole
-        # deploy log is thousands of lines of container output.
-        "output": "\n".join(output.splitlines()[-40:]),
+        "ok": files_res["ok"],
+        "action": "workshop_clean",
+        "lab_destroy": destroy_workshop,
+        "demo_destroy": destroy_demo,
+        "files_clean": files_res,
+        "output": combined,
     }
+
+
+def workshop_import_netbox() -> dict:
+    """Quick Start Step 3: run `scripts/full_import.py` inside the ansible container."""
+    return run_ansible_action(
+        "import_netbox",
+        ["python", "scripts/full_import.py"],
+        tail_lines=80,
+    )
+
+
+def workshop_generate_topology() -> dict:
+    """Quick Start Step 4: generate `clab/topology-docker.clab.yml` from NetBox."""
+    return run_ansible_action(
+        "generate_topology",
+        ["python", "scripts/generate_clab_topology_docker.py"],
+        tail_lines=60,
+    )
+
+
+def workshop_generate_configs() -> dict:
+    """Quick Start Step 5 / Day 2: render device configs from NetBox via Ansible."""
+    return run_ansible_action(
+        "generate_configs",
+        ["ansible-playbook", "playbooks/generate_configs.yml"],
+        tail_lines=80,
+    )
+
+
+def workshop_push_configs() -> dict:
+    """Quick Start Step 7 / Day 2: push full rendered configs to all 6 running cEOS switches."""
+    configs_dir = Path(COMPOSE_DIR) / "output" / "configs"
+    results: list[dict] = []
+    failures = 0
+
+    for dev in FABRIC_DEVICES:
+        cfg_path = configs_dir / f"{dev}.cfg"
+        if not cfg_path.exists():
+            results.append({"device": dev, "ok": False, "error": f"missing {cfg_path.name}"})
+            failures += 1
+            continue
+
+        cfg_lines = cfg_path.read_text(encoding="utf-8").splitlines()
+        while cfg_lines and cfg_lines[-1].strip() in ("", "!", "end"):
+            cfg_lines.pop()
+        cfg_text = "\n".join(cfg_lines)
+        container = f"{CONTAINER_PREFIX}{dev}"
+        payload = f"configure\n{cfg_text}\nend\nwrite memory\n"
+        res = _run_subprocess(
+            ["docker", "exec", "-i", container, "Cli", "-p", "15"],
+            action=f"push {dev}",
+            input_text=payload,
+            timeout=120,
+            tail_lines=20,
+        )
+        out = res.get("output", "")
+        has_cli_error = any(marker in out for marker in ("% Invalid input", "% Error", "% Ambiguous"))
+        ok = bool(res.get("ok")) and not has_cli_error
+        if not ok:
+            failures += 1
+        results.append(
+            {
+                "device": dev,
+                "ok": ok,
+                "output": out,
+                "error": "" if ok else (res.get("error") or out[-300:] or "CLI error"),
+            }
+        )
+
+    return {
+        "ok": failures == 0,
+        "action": "push_configs",
+        "devices": results,
+        "succeeded": len(results) - failures,
+        "failed": failures,
+        "output": "\n".join(
+            f"{r['device']}: {'OK' if r['ok'] else 'FAIL - ' + r['error']}" for r in results
+        ),
+    }
+
+
+def _switch_cli_all(action: str, cli_command: str) -> dict:
+    """Run one fixed EOS CLI command on all 6 fabric switches via `docker exec`."""
+    results: list[dict] = []
+    failures = 0
+    for dev in FABRIC_DEVICES:
+        container = f"{CONTAINER_PREFIX}{dev}"
+        res = _run_subprocess(
+            ["docker", "exec", container, "Cli", "-p", "15", "-c", cli_command],
+            action=f"{action} {dev}",
+            timeout=90,
+            tail_lines=15,
+        )
+        out = res.get("output", "")
+        ok = bool(res.get("ok")) and "% " not in out
+        if not ok:
+            failures += 1
+        results.append(
+            {
+                "device": dev,
+                "ok": ok,
+                "output": out,
+                "error": "" if ok else (res.get("error") or out[-200:] or "CLI error"),
+            }
+        )
+
+    return {
+        "ok": failures == 0,
+        "action": action,
+        "devices": results,
+        "succeeded": len(results) - failures,
+        "failed": failures,
+        "output": "\n".join(
+            f"{r['device']}: {'OK' if r['ok'] else 'FAIL - ' + r['error']}" for r in results
+        ),
+    }
+
+
+def workshop_backup() -> dict:
+    """Day 2: save running-config to flash:backup.cfg on all 6 switches."""
+    return _switch_cli_all("backup", "copy running-config flash:backup.cfg")
+
+
+def workshop_rollback() -> dict:
+    """Day 2: restore flash:backup.cfg on all 6 switches via configure replace."""
+    return _switch_cli_all("rollback", "configure replace flash:backup.cfg")
+
+
+def workshop_validate(*, quick: bool = False) -> dict:
+    """Quick Start Step 9 / Day 2: run `playbooks/test_all.yml` (full or `--tags quick`)."""
+    cmd = ["ansible-playbook", "-i", "inventory/hosts.yml", "playbooks/test_all.yml"]
+    if quick:
+        cmd += ["--tags", "quick"]
+    return run_ansible_action("validate_quick" if quick else "validate", cmd, tail_lines=120)
+
+
+#: Fixed POST dispatch table — no path parameters, no dynamic dispatch.
+POST_ROUTES = {
+    "/deploy": lambda: run_clab("deploy", topology=TOPOLOGY),
+    "/destroy": lambda: run_clab("destroy", topology=TOPOLOGY),
+    "/workshop/clean": workshop_clean,
+    "/workshop/import": workshop_import_netbox,
+    "/workshop/topology": workshop_generate_topology,
+    "/workshop/generate-configs": workshop_generate_configs,
+    "/workshop/deploy": lambda: run_clab("deploy", topology=WORKSHOP_TOPOLOGY),
+    "/workshop/destroy": lambda: run_clab("destroy", topology=WORKSHOP_TOPOLOGY),
+    "/workshop/push-configs": workshop_push_configs,
+    "/workshop/backup": workshop_backup,
+    "/workshop/rollback": workshop_rollback,
+    "/workshop/validate": lambda: workshop_validate(quick=False),
+    "/workshop/validate-quick": lambda: workshop_validate(quick=True),
+}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -153,22 +396,27 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's naming
         if self.path.rstrip("/") == "/health":
-            self._send({"ok": True, "service": "lab-runner", "topology": TOPOLOGY})
+            self._send(
+                {
+                    "ok": True,
+                    "service": "lab-runner",
+                    "topology": TOPOLOGY,
+                    "workshop_topology": WORKSHOP_TOPOLOGY,
+                    "endpoints": sorted(POST_ROUTES),
+                }
+            )
             return
         self._send({"ok": False, "error": "not found"}, status=404)
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.rstrip("/")
-        if path == "/deploy":
-            self._send(run_clab("deploy"))
+        handler = POST_ROUTES.get(path)
+        if handler is None:
+            self._send({"ok": False, "error": "not found"}, status=404)
             return
-        if path == "/destroy":
-            self._send(run_clab("destroy"))
-            return
-        self._send({"ok": False, "error": "not found"}, status=404)
+        self._send(handler())
 
     def log_message(self, fmt: str, *args: object) -> None:
-        # Containerlab output is the interesting part; keep the access log quiet.
         print(f"lab-runner: {fmt % args}", flush=True)
 
 

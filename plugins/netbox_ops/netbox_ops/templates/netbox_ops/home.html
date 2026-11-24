@@ -21,12 +21,14 @@
   {% endfor %}
 </ul>
 
-{% if tab == 'devices' %}
+{% if tab == 'workshop' %}
+  {% include 'netbox_ops/_workshop.html' with workshop=workshop %}
+{% elif tab == 'devices' %}
   {% include 'netbox_ops/_devices.html' with fabric=fabric setup=setup %}
 {% elif tab == 'live' %}
   {% include 'netbox_ops/_live.html' with live=live %}
 {% elif tab == 'actions' %}
-  {% include 'netbox_ops/_actions.html' with fabric=fabric %}
+  {% include 'netbox_ops/_actions.html' %}
 {% elif tab == 'labs' %}
   {% include 'netbox_ops/_labs.html' with lab=lab %}
 {% elif tab == 'lifecycle' %}

@@ -1,0 +1,132 @@
+{% extends 'base/layout.html' %}
+
+{% block title %}{{ title }} — Network Ops{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-0">{{ title }}</h1>
+  </div>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'plugins:netbox_ops:workshop' %}">
+    &larr; Back to Workshop
+  </a>
+</div>
+
+<div class="alert {% if result.ok %}alert-success{% else %}alert-danger{% endif %}">
+  <strong>{{ result.headline }}</strong>
+  {% if result.detail %}
+    <div class="small mt-1">{{ result.detail }}</div>
+  {% endif %}
+  {% if result.netbox_only %}
+    <div class="mt-2">
+      <a class="btn btn-sm btn-primary" href="{% url 'plugins:netbox_ops:actions' %}">
+        Inspect Drift &amp; Remediate in Day-two actions &rarr;
+      </a>
+    </div>
+  {% endif %}
+</div>
+
+{# Structured Step 8 live fabric checks #}
+{% if kind == 'checks' and result.checks %}
+  <div class="row">
+    {% for check in result.checks %}
+      <div class="col-md-6 mb-3">
+        <div class="card h-100 border-start border-4 {% if check.ok %}border-success{% else %}border-danger{% endif %}">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-1">
+              <strong>{{ check.title }}</strong>
+              <span class="badge {% if check.ok %}bg-success{% else %}bg-danger{% endif %}">
+                {% if check.ok %}PASS{% else %}FAIL{% endif %}
+              </span>
+            </div>
+            <div class="small text-muted mb-2">{{ check.summary }}</div>
+            {% if check.output %}
+              <details>
+                <summary class="small text-primary" style="cursor:pointer;">Show CLI output</summary>
+                <pre class="bg-dark text-light p-2 rounded small mt-2 mb-0" style="max-height:260px; overflow:auto;">{{ check.output }}</pre>
+              </details>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+{# Per-device push / backup / rollback results #}
+{% if kind == 'devices' and result.devices %}
+  <div class="card mb-3">
+    <div class="card-header"><strong>Per-Device Results</strong></div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>Device</th>
+            <th>Status</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in result.devices %}
+            <tr>
+              <td class="font-monospace">{{ d.device }}</td>
+              <td>
+                <span class="badge {% if d.ok %}bg-success{% else %}bg-danger{% endif %}">
+                  {% if d.ok %}OK{% else %}FAIL{% endif %}
+                </span>
+              </td>
+              <td class="small">{{ d.error|default:"Applied cleanly" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}
+
+{# Unified config diffs #}
+{% if kind == 'diffs' and result.devices %}
+  {% for d in result.devices %}
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="font-monospace fw-bold">{{ d.device }}</span>
+        {% if not d.ok %}
+          <span class="badge bg-danger">Error: {{ d.error }}</span>
+        {% elif d.changed %}
+          <span class="badge bg-warning text-dark">+{{ d.added }} / -{{ d.removed }} lines</span>
+        {% else %}
+          <span class="badge bg-success">Matches generated config</span>
+        {% endif %}
+      </div>
+      {% if d.diff %}
+        <div class="card-body p-0">
+          <pre class="bg-dark text-light p-3 mb-0 small" style="max-height:360px; overflow:auto;">{{ d.diff }}</pre>
+        </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+{% endif %}
+
+{# File viewer (topology YAML or generated .cfg) #}
+{% if kind == 'file' and result.content %}
+  <div class="card mb-3">
+    <div class="card-body p-0">
+      <pre class="bg-dark text-light p-3 mb-0 small" style="max-height:600px; overflow:auto;">{{ result.content }}</pre>
+    </div>
+  </div>
+{% endif %}
+
+{# Raw command output #}
+{% if result.output %}
+  <div class="card mb-3">
+    <div class="card-header"><strong>Command Output</strong></div>
+    <div class="card-body p-0">
+      <pre class="bg-dark text-light p-3 mb-0 small" style="max-height:480px; overflow:auto;">{{ result.output }}</pre>
+    </div>
+  </div>
+{% endif %}
+
+<div class="mt-3">
+  <a class="btn btn-primary btn-sm" href="{% url 'plugins:netbox_ops:workshop' %}">&larr; Back to Workshop</a>
+</div>
+{% endblock %}

@@ -1,10 +1,4 @@
-"""The day-two operation catalogue and its resolver (INIT-005).
-
-The property that matters most here is the one the old form could not provide: **you cannot name a
-VLAN that IPAM does not have.** The old page had a free-text VLAN box, so it would configure a
-switch with any number typed into it — an object the source of truth had never heard of. That is
-what these tests pin, along with the catalogue's own integrity.
-"""
+"""Unit tests for the real-world Arista EVPN/VXLAN Day 2 catalogue & resolver (INIT-005/SPEC-001, SPEC-004)."""
 
 from __future__ import annotations
 
@@ -14,237 +8,140 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from workbench import operations, operations_resolve  # noqa: E402
 
 
-# --------------------------------------------------------------------------- #
-# the catalogue
-# --------------------------------------------------------------------------- #
-
-
-def test_every_operation_has_a_name_that_is_not_a_verbless_noun():
-    """Names are read aloud to an operator; "tagged_vlans" is not a name."""
-    for op in operations.OPERATIONS:
-        assert op.name.strip()
-        assert "_" not in op.name, f"{op.key}: name looks like an identifier"
-        assert op.summary.strip(), f"{op.key} has no summary"
-
-
-def test_operation_keys_are_unique():
-    keys = [op.key for op in operations.OPERATIONS]
-    assert len(keys) == len(set(keys))
-
-
-def test_every_operation_declares_a_vlan_field_that_exists():
-    for op in operations.OPERATIONS:
-        assert op.vlan_field, f"{op.key} declares no vlan_field"
-        assert op.vlan_field in {f.key for f in op.fields}
-
-
-def test_every_operation_has_at_least_one_field():
-    for op in operations.OPERATIONS:
-        assert op.fields, f"{op.key} asks for nothing, so it cannot do anything"
-
-
-def test_an_unknown_operation_names_the_valid_ones():
-    with pytest.raises(operations.UnknownOperation) as exc:
-        operations.operation("do-something-else")
-    assert "deliver_service" in str(exc.value)
-
-
-def test_a_static_field_must_declare_its_choices():
-    with pytest.raises(ValueError):
-        operations.Field(key="x", label="X", source="static")
-
-
-def test_a_field_cannot_use_an_undeclared_source():
-    with pytest.raises(ValueError):
-        operations.Field(key="x", label="X", source="telepathy")
-
-
-def test_vlan_fields_are_sourced_from_ipam_not_typed():
-    """The whole point: a VLAN input must be a menu of real objects, never a text box."""
-    for op in operations.OPERATIONS:
-        vlan_field = next(f for f in op.fields if f.key == op.vlan_field)
-        assert vlan_field.source == "ipam.vlan", (
-            f"{op.key}: the VLAN field is sourced from {vlan_field.source!r}, "
-            "which means it could hold something IPAM has never heard of"
-        )
-
-
-# --------------------------------------------------------------------------- #
-# field options come from live data
-# --------------------------------------------------------------------------- #
-
-
-VLANS = [
-    {"vid": 120, "name": "STORAGE", "tenant": "Infrastructure", "description": ""},
-    {"vid": 333, "name": "PHARMACY", "tenant": "Pharmacy", "description": ""},
+SAMPLE_VLANS = [
+    {"vid": 100, "name": "SERVERS", "tenant": "CORE", "description": "Server VLAN"},
+    {"vid": 110, "name": "STORAGE", "tenant": "CORE", "description": "Storage VLAN"},
 ]
 
-
-def test_ipam_field_options_carry_the_name_and_the_owner():
-    """A bare "333" means nothing to a person; "PHARMACY (VLAN 333) — Pharmacy" does."""
-    field = operations.Field(key="vlan", label="Which?", source="ipam.vlan")
-    options = operations_resolve.field_choices(field, VLANS)
-
-    assert [o["value"] for o in options] == ["120", "333"]
-    assert "PHARMACY" in options[1]["label"]
-    assert "333" in options[1]["label"]
-    assert "Pharmacy" in options[1]["label"]
+SAMPLE_LEAVES = [{"name": d, "role": "leaf"} for d in operations_resolve.FABRIC_LEAVES]
+SAMPLE_IFACES = {
+    d: [{"value": f"Ethernet{n}", "label": f"Ethernet{n}"} for n in (5, 6, 7, 8)]
+    for d in operations_resolve.FABRIC_LEAVES
+}
 
 
-def test_pair_options_come_from_the_fabric_topology():
-    field = operations.Field(key="pair", label="Which?", source="mlag.pair")
-    options = operations_resolve.field_choices(field, VLANS)
-    assert {o["value"] for o in options} == set(__import__("workbench.catalogue", fromlist=["x"]).MLAG_PAIRS)
+def test_catalogue_contains_six_real_world_operations():
+    keys = [op.key for op in operations.OPERATIONS]
+    assert keys == [
+        "provision_vlan",
+        "configure_port",
+        "provision_mlag_portchannel",
+        "update_fabric_services",
+        "retire_vlan",
+        "remediate_drift",
+    ]
 
 
-# --------------------------------------------------------------------------- #
-# resolution refuses what is not real
-# --------------------------------------------------------------------------- #
-
-
-def test_a_vlan_that_is_not_in_ipam_is_refused():
-    """This is the hole the free-text form had, and the reason this module exists."""
-    with pytest.raises(operations_resolve.ResolveError) as exc:
-        operations_resolve.resolve(
-            operation_key="deliver_service",
-            values={"vlan": "999", "scope": "all-leaves"},
-            vlans=VLANS,
-        )
-    message = str(exc.value)
-    assert "999" in message
-    assert "IPAM" in message
-    assert "cannot be delivered" in message
-
-
-def test_a_non_numeric_vlan_is_refused_cleanly():
-    with pytest.raises(operations_resolve.ResolveError) as exc:
-        operations_resolve.resolve(
-            operation_key="deliver_service",
-            values={"vlan": "not-a-number", "scope": "all-leaves"},
-            vlans=VLANS,
-        )
-    assert "not a VLAN number" in str(exc.value)
-
-
-def test_a_missing_required_field_names_the_field():
-    with pytest.raises(operations_resolve.ResolveError) as exc:
-        operations_resolve.resolve(
-            operation_key="deliver_service", values={"scope": "all-leaves"}, vlans=VLANS
-        )
-    assert "Which network" in str(exc.value)
-
-
-def test_a_real_vlan_resolves_to_the_devices_and_a_sentence():
-    resolved = operations_resolve.resolve(
-        operation_key="deliver_service",
-        values={"vlan": "120", "scope": "mlag-pair", "pair": "pair-1"},
-        vlans=VLANS,
+def test_describe_all_populates_live_choices():
+    data = operations_resolve.describe_all(
+        fetch_vlans=lambda: SAMPLE_VLANS,
+        fetch_leaves=lambda: SAMPLE_LEAVES,
+        fetch_interfaces=lambda: SAMPLE_IFACES,
     )
-    assert resolved.vlan_vid == 120
-    assert resolved.vlan_name == "STORAGE"
-    assert sorted(resolved.devices) == ["leaf-01", "leaf-02"]
-    assert "STORAGE" in resolved.sentence
-    assert "120" in resolved.sentence
+    assert data["ok"] is True
+    assert len(data["operations"]) == 6
+    by_key = {op["key"]: op for op in data["operations"]}
+
+    port_fields = {f["key"]: f for f in by_key["configure_port"]["fields"]}
+    assert [c["value"] for c in port_fields["device"]["choices"]] == list(operations_resolve.FABRIC_LEAVES)
+    assert [c["value"] for c in port_fields["vlan"]["choices"]] == ["100", "110"]
+    assert "leaf-01" in port_fields["interface"]["choices_by_device"]
 
 
-def test_all_leaves_resolves_to_every_leaf_once():
-    resolved = operations_resolve.resolve(
-        operation_key="deliver_service",
-        values={"vlan": "120", "scope": "all-leaves"},
-        vlans=VLANS,
+def test_resolve_provision_vlan_valid_and_invalid():
+    res = operations_resolve.resolve(
+        operation_key="provision_vlan",
+        values={"vlan_id": "150", "vlan_name": "APP_TIER", "svi_ip": "10.100.150.1/24", "mtu": "9000"},
+        fetch_vlans=lambda: SAMPLE_VLANS,
     )
-    assert sorted(resolved.devices) == ["leaf-01", "leaf-02", "leaf-03", "leaf-04"]
+    assert res.vlan_vid == 150
+    assert res.values["vni"] == 10150
+    assert res.devices == list(operations_resolve.FABRIC_LEAVES)
+    assert "10.100.150.1/24" in res.sentence
 
-
-def test_a_storage_array_always_lands_on_a_pair_not_one_switch():
-    """A storage array is dual-homed: one switch would leave half its traffic unaddressed."""
-    resolved = operations_resolve.resolve(
-        operation_key="add_storage_array",
-        values={"vlan": "120", "pair": "pair-2", "mtu": "9214"},
-        vlans=VLANS,
-    )
-    assert sorted(resolved.devices) == ["leaf-03", "leaf-04"]
-    assert "MTU 9214" in resolved.sentence
-
-
-def test_retirement_targets_the_whole_estate():
-    """Leaving one leaf carrying a retired VLAN is the drift this tool exists to find."""
-    resolved = operations_resolve.resolve(
-        operation_key="retire_service", values={"vlan": "333"}, vlans=VLANS
-    )
-    assert sorted(resolved.devices) == ["leaf-01", "leaf-02", "leaf-03", "leaf-04"]
-    assert "Retire" in resolved.sentence
-
-
-def test_a_jack_resolves_to_the_switch_it_is_cabled_to():
-    resolved = operations_resolve.resolve(
-        operation_key="change_jack",
-        values={"building": "east-wing", "jack": "EW-2-0031", "vlan": "120"},
-        vlans=VLANS,
-    )
-    assert resolved.devices == ["leaf-04"]
-
-
-def test_an_unmodelled_jack_is_refused_rather_than_guessed():
     with pytest.raises(operations_resolve.ResolveError):
         operations_resolve.resolve(
-            operation_key="change_jack",
-            values={"building": "east-wing", "jack": "NOPE-9", "vlan": "120"},
-            vlans=VLANS,
+            operation_key="provision_vlan",
+            values={"vlan_id": "4094", "vlan_name": "BAD_MLAG", "svi_ip": "", "mtu": "9000"},
+            fetch_vlans=lambda: SAMPLE_VLANS,
+        )
+
+    with pytest.raises(operations_resolve.ResolveError):
+        operations_resolve.resolve(
+            operation_key="provision_vlan",
+            values={"vlan_id": "150", "vlan_name": "APP_TIER", "svi_ip": "not-an-ip", "mtu": "9000"},
+            fetch_vlans=lambda: SAMPLE_VLANS,
         )
 
 
-def test_resolved_carries_the_values_back_for_the_page():
-    """The page needs to echo what was chosen, so a mistake is visible before it is approved."""
-    resolved = operations_resolve.resolve(
-        operation_key="add_storage_array",
-        values={"vlan": "120", "pair": "pair-1", "mtu": "1500"},
-        vlans=VLANS,
+def test_resolve_configure_port_protects_uplinks_and_mlag_peer_links():
+    res = operations_resolve.resolve(
+        operation_key="configure_port",
+        values={
+            "device": "leaf-01",
+            "interface": "Ethernet5",
+            "mode": "access",
+            "vlan": "100",
+            "mtu": "9214",
+            "admin_state": "up",
+            "description": "ESXi-01 NIC0",
+        },
+        fetch_vlans=lambda: SAMPLE_VLANS,
     )
-    payload = resolved.to_dict()
-    assert payload["values"]["mtu"] == "1500"
-    assert payload["vlan"] == {"vid": 120, "name": "STORAGE"}
+    assert res.devices == ["leaf-01"]
+    assert res.values["mtu"] == 9214
 
-
-def test_the_sentence_never_leaks_an_internal_key():
-    """It is read aloud to an executive; `mlag-pair` is not a word."""
-    for op in operations.OPERATIONS:
-        resolved = operations_resolve.resolve(
-            operation_key=op.key,
+    # Spine uplink Ethernet1 must be refused
+    with pytest.raises(operations_resolve.ResolveError):
+        operations_resolve.resolve(
+            operation_key="configure_port",
             values={
-                "vlan": "120",
-                "scope": "mlag-pair",
-                "pair": "pair-1",
-                "mtu": "9214",
-                "building": "main-hospital",
-                "jack": "MH-1-0142",
+                "device": "leaf-01",
+                "interface": "Ethernet1",
+                "mode": "access",
+                "vlan": "100",
+                "mtu": "1500",
+                "admin_state": "up",
             },
-            vlans=VLANS,
+            fetch_vlans=lambda: SAMPLE_VLANS,
         )
-        for leak in ("mlag-pair", "all-leaves", "None", "{", "ipam.vlan"):
-            assert leak not in resolved.sentence, f"{op.key}: {leak!r} leaked into {resolved.sentence!r}"
 
 
-# --------------------------------------------------------------------------- #
-# the payload the page renders
-# --------------------------------------------------------------------------- #
+def test_resolve_mlag_portchannel_and_services_and_retire():
+    mlag_res = operations_resolve.resolve(
+        operation_key="provision_mlag_portchannel",
+        values={
+            "pair": "pair-1",
+            "po_id": "10",
+            "member_interface": "Ethernet5",
+            "vlan": "110",
+            "mtu": "9214",
+            "description": "PURE-ARRAY-01",
+        },
+        fetch_vlans=lambda: SAMPLE_VLANS,
+    )
+    assert mlag_res.devices == ["leaf-01", "leaf-02"]
+    assert mlag_res.values["po_id"] == 10
+    assert mlag_res.values["mtu"] == 9214
 
+    svc_res = operations_resolve.resolve(
+        operation_key="update_fabric_services",
+        values={"service_type": "ntp", "action": "add", "server_ip": "172.30.30.10"},
+        fetch_vlans=lambda: SAMPLE_VLANS,
+    )
+    assert len(svc_res.devices) == 6
+    assert "172.30.30.10" in svc_res.sentence
 
-def test_describe_all_returns_every_field_with_its_options():
-    payload = operations_resolve.describe_all(vlans=VLANS)
-
-    assert payload["ok"] is True
-    assert payload["source"] == "netbox:ipam"
-    assert payload["vlan_count"] == 2
-    for op in payload["operations"]:
-        for field in op["fields"]:
-            assert "options" in field, f"{op['key']}.{field['key']} has no options key"
-            if field["source"] in ("ipam.vlan", "mlag.pair", "static"):
-                assert field["options"], (
-                    f"{op['key']}.{field['key']} would render an empty dropdown"
-                )
+    retire_res = operations_resolve.resolve(
+        operation_key="retire_vlan",
+        values={"vlan": "100"},
+        fetch_vlans=lambda: SAMPLE_VLANS,
+    )
+    assert retire_res.vlan_vid == 100
+    assert retire_res.devices == list(operations_resolve.FABRIC_LEAVES)

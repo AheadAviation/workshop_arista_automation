@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetBox Network Ops Plugin — Live Showcase Walkthrough</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --card-border: #334155;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --green: #4ade80;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --code-bg: #020617;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: rgba(15, 23, 42, 0.94);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--card-border);
+    padding: 0.9rem 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 1.15rem;
+    letter-spacing: -0.01em;
+  }
+  .quick-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-items: center;
+  }
+  .btn-link, button.action-btn {
+    background: #1e293b;
+    color: var(--accent);
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.82rem;
+    text-decoration: none;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .btn-link:hover, button.action-btn:hover {
+    border-color: var(--accent);
+    background: #0f172a;
+  }
+  .btn-reset {
+    color: var(--muted) !important;
+  }
+  main {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 1.5rem 1.25rem 4rem;
+  }
+  .progress-bar-wrap {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 0.85rem 1.1rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .progress-track {
+    flex: 1;
+    height: 8px;
+    background: #0f172a;
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--green));
+    transition: width 0.2s ease;
+  }
+  .section-title {
+    margin: 2rem 0 0.85rem;
+    font-size: 1.25rem;
+    color: var(--accent);
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 0.4rem;
+  }
+  .step-card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-left: 4px solid var(--accent);
+    border-radius: 10px;
+    padding: 1rem 1.15rem;
+    margin-bottom: 0.9rem;
+    transition: opacity 0.2s, border-color 0.2s;
+  }
+  .step-card.done {
+    border-left-color: var(--green);
+    opacity: 0.72;
+  }
+  .step-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  .step-check {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 1rem;
+  }
+  .step-check input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--green);
+    cursor: pointer;
+  }
+  .badge {
+    font-size: 0.74rem;
+    padding: 0.18rem 0.5rem;
+    border-radius: 99px;
+    background: rgba(56, 189, 248, 0.14);
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .badge.time {
+    background: rgba(251, 191, 36, 0.14);
+    color: var(--amber);
+  }
+  .step-body {
+    margin-top: 0.65rem;
+    padding-left: 1.75rem;
+    font-size: 0.92rem;
+  }
+  .click-path {
+    background: rgba(56, 189, 248, 0.08);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    border-radius: 6px;
+    padding: 0.45rem 0.7rem;
+    margin: 0.45rem 0;
+    font-size: 0.88rem;
+  }
+  .talk-track {
+    color: var(--muted);
+    font-style: italic;
+    margin: 0.45rem 0 0;
+    font-size: 0.88rem;
+  }
+  .talk-track strong {
+    color: var(--text);
+    font-style: normal;
+  }
+  .kv-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 0.45rem;
+    margin: 0.55rem 0;
+  }
+  .kv {
+    background: var(--code-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.83rem;
+  }
+  .kv span.lbl { color: var(--muted); display: block; font-size: 0.72rem; }
+  .kv code { color: var(--green); font-family: ui-monospace, Consolas, monospace; }
+  .copy-btn {
+    background: #1e293b;
+    color: var(--text);
+    border: 1px solid var(--card-border);
+    border-radius: 4px;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.72rem;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .cmd-box {
+    background: var(--code-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    padding: 0.5rem 0.7rem;
+    margin: 0.5rem 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.6rem;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 0.8rem;
+    color: #e2e8f0;
+    overflow-x: auto;
+  }
+  .note-box {
+    background: rgba(251, 191, 36, 0.08);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 0.88rem;
+    margin-bottom: 1rem;
+  }
+  ul.tight { margin: 0.35rem 0; padding-left: 1.2rem; }
+  ul.tight li { margin-bottom: 0.25rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>NetBox Network Ops Plugin — Live Showcase Walkthrough</h1>
+  <div class="quick-links">
+    <a class="btn-link" href="http://localhost:8888/plugins/ops/workshop/" target="_blank">Workshop (Day 0)</a>
+    <a class="btn-link" href="http://localhost:8888/plugins/ops/actions/" target="_blank">Day-two actions</a>
+    <a class="btn-link" href="http://localhost:8888/plugins/ops/live/" target="_blank">Live config</a>
+    <a class="btn-link" href="http://localhost:8888/plugins/ops/labs/" target="_blank">Container labs</a>
+    <a class="btn-link" href="http://localhost:8888/plugins/ops/audit/" target="_blank">Audit trail</a>
+    <a class="btn-link" href="http://localhost:8888/plugins/ops/topology/" target="_blank">Topology Map</a>
+    <button class="action-btn btn-reset" onclick="resetChecklist()">Reset Checklist</button>
+  </div>
+</header>
+
+<main>
+
+  <div class="progress-bar-wrap">
+    <div>
+      <strong id="progress-label">0 of 15 steps completed</strong>
+      <div style="font-size:0.8rem; color:var(--muted);">Login: <code>admin</code> / <code>admin</code> · Zero CLI or AI agents required</div>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+  </div>
+
+  <div class="note-box">
+    <strong>Before you start:</strong> NetBox is already up at <a href="http://localhost:8888" target="_blank" style="color:var(--accent);">http://localhost:8888</a>.
+    If you want to demo <strong>Day Zero from scratch</strong>, start at Step 1 (Clean Slate). If you only want to demo <strong>Day 2 Operations</strong> on the already-running 6-switch ContainerLab fabric, jump straight to <strong>Part 2</strong> below.
+  </div>
+
+  <!-- ================================================================== -->
+  <h2 class="section-title">Part 1 — Day Zero: Blank Slate to Verified EVPN/VXLAN Fabric</h2>
+  <!-- ================================================================== -->
+
+  <div class="step-card" data-step="d0-1">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 1. Clean Slate (Start Over from Zero)</label>
+      <span class="badge time">~5 sec</span>
+    </div>
+    <div class="step-body">
+      <div class="click-path">Open <strong>Network Ops &rarr; Workshop</strong> &rarr; Step 1 &rarr; click <strong>Clean Slate (Full Reset)</strong> &rarr; confirm.</div>
+      <p style="margin:0.35rem 0;">Destroys any running ContainerLab containers, deletes generated configs &amp; topology YAML, and wipes the 6 fabric devices, cables, IPs, and config contexts from NetBox. Click <strong>Back to Workshop</strong> — top counters now show <code>0/6</code>, <code>Missing</code>, <code>0/6</code>, <code>0/6</code>.</p>
+      <p class="talk-track"><strong>Talk track:</strong> "Everything is empty — no devices in NetBox, no configs on disk, no running switches. We're building the entire 2-spine, 4-leaf EVPN/VXLAN fabric from NetBox without touching a CLI."</p>
+    </div>
+  </div>
+
+  <div class="step-card" data-step="d0-2">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 2. Import Network Data into NetBox (Step 3)</label>
+      <span class="badge time">~20 sec</span>
+    </div>
+    <div class="step-body">
+      <div class="click-path">Step 3 &rarr; click <strong>Run Full Import</strong> &rarr; wait for green banner &rarr; <strong>Back to Workshop</strong>.</div>
+      <p style="margin:0.35rem 0;">Populates Site DC1, 6 Arista cEOS devices, interfaces, IPs, 12 cables, custom fields (ASN, router-id, VTEP IP), tags, and 8 config contexts. Click <strong>Browse Devices</strong> or <strong>View Topology Map</strong> to show NetBox as the Source of Truth.</p>
+      <p class="talk-track"><strong>Talk track:</strong> "NetBox now holds the entire intent — no hardcoded values in playbooks or templates."</p>
+    </div>
+  </div>
+
+  <div class="step-card" data-step="d0-3">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 3. Generate ContainerLab Topology (Step 4)</label>
+      <span class="badge time">~2 sec</span>
+    </div>
+    <div class="step-body">
+      <div class="click-path">Step 4 &rarr; click <strong>Generate Topology</strong> &rarr; <strong>Back to Workshop</strong> &rarr; click <strong>Inspect Topology YAML</strong>.</div>
+      <p style="margin:0.35rem 0;">Queries NetBox devices and cables and writes <code>clab/topology-docker.clab.yml</code> (6 nodes, 12 links).</p>
+    </div>
+  </div>
+
+  <div class="step-card" data-step="d0-4">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 4. Generate Device Configurations (Step 5)</label>
+      <span class="badge time">~18 sec</span>
+    </div>
+    <div class="step-body">
+      <div class="click-path">Step 5 &rarr; click <strong>Generate Configs</strong> &rarr; <strong>Back to Workshop</strong> &rarr; click <code>spine-01.cfg</code> and <code>leaf-01.cfg</code> chips to inspect.</div>
+      <p style="margin:0.35rem 0;">Ansible reads NetBox via dynamic inventory and renders all 6 EOS configs (BGP underlay, MLAG pair config, Vxlan1 VNI mappings, EVPN address family, tenant VLANs).</p>
+    </div>
+  </div>
+
+  <div class="step-card" data-step="d0-5">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 5. Deploy the 6-Switch ContainerLab Fabric (Step 6)</label>
+      <span class="badge time">~60s deploy + ~60s boot</span>
+    </div>
+    <div class="step-body">
+      <div class="click-path">Step 6 &rarr; click <strong>Deploy Fabric</strong> &rarr; wait for green banner &rarr; allow ~60 seconds for Arista cEOS switches to finish booting.</div>
+      <p style="margin:0.35rem 0;">Runs through the locked-down <code>lab-runner</code> sidecar — NetBox itself has no Docker socket access.</p>
+      <p class="talk-track"><strong>Talk track:</strong> "Notice the security boundary: NetBox never holds the Docker socket. It only calls fixed, allowlisted verbs on an isolated sidecar."</p>
+    </div>
+  </div>
+
+  <div class="step-card" data-step="d0-6">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 6. Push Full Configurations (Step 7)</label>
+      <span class="badge time">~5 sec</span>
+    </div>
+    <div class="step-body">
+      <div class="click-path">Step 7 &rarr; click <strong>Push Full Configs</strong> &rarr; verify all 6 switches show <code>OK</code>.</div>
+      <p style="margin:0.35rem 0;">Loads each rendered config onto all 6 running cEOS containers and saves <code>write memory</code>. Wait ~20 seconds for BGP &amp; MLAG to converge.</p>
+    </div>
+  </div>
+
+  <div class="step-card" data-step="d0-7">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 7. Live Fabric Verification over eAPI (Step 8)</label>
+      <span class="badge time">~3 sec</span>
+    </div>
+    <div class="step-body">
+      <div class="click-path">Step 8 &rarr; click <strong>Run Live Fabric Checks</strong>.</div>
+      <p style="margin:0.35rem 0;">Shows <strong>13 of 13 PASS</strong> cards live over eAPI: Spine BGP peers, all 4 Leaf MLAG Active statuses, Vxlan1/VNI table, EVPN BGP summary, Tenant VLANs &amp; VRF CORE, and 4 cross-fabric loopback pings. Expand any card's <em>Show CLI output</em> to prove it's live.</p>
+    </div>
+  </div>
+
+  <div class="step-card" data-step="d0-8">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 8. Run Full Ansible Validation Suite (Step 9)</label>
+      <span class="badge time">~20 sec</span>
+    </div>
+    <div class="step-body">
+      <div class="click-path">Step 9 &rarr; click <strong>Run Full Validation</strong>.</div>
+      <p style="margin:0.35rem 0;">Runs <code>playbooks/test_all.yml</code> across all 6 validation categories (Reachability, BGP, MLAG, Routing, Pings, VXLAN) and returns green.</p>
+    </div>
+  </div>
+
+  <!-- ================================================================== -->
+  <h2 class="section-title">Part 2 — Real-World Day 2 Operations (Source-of-Truth First)</h2>
+  <!-- ================================================================== -->
+
+  <div class="step-card" data-step="d2-0">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 9. Open Day-two actions &amp; Take a Safety Backup</label>
+      <span class="badge">Prep</span>
+    </div>
+    <div class="step-body">
+      <div class="click-path">Optional safety net: on <strong>Workshop</strong> &rarr; Day 2 bar &rarr; click <strong>4. Backup Switches</strong> (saves <code>flash:backup.cfg</code> on all 6 switches). Then open <strong>Network Ops &rarr; Day-two actions</strong>.</div>
+      <p class="talk-track"><strong>Talk track:</strong> "Every Day 2 action follows the same rule: NetBox is the menu and Source of Truth, Preview shows both the NetBox update and exact EOS CLI diff, nothing touches a switch without a named approver, and every change is audited."</p>
+    </div>
+  </div>
+
+  <div class="step-card" data-step="d2-1">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 10. Provision a New Tenant VLAN / VNI (L2 + L3 Anycast SVI)</label>
+      <span class="badge">All 4 Leaves</span>
+    </div>
+    <div class="step-body">
+      <div class="click-path">Click <strong>Provision Tenant VLAN / VNI</strong> &rarr; enter values below &rarr; <strong>Preview NetBox &amp; EOS diff</strong> &rarr; enter your name &rarr; <strong>Approve &amp; apply</strong>.</div>
+      <div class="kv-grid">
+        <div class="kv"><div><span class="lbl">VLAN ID</span><code>160</code></div><button class="copy-btn" onclick="copyText('160', this)">Copy</button></div>
+        <div class="kv"><div><span class="lbl">VLAN Name</span><code>SHOWCASE_APP</code></div><button class="copy-btn" onclick="copyText('SHOWCASE_APP', this)">Copy</button></div>
+        <div class="kv"><div><span class="lbl">Anycast Gateway</span><code>10.100.160.1/24</code></div><button class="copy-btn" onclick="copyText('10.100.160.1/24', this)">Copy</button></div>
+        <div class="kv"><div><span class="lbl">SVI MTU</span><code>9000 (jumbo)</code></div></div>
+      </div>
+      <p style="margin:0.35rem 0;">Creates IPAM VLAN 160 + updates <code>tenant-core</code> in NetBox, then pushes <code>vlan 160</code>, <code>Vxlan1 vni 10160</code>, and <code>interface Vlan160</code> in <code>vrf CORE</code> to all 4 leaves.</p>
+    </div>
+  </div>
+
+  <div class="step-card" data-step="d2-2">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 11. Configure / Reassign a Server-Facing Switch Port</label>
+      <span class="badge">leaf-01</span>
+    </div>
+    <div class="step-body">
+      <div class="click-path">Click <strong>Configure / Reassign Switch Port</strong> &rarr; pick values below &rarr; <strong>Preview</strong> &rarr; <strong>Approve &amp; apply</strong>.</div>
+      <div class="kv-grid">
+        <div class="kv"><div><span class="lbl">Leaf Switch</span><code>leaf-01</code></div></div>
+        <div class="kv"><div><span class="lbl">Interface</span><code>Ethernet6</code></div></div>
+        <div class="kv"><div><span class="lbl">Mode / VLAN</span><code>Access / VLAN 160</code></div></div>
+        <div class="kv"><div><span class="lbl">MTU / State</span><code>9214 / Enabled</code></div></div>
+        <div class="kv"><div><span class="lbl">Description</span><code>ESXi-01 NIC0</code></div><button class="copy-btn" onclick="copyText('ESXi-01 NIC0', this)">Copy</button></div>
+      </div>
+      <p class="talk-track"><strong>Talk track:</strong> "Notice that VLAN 160 immediately appeared in the dropdown because we just created it in NetBox — and spine uplinks (Ethernet1–2) and MLAG peer-links (Ethernet3–4) are protected from accidental edits."</p>
+    </div>
+  </div>
+
+  <div class="step-card" data-step="d2-3">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 12. Provision a Dual-Homed MLAG Port-Channel (with Real Jumbo MTU)</label>
+      <span class="badge">MLAG Pair 1</span>
+    </div>
+    <div class="step-body">
+      <div class="click-path">Click <strong>Provision Dual-Homed MLAG Port-Channel</strong> &rarr; pick values below &rarr; <strong>Preview</strong> &rarr; <strong>Approve &amp; apply</strong>.</div>
+      <div class="kv-grid">
+        <div class="kv"><div><span class="lbl">MLAG Pair</span><code>MLAG Pair 1 (leaf-01 + leaf-02)</code></div></div>
+        <div class="kv"><div><span class="lbl">Port-Channel / MLAG ID</span><code>10</code></div><button class="copy-btn" onclick="copyText('10', this)">Copy</button></div>
+        <div class="kv"><div><span class="lbl">Member Interface</span><code>Ethernet5</code></div></div>
+        <div class="kv"><div><span class="lbl">Allowed VLAN / MTU</span><code>VLAN 160 / 9214</code></div></div>
+        <div class="kv"><div><span class="lbl">Server / Array Name</span><code>PURE-ARRAY-01</code></div><button class="copy-btn" onclick="copyText('PURE-ARRAY-01', this)">Copy</button></div>
+      </div>
+      <p style="margin:0.35rem 0;">Creates <code>Port-Channel10</code> LAG + binds <code>Ethernet5</code> in NetBox on both leaves, and pushes symmetrical <code>mlag 10</code>, <code>channel-group 10 mode active</code>, and <code>mtu 9214</code> to both <code>leaf-01</code> and <code>leaf-02</code>.</p>
+    </div>
+  </div>
+
+  <div class="step-card" data-step="d2-4">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 13. Update Fabric Services (Add NTP Server Across All 6 Switches)</label>
+      <span class="badge">All 6 Switches</span>
+    </div>
+    <div class="step-body">
+      <div class="click-path">Click <strong>Update Fabric Services (NTP / DNS)</strong> &rarr; Service: <code>NTP Server</code>, Action: <code>Add</code>, Server IP: <code>172.30.30.10</code> &rarr; <strong>Preview</strong> &rarr; <strong>Approve &amp; apply</strong>.</div>
+      <div class="kv-grid">
+        <div class="kv"><div><span class="lbl">Server IPv4</span><code>172.30.30.10</code></div><button class="copy-btn" onclick="copyText('172.30.30.10', this)">Copy</button></div>
+      </div>
+      <p style="margin:0.35rem 0;">Updates <code>fabric-global</code> in NetBox and pushes <code>ntp server vrf MGMT 172.30.30.10</code> to both spines and all 4 leaves.</p>
+    </div>
+  </div>
+
+  <div class="step-card" data-step="d2-5">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 14. Prove It Live: Live Config + Audit Trail</label>
+      <span class="badge">Proof</span>
+    </div>
+    <div class="step-body">
+      <ul class="tight">
+        <li>Open <a href="http://localhost:8888/plugins/ops/live/" target="_blank" style="color:var(--accent);"><strong>Live config</strong></a> &rarr; inspect <code>leaf-01</code> to show <code>Port-Channel10</code> (MTU 9214, MLAG 10), <code>Ethernet6</code> (VLAN 160), and <code>Vlan160</code> (SVI <code>10.100.160.1/24</code>) live on the switch.</li>
+        <li>Open <a href="http://localhost:8888/plugins/ops/audit/" target="_blank" style="color:var(--accent);"><strong>Audit trail</strong></a> &rarr; show every approved change ID, approver name, timestamp, and NetBox update.</li>
+        <li>Optional terminal proof (only if someone asks to see the raw switch CLI):</li>
+      </ul>
+      <div class="cmd-box">
+        <span>docker exec clab-netbox-arista-lab-leaf-01 Cli -p 15 -c "show running-config interfaces Ethernet6 Port-Channel10 Vlan160"</span>
+        <button class="copy-btn" onclick="copyText('docker exec clab-netbox-arista-lab-leaf-01 Cli -p 15 -c &quot;show running-config interfaces Ethernet6 Port-Channel10 Vlan160&quot;', this)">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-card" data-step="d2-6">
+    <div class="step-head">
+      <label class="step-check"><input type="checkbox"> 15. Clean Up Demo Changes: Retire VLAN 160 &amp; Drift Check (or Rollback)</label>
+      <span class="badge">Cleanup</span>
+    </div>
+    <div class="step-body">
+      <div class="click-path">
+        <strong>Option A (show decommissioning):</strong> Click <strong>Retire Tenant VLAN / VNI</strong> &rarr; pick <code>VLAN 160 (SHOWCASE_APP)</code> &rarr; Preview &rarr; Approve &amp; apply. Then click <strong>Detect &amp; Remediate Config Drift</strong> to confirm compliance.<br>
+        <strong>Option B (instant restore):</strong> On <strong>Workshop</strong> &rarr; Day 2 bar &rarr; click <strong>Rollback to Backup</strong> to restore <code>flash:backup.cfg</code> across all 6 switches.
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================== -->
+  <h2 class="section-title">Quick Recovery Reference</h2>
+  <!-- ================================================================== -->
+  <div class="step-card" style="border-left-color: var(--amber);">
+    <ul class="tight" style="margin:0;">
+      <li><strong>Switches still booting after Step 6 Deploy?</strong> Wait ~60 seconds, then click <strong>Push Full Configs</strong> again.</li>
+      <li><strong>BGP/MLAG check fails right after Step 7 Push?</strong> Wait ~20 seconds for eBGP &amp; MLAG to converge, then click <strong>Run Live Fabric Checks</strong> again.</li>
+      <li><strong>Need to reset everything for the next audience?</strong> Open <strong>Workshop &rarr; Step 1 &rarr; Clean Slate (Full Reset)</strong>.</li>
+    </ul>
+  </div>
+
+</main>
+
+<script>
+const STORAGE_KEY = "netbox_ops_showcase_checks_v1";
+
+function loadState() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); }
+  catch { return {}; }
+}
+
+function saveState(state) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+}
+
+function updateProgress() {
+  const cards = Array.from(document.querySelectorAll(".step-card[data-step]"));
+  const done = cards.filter(c => c.querySelector("input[type=checkbox]").checked).length;
+  const pct = cards.length ? Math.round((done / cards.length) * 100) : 0;
+  document.getElementById("progress-label").textContent = `${done} of ${cards.length} steps completed`;
+  document.getElementById("progress-fill").style.width = pct + "%";
+}
+
+function initChecklist() {
+  const state = loadState();
+  document.querySelectorAll(".step-card[data-step]").forEach(card => {
+    const key = card.dataset.step;
+    const cb = card.querySelector("input[type=checkbox]");
+    if (state[key]) {
+      cb.checked = true;
+      card.classList.add("done");
+    }
+    cb.addEventListener("change", () => {
+      const s = loadState();
+      s[key] = cb.checked;
+      saveState(s);
+      card.classList.toggle("done", cb.checked);
+      updateProgress();
+    });
+  });
+  updateProgress();
+}
+
+function resetChecklist() {
+  localStorage.removeItem(STORAGE_KEY);
+  document.querySelectorAll(".step-card[data-step]").forEach(card => {
+    card.querySelector("input[type=checkbox]").checked = false;
+    card.classList.remove("done");
+  });
+  updateProgress();
+}
+
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = orig; }, 1200);
+  });
+}
+
+initChecklist();
+</script>
+</body>
+</html>

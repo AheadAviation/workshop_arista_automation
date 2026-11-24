@@ -8,7 +8,7 @@
 <div class="d-flex justify-content-between align-items-center mb-2">
   <p class="text-muted small mb-0">
     Each switch's running configuration, read live over eAPI as you load this page — not
-    cached, not stored. Watch it change as you make a change on the Change tab.
+    cached, not stored. Watch it change as you run Workshop steps or Day-two actions.
   </p>
   <button class="btn btn-sm btn-outline-secondary" type="button"
           onclick="window.location.reload()">Refresh</button>
@@ -22,6 +22,10 @@
         {{ d.device }}
         {% if d.ok %}
           <span class="badge bg-secondary ms-1">{{ d.lines }}</span>
+        {% elif d.state == 'not_deployed' %}
+          <span class="badge bg-secondary ms-1">offline</span>
+        {% elif d.state == 'booting' %}
+          <span class="badge bg-warning text-dark ms-1">booting</span>
         {% else %}
           <span class="badge bg-danger ms-1">!</span>
         {% endif %}
@@ -42,6 +46,16 @@
         </div>
         <pre class="small bg-body-tertiary border rounded p-2"
              style="max-height:34rem;overflow:auto">{{ d.config }}</pre>
+      {% elif d.state == 'not_deployed' %}
+        <div class="alert alert-secondary">
+          <strong>{{ d.headline }}</strong>
+          <div class="small mt-1">{{ d.detail }}</div>
+        </div>
+      {% elif d.state == 'booting' %}
+        <div class="alert alert-warning">
+          <strong>{{ d.headline }}</strong>
+          <div class="small mt-1">{{ d.detail }}</div>
+        </div>
       {% else %}
         <div class="alert alert-danger">
           <strong>{{ d.headline }}</strong>

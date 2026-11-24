@@ -19,9 +19,11 @@ urlpatterns = [
     path("", views.OpsHomeView.as_view(), name="home"),
 
     # One route per tab, each named, so both the nav and the tab strip can reverse them.
+    path("workshop/", views.OpsHomeView.as_view(), {"tab": "workshop"}, name="workshop"),
+    path("devices/", views.OpsHomeView.as_view(), {"tab": "devices"}, name="devices"),
     path("labs/", views.OpsHomeView.as_view(), {"tab": "labs"}, name="labs"),
     path("live/", views.OpsHomeView.as_view(), {"tab": "live"}, name="live"),
-    path("change/", views.OpsHomeView.as_view(), {"tab": "change"}, name="change"),
+    path("change/", views.OpsHomeView.as_view(), {"tab": "actions"}, name="change"),
     path("lifecycle/", views.OpsHomeView.as_view(), {"tab": "lifecycle"}, name="lifecycle"),
     path("awx/", views.OpsHomeView.as_view(), {"tab": "awx"}, name="awx"),
     path("tickets/", views.OpsHomeView.as_view(), {"tab": "tickets"}, name="tickets"),
@@ -50,4 +52,22 @@ urlpatterns = [
     path("actions/apply/", views.OperationApplyView.as_view(), name="actions_apply"),
     # The fabric topology, with the parameters netbox_topology_views needs to draw anything.
     path("topology/", views.TopologyRedirectView.as_view(), name="topology"),
+
+    # Guided Workshop Quick Start & Day-2 Operations actions (INIT-004/SPEC-003).
+    path("workshop/action/clean/", views.WorkshopCleanView.as_view(), name="workshop_clean"),
+    path("workshop/action/import/", views.WorkshopImportView.as_view(), name="workshop_import"),
+    path("workshop/action/topology/", views.WorkshopTopologyGenView.as_view(), name="workshop_topology_gen"),
+    path("workshop/action/configs/", views.WorkshopConfigsGenView.as_view(), name="workshop_configs_gen"),
+    path("workshop/action/deploy/", views.WorkshopDeployView.as_view(), name="workshop_deploy"),
+    path("workshop/action/destroy/", views.WorkshopDestroyView.as_view(), name="workshop_destroy"),
+    path("workshop/action/push/", views.WorkshopPushView.as_view(), name="workshop_push"),
+    path("workshop/action/verify/", views.WorkshopVerifyView.as_view(), name="workshop_verify"),
+    path("workshop/action/validate/", views.WorkshopValidateView.as_view(), name="workshop_validate"),
+    path("workshop/action/backup/", views.WorkshopBackupView.as_view(), name="workshop_backup"),
+    path("workshop/action/rollback/", views.WorkshopRollbackView.as_view(), name="workshop_rollback"),
+    path("workshop/action/diff/", views.WorkshopDiffView.as_view(), name="workshop_diff"),
+    path("workshop/action/standard-config/", views.WorkshopStandardConfigView.as_view(), name="workshop_standard_config"),
+    path("workshop/status.json", views.WorkshopStatusJsonView.as_view(), name="workshop_status_json"),
+    path("workshop/view/topology/", views.WorkshopTopologyInspectView.as_view(), name="workshop_topology_view"),
+    path("workshop/view/config/<str:device>/", views.WorkshopConfigInspectView.as_view(), name="workshop_config_view"),
 ]

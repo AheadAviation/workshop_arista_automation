@@ -50,28 +50,48 @@ def redact(text: str) -> str:
     return _SECRET_RE.sub(_sub, text)
 
 
-def running_config(device: str) -> dict[str, Any]:
+def running_config(device: str, *, container_up: bool | None = None) -> dict[str, Any]:
     """The device's running config, read live and redacted.
 
     Never cached. Each call is a real read, so what the page shows is what the switch is
-    configured with at that moment.
+    configured with at that moment. When a switch is not deployed yet or still booting EOS,
+    returns a clean operator-friendly state instead of a raw socket exception.
     """
-    try:
-        out = eapi_exec._eapi(device, ["enable", "show running-config"], timeout=45)
-    except eapi_exec.ApplyError as exc:
+    if container_up is False:
         return {
             "ok": False,
+            "state": "not_deployed",
             "device": device,
             "config": "",
             "lines": 0,
-            "headline": f"Could not read {device}",
-            "detail": str(exc),
+            "headline": f"{device} is not deployed yet",
+            "detail": "No running configuration exists yet. Run Workshop Step 6 (Deploy Fabric) to boot this switch.",
+        }
+
+    try:
+        out = eapi_exec._eapi(device, ["enable", "show running-config"], timeout=15)
+    except eapi_exec.ApplyError as exc:
+        msg = str(exc)
+        booting = container_up is True and ("Connection refused" in msg or "timed out" in msg)
+        return {
+            "ok": False,
+            "state": "booting" if booting else "unreachable",
+            "device": device,
+            "config": "",
+            "lines": 0,
+            "headline": f"{device} is still booting EOS" if booting else f"Could not read {device}",
+            "detail": (
+                "Container is running and EOS eAPI is initializing (~45-60s after deploy). Click Refresh in a moment."
+                if booting
+                else msg
+            ),
         }
 
     raw = out[-1] if out else ""
     text = redact(raw)
     return {
         "ok": True,
+        "state": "ready",
         "device": device,
         "config": text,
         "lines": len(text.splitlines()),
@@ -81,18 +101,41 @@ def running_config(device: str) -> dict[str, Any]:
 
 
 def running_configs(devices: list[str] | None = None) -> dict[str, Any]:
-    """Running configs for several devices at once, for the side-by-side view."""
+    """Running configs for several devices at once, read in parallel for the side-by-side view."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from . import labs
+
     targets = devices or ["spine-01", "spine-02", "leaf-01", "leaf-02", "leaf-03", "leaf-04"]
-    results = [running_config(d) for d in targets]
+
+    # Check container running state once so undeployed switches return instantly without waiting on timeouts.
+    up_map: dict[str, bool] = {}
+    try:
+        lab = labs.lab_status()
+        for node in lab.get("nodes") or []:
+            name = str(node.get("name") or "")
+            if name:
+                up_map[name] = bool(node.get("up"))
+    except Exception:
+        pass
+
+    def _read(dev: str) -> dict[str, Any]:
+        return running_config(dev, container_up=up_map.get(dev, False) if up_map else None)
+
+    with ThreadPoolExecutor(max_workers=min(len(targets), 6) or 1) as pool:
+        results = list(pool.map(_read, targets))
     readable = sum(1 for r in results if r["ok"])
+    not_deployed = sum(1 for r in results if r.get("state") == "not_deployed")
+    if readable == len(targets):
+        headline = f"Live config from all {len(targets)} devices"
+    elif not_deployed == len(targets):
+        headline = "No switches deployed yet (0 of 6 running)"
+    else:
+        headline = f"Live config from {readable} of {len(targets)} devices"
     return {
         "ok": readable == len(targets),
         "devices": results,
-        "headline": (
-            f"Live config from all {len(targets)} devices"
-            if readable == len(targets)
-            else f"Live config from {readable} of {len(targets)} devices"
-        ),
+        "headline": headline,
     }
 
 

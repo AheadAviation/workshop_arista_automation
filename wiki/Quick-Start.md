@@ -1,5 +1,7 @@
 # Full Workshop Walkthrough
 
+> **Run this entire walkthrough from NetBox (no CLI required):** Once NetBox is running (`docker compose up -d`), open **Network Ops → Workshop** in the NetBox UI (`http://localhost:8888/plugins/ops/workshop/`). Every step below — from Clean Slate (start over) through Import, Generate Topology, Generate Configs, Deploy, Push Full Configs, Live Verification, and Full Validation — can be executed with one-click buttons inside NetBox.
+
 This is the **complete, hands-on demo** — from a blank slate to a fully operational EVPN/VXLAN fabric running in Docker. Every step is shown in order. Follow this page top to bottom.
 
 **What you'll build:**

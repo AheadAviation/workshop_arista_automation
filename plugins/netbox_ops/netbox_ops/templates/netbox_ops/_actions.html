@@ -1,69 +1,49 @@
-{# The interactive day-two page (INIT-005).
-
-   Deliberately not a form. The old page asked for a switch, a VLAN number and a VLAN name as
-   three inputs, which made the operator the integration layer: they had to know which VLAN a
-   service used and which switches it belonged on, and nothing tied the value to IPAM — you could
-   configure a switch with a VLAN NetBox had never heard of.
-
-   Here, choosing an *operation* re-renders the inputs, and every input that names something in
-   NetBox is populated from NetBox. The VLAN list comes from ipam.vlan. There is nowhere to type a
-   VLAN number, because there is no reason to: the network's own record is the menu.
-
-   JavaScript is inline on purpose. This plugin has no static asset pipeline (the ZTP portal's
-   static needed pre-copying in the Dockerfile after collectstatic failed to pick it up), and a
-   demo page that cannot load its JS is a blank panel in front of a customer.
-#}
+{% comment %}
+Interactive real-world Arista EVPN/VXLAN Day-two operations page (INIT-005/SPEC-003).
+Every operation is Source-of-Truth-first: menus come live from NetBox, Preview shows both the
+NetBox update and exact per-switch EOS CLI diff, and Approve & Apply updates NetBox first,
+pushes over eAPI, verifies live state, and writes an audit record.
+{% endcomment %}
 
 <style>
-  .ops-shell { max-width: 1150px; }
-  .ops-op-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .6rem; }
-  .ops-op { border: 1px solid #dee2e6; border-radius: .5rem; padding: .7rem .85rem; cursor: pointer;
-            background: transparent; text-align: left; height: 100%; }
+  .ops-shell { max-width: 1180px; }
+  .ops-op-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: .65rem; }
+  .ops-op { border: 1px solid rgba(130, 145, 165, .35); border-radius: .5rem; padding: .8rem .95rem; cursor: pointer;
+            background: transparent; text-align: left; height: 100%; color: inherit; transition: border-color .15s, background .15s; }
   .ops-op:hover { border-color: #0d6efd; }
-  .ops-op.is-active { border-color: #0d6efd; background: rgba(13,110,253,.06); }
-  .ops-op-name { font-weight: 600; font-size: .92rem; display: block; }
-  .ops-op-sum { font-size: .78rem; color: #6c757d; display: block; margin-top: .2rem; }
-  .ops-sentence { font-size: 1.02rem; padding: .85rem 1rem; border-radius: .5rem;
-                  background: rgba(13,110,253,.07); border-left: 3px solid #0d6efd; margin: .9rem 0; }
-  .ops-sentence.is-bad { background: rgba(220,53,69,.08); border-left-color: #dc3545; }
-  .ops-device { font-size: .85rem; padding: .45rem .7rem; border-left: 3px solid #dee2e6;
-                background: rgba(0,0,0,.03); border-radius: .35rem; margin-bottom: .35rem; }
+  .ops-op.is-active { border-color: #0d6efd; background: rgba(13, 110, 253, .10); }
+  .ops-op-name { font-weight: 600; font-size: .95rem; display: block; }
+  .ops-op-sum { font-size: .8rem; opacity: .78; display: block; margin-top: .25rem; }
+  .ops-sentence { font-size: 1rem; padding: .85rem 1rem; border-radius: .5rem;
+                  background: rgba(13, 110, 253, .10); border-left: 3px solid #0d6efd; margin: .9rem 0; }
+  .ops-sentence.is-bad { background: rgba(220, 53, 69, .12); border-left-color: #dc3545; }
+  .ops-device { font-size: .85rem; padding: .55rem .75rem; border-left: 3px solid #6c757d;
+                background: rgba(255, 255, 255, .03); border-radius: .35rem; margin-bottom: .45rem; }
   .ops-device.needs-change { border-left-color: #0d6efd; }
   .ops-device.already { border-left-color: #198754; }
   .ops-device.unreachable { border-left-color: #dc3545; }
-  .ops-diff { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .78rem;
+  .ops-diff { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .8rem;
               white-space: pre; overflow-x: auto; max-height: 16rem; overflow-y: auto;
-              background: rgba(0,0,0,.04); padding: .6rem .8rem; border-radius: .35rem; }
-  .ops-diff .add { color: #198754; }
-  .ops-diff .del { color: #dc3545; }
-  .ops-muted { color: #6c757d; font-size: .8rem; }
-  .ops-field-help { font-size: .75rem; color: #6c757d; }
+              background: rgba(0, 0, 0, .28); color: #e2e8f0; padding: .6rem .8rem; border-radius: .35rem; margin-top: .4rem; }
+  .ops-diff .add { color: #4ade80; }
+  .ops-diff .del { color: #f87171; }
+  .ops-muted { opacity: .72; font-size: .82rem; }
+  .ops-field-help { opacity: .72; font-size: .76rem; margin-top: .2rem; }
 </style>
 
 <div class="ops-shell">
 
-  {% if not fabric.ok %}
-    <div class="alert alert-danger">
-      <strong>{{ fabric.headline }}</strong>
-      <div class="small mt-1">{{ fabric.detail }}</div>
-    </div>
-  {% endif %}
-
   <div class="mb-3">
     <h2 class="h4 mb-1">Day-two operations</h2>
     <p class="text-muted small mb-0">
-      Pick what needs doing. Every choice that names something in NetBox is filled from NetBox
-      &mdash; there is nowhere to type a VLAN number, because the network's own record is the menu.
+      Source-of-Truth-first operations for your Arista EVPN/VXLAN fabric. Devices, interfaces, MLAG pairs, and VLANs are populated live from NetBox. Every change previews both its NetBox update and exact EOS CLI diff before an approver applies it.
     </p>
   </div>
 
   <div class="card mb-3">
     <div class="card-body">
-      <h5 class="card-title mb-1">What needs doing?</h5>
-      <p class="ops-muted mb-2">
-        Choosing an operation changes the questions below &mdash; the work is different, so the
-        inputs are.
-      </p>
+      <h5 class="card-title mb-1">1. Choose an operation</h5>
+      <p class="ops-muted mb-3">Select a Day 2 workflow to load its live NetBox parameters.</p>
       <div id="ops-op-grid" class="ops-op-grid">
         <div class="ops-muted">Loading operations from NetBox&hellip;</div>
       </div>
@@ -72,8 +52,11 @@
 
   <div class="card mb-3" id="ops-form-card" hidden>
     <div class="card-body">
-      <h5 class="card-title mb-3" id="ops-form-title">Details</h5>
+      <h5 class="card-title mb-3" id="ops-form-title">2. Parameters</h5>
       <form id="ops-form" class="row g-3" onsubmit="return false;"></form>
+      <div class="mt-3">
+        <button class="btn btn-primary btn-sm" id="ops-preview-btn" type="button">Preview NetBox &amp; EOS diff</button>
+      </div>
     </div>
   </div>
 
@@ -82,9 +65,11 @@
   <div id="ops-preview" class="card mb-3" hidden>
     <div class="card-body">
       <div class="d-flex justify-content-between align-items-start mb-2">
-        <h5 class="card-title mb-0">What would change</h5>
+        <h5 class="card-title mb-0">3. Preview — what will change</h5>
         <span id="ops-preview-summary" class="badge bg-secondary"></span>
       </div>
+
+      <div id="ops-netbox-changes" class="mb-3"></div>
       <div id="ops-devices"></div>
 
       <div class="mt-3 pt-3 border-top" id="ops-approve-row" hidden>
@@ -92,14 +77,17 @@
           <div class="col-auto">
             <label class="form-label small text-muted" for="ops-approver">Approved by</label>
             <input class="form-control form-control-sm" id="ops-approver" placeholder="your name"
-                   autocomplete="off" style="width:12rem">
+                   autocomplete="off" style="width:14rem">
           </div>
           <div class="col-auto">
-            <button class="btn btn-sm btn-success" id="ops-apply" type="button">Approve and apply</button>
+            <button class="btn btn-sm btn-outline-primary" id="ops-apply-nb-only" type="button">Save to NetBox only (show drift)</button>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-sm btn-success" id="ops-apply" type="button">Approve &amp; apply to switches</button>
           </div>
           <div class="col">
             <div class="ops-field-help">
-              One approval covers every switch listed. Nothing is sent until this is clicked with a name.
+              Save to NetBox first to inspect drift &amp; remediate separately, or apply straight to NetBox and the live switches.
             </div>
           </div>
         </div>
@@ -107,343 +95,299 @@
     </div>
   </div>
 
-  <div id="ops-result" class="card mb-3" hidden><div class="card-body" id="ops-result-body"></div></div>
-
-  <div class="card mb-3">
-    <div class="card-body d-flex justify-content-between align-items-center">
-      <div>
-        <strong class="small">Reset the demo</strong>
-        <div class="ops-muted">Removes the changed VLAN from the trunks and clears the snapshot.</div>
-      </div>
-      <form method="post" action="{% url 'plugins:netbox_ops:reset_demo' %}">
-        {% csrf_token %}
-        <button class="btn btn-sm btn-outline-danger" type="submit">Reset</button>
-      </form>
-    </div>
+  <div id="ops-result" class="card mb-3" hidden>
+    <div class="card-body" id="ops-result-body"></div>
   </div>
 
+  <input type="hidden" id="ops-csrf" value="{{ csrf_token }}">
 </div>
 
 <script>
-(function () {
-  "use strict";
+(function() {
+  const URLS = {
+    catalogue: "{% url 'plugins:netbox_ops:actions_catalogue' %}",
+    preview: "{% url 'plugins:netbox_ops:actions_preview' %}",
+    apply: "{% url 'plugins:netbox_ops:actions_apply' %}",
+  };
 
-  var CSRF = "{{ csrf_token }}";
-  var state = { catalogue: [], operation: null, values: {}, preview: null };
+  let catalogueData = null;
+  let currentOp = null;
+  let stagedChangeId = "";
 
-  function $id(id) { return document.getElementById(id); }
+  const gridEl = document.getElementById("ops-op-grid");
+  const formCard = document.getElementById("ops-form-card");
+  const formTitle = document.getElementById("ops-form-title");
+  const formEl = document.getElementById("ops-form");
+  const previewBtn = document.getElementById("ops-preview-btn");
+  const sentenceEl = document.getElementById("ops-sentence");
+  const previewCard = document.getElementById("ops-preview");
+  const previewSummary = document.getElementById("ops-preview-summary");
+  const nbChangesEl = document.getElementById("ops-netbox-changes");
+  const devicesEl = document.getElementById("ops-devices");
+  const approveRow = document.getElementById("ops-approve-row");
+  const approverInput = document.getElementById("ops-approver");
+  const applyNbBtn = document.getElementById("ops-apply-nb-only");
+  const applyBtn = document.getElementById("ops-apply");
+  const resultCard = document.getElementById("ops-result");
+  const resultBody = document.getElementById("ops-result-body");
 
-  /* Text only, never innerHTML: these strings come from NetBox and from devices. */
-  function el(tag, cls, text) {
-    var n = document.createElement(tag);
-    if (cls) n.className = cls;
-    if (text !== undefined && text !== null) n.textContent = String(text);
-    return n;
+  function csrfToken() {
+    const el = document.getElementById("ops-csrf");
+    return el ? el.value : "";
   }
 
-  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+  function esc(str) {
+    return String(str || "").replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
 
-  function post(url, data) {
-    var body = new URLSearchParams();
-    Object.keys(data).forEach(function (k) { body.append(k, data[k] == null ? "" : data[k]); });
-    return fetch(url, {
-      method: "POST",
-      headers: { "X-CSRFToken": CSRF, "Content-Type": "application/x-www-form-urlencoded" },
-      body: body.toString()
-    }).then(function (r) {
-      return r.json().catch(function () {
-        return { ok: false, headline: "The page did not get a readable reply", detail: "" };
-      });
+  function showSentence(text, isBad) {
+    sentenceEl.hidden = false;
+    sentenceEl.className = "ops-sentence" + (isBad ? " is-bad" : "");
+    sentenceEl.textContent = text;
+  }
+
+  function renderGrid() {
+    if (!catalogueData || !catalogueData.operations) return;
+    gridEl.innerHTML = "";
+    catalogueData.operations.forEach(op => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ops-op" + (currentOp && currentOp.key === op.key ? " is-active" : "");
+      btn.innerHTML = `<span class="ops-op-name">${esc(op.name)}</span><span class="ops-op-sum">${esc(op.summary)}</span>`;
+      btn.addEventListener("click", () => selectOperation(op));
+      gridEl.appendChild(btn);
     });
   }
 
-  /* ------------------------------------------------------------ operations */
-
-  function renderOperations() {
-    var grid = $id("ops-op-grid");
-    clear(grid);
-    if (!state.catalogue.length) {
-      grid.appendChild(el("div", "ops-muted",
-        "No operations available. If IPAM is unreachable the list is empty on purpose."));
+  function populateSelect(selectEl, choices, defaultVal) {
+    selectEl.innerHTML = "";
+    if (!choices || choices.length === 0) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "— none available in NetBox —";
+      selectEl.appendChild(opt);
       return;
     }
-    state.catalogue.forEach(function (op) {
-      var active = state.operation && state.operation.key === op.key;
-      var btn = el("button", "ops-op" + (active ? " is-active" : ""));
-      btn.type = "button";
-      btn.appendChild(el("span", "ops-op-name", op.name));
-      btn.appendChild(el("span", "ops-op-sum", op.summary));
-      btn.addEventListener("click", function () { chooseOperation(op.key); });
-      grid.appendChild(btn);
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "— choose —";
+    if (!defaultVal) selectEl.appendChild(blank);
+
+    choices.forEach(ch => {
+      const opt = document.createElement("option");
+      opt.value = ch.value;
+      opt.textContent = ch.label;
+      if (defaultVal && String(ch.value) === String(defaultVal)) opt.selected = true;
+      selectEl.appendChild(opt);
     });
   }
 
-  function chooseOperation(key) {
-    state.operation = state.catalogue.filter(function (o) { return o.key === key; })[0] || null;
-    state.values = {};
-    state.preview = null;
-    $id("ops-preview").hidden = true;
-    $id("ops-result").hidden = true;
-    renderOperations();
-    renderForm();
-    updateSentence();
-  }
+  function selectOperation(op) {
+    currentOp = op;
+    stagedChangeId = "";
+    renderGrid();
+    sentenceEl.hidden = true;
+    previewCard.hidden = true;
+    resultCard.hidden = true;
+    formCard.hidden = false;
+    formTitle.textContent = "2. " + op.name;
+    formEl.innerHTML = "";
 
-  /* ---------------------------------------------------------------- fields */
+    op.fields.forEach(f => {
+      const col = document.createElement("div");
+      col.className = "col-md-4";
+      const id = "ops-field-" + f.key;
+      const label = document.createElement("label");
+      label.className = "form-label small fw-semibold";
+      label.htmlFor = id;
+      label.textContent = f.label + (f.required ? "" : " (optional)");
+      col.appendChild(label);
 
-  function renderForm() {
-    var card = $id("ops-form-card");
-    var form = $id("ops-form");
-    clear(form);
-    if (!state.operation) { card.hidden = true; return; }
-    card.hidden = false;
-    $id("ops-form-title").textContent = state.operation.name;
-
-    state.operation.fields.forEach(function (field) {
-      var wrap = el("div", "col-md-4");
-      var label = el("label", "form-label small text-muted", field.label + (field.required ? "" : " (optional)"));
-      label.setAttribute("for", "ops-f-" + field.key);
-      wrap.appendChild(label);
-
-      var select = document.createElement("select");
-      select.className = "form-select form-select-sm";
-      select.id = "ops-f-" + field.key;
-
-      var blank = document.createElement("option");
-      blank.value = "";
-      blank.textContent = field.required ? "\u2014 choose \u2014" : "\u2014 not needed \u2014";
-      select.appendChild(blank);
-
-      (field.options || []).forEach(function (opt) {
-        var o = document.createElement("option");
-        o.value = opt.value;
-        o.textContent = opt.label;
-        select.appendChild(o);
-      });
-
-      if (field.default) select.value = field.default;
-      if (state.values[field.key]) select.value = state.values[field.key];
-      if (select.value) state.values[field.key] = select.value;
-
-      select.addEventListener("change", function () {
-        state.values[field.key] = select.value;
-        state.preview = null;
-        $id("ops-preview").hidden = true;
-        updateSentence();
-      });
-
-      wrap.appendChild(select);
-      if (field.help) wrap.appendChild(el("div", "ops-field-help mt-1", field.help));
-      form.appendChild(wrap);
-    });
-
-    var row = el("div", "col-12");
-    var btn = el("button", "btn btn-sm btn-primary", "Preview the change");
-    btn.type = "button";
-    btn.addEventListener("click", doPreview);
-    row.appendChild(btn);
-    form.appendChild(row);
-  }
-
-  function requiredFilled() {
-    if (!state.operation) return false;
-    return state.operation.fields.every(function (f) {
-      return !f.required || (state.values[f.key] || "").length > 0;
-    });
-  }
-
-  function valuesPayload() {
-    var payload = { operation: state.operation ? state.operation.key : "" };
-    Object.keys(state.values).forEach(function (k) { payload[k] = state.values[k]; });
-    return payload;
-  }
-
-  /* -------------------------------------------------------------- sentence */
-
-  function updateSentence() {
-    var box = $id("ops-sentence");
-    if (!state.operation || !requiredFilled()) { box.hidden = true; return; }
-
-    post("{% url 'plugins:netbox_ops:actions_resolve' %}", valuesPayload()).then(function (res) {
-      box.hidden = false;
-      clear(box);
-      box.classList.toggle("is-bad", !res.ok);
-      if (res.ok) {
-        box.appendChild(el("strong", null, res.headline || res.sentence || ""));
-        if (res.devices && res.devices.length) {
-          box.appendChild(el("div", "ops-muted mt-1",
-            res.devices.length + " switch(es): " + res.devices.join(", ")));
-        }
+      let input;
+      if (f.source === "text" || f.source === "number") {
+        input = document.createElement("input");
+        input.type = f.source === "number" ? "number" : "text";
+        input.className = "form-control form-control-sm";
+        input.id = id;
+        input.name = f.key;
+        if (f.default) input.value = f.default;
+        if (f.placeholder) input.placeholder = f.placeholder;
       } else {
-        box.appendChild(el("strong", null, res.headline || "That is not a change that can be made"));
-        if (res.detail) box.appendChild(el("div", "ops-muted mt-1", res.detail));
+        input = document.createElement("select");
+        input.className = "form-select form-select-sm";
+        input.id = id;
+        input.name = f.key;
+        populateSelect(input, f.choices || [], f.default || "");
       }
+      col.appendChild(input);
+
+      if (f.help) {
+        const help = document.createElement("div");
+        help.className = "ops-field-help";
+        help.textContent = f.help;
+        col.appendChild(help);
+      }
+      formEl.appendChild(col);
     });
+
+    // Wire cascading device -> interface dropdown when present
+    const devSelect = document.getElementById("ops-field-device");
+    const ifaceField = op.fields.find(f => f.source === "dcim.interface");
+    const ifaceSelect = ifaceField ? document.getElementById("ops-field-" + ifaceField.key) : null;
+    if (devSelect && ifaceSelect && ifaceField.choices_by_device) {
+      devSelect.addEventListener("change", () => {
+        const list = ifaceField.choices_by_device[devSelect.value] || [];
+        populateSelect(ifaceSelect, list, "");
+      });
+    }
   }
 
-  /* --------------------------------------------------------------- preview */
-
-  function renderDiff(container, diff) {
-    var pre = el("div", "ops-diff");
-    String(diff || "").split("\n").forEach(function (line) {
-      var span = document.createElement("span");
-      span.className = line.indexOf("+") === 0 ? "add" : line.indexOf("-") === 0 ? "del" : "";
-      span.textContent = line + "\n";
-      pre.appendChild(span);
+  function collectFormValues() {
+    const fd = new FormData();
+    fd.append("csrfmiddlewaretoken", csrfToken());
+    fd.append("operation", currentOp.key);
+    currentOp.fields.forEach(f => {
+      const el = document.getElementById("ops-field-" + f.key);
+      if (el) fd.append(f.key, el.value);
     });
-    container.appendChild(pre);
+    return fd;
   }
 
-  function doPreview() {
-    var devices = $id("ops-devices");
-    $id("ops-preview").hidden = false;
-    clear(devices);
-    devices.appendChild(el("div", "ops-muted", "Working out which switches this needs\u2026"));
-    $id("ops-approve-row").hidden = true;
-
-    post("{% url 'plugins:netbox_ops:actions_preview' %}", valuesPayload()).then(function (res) {
-      clear(devices);
-      $id("ops-preview").hidden = false;
-
-      if (!res.ok) {
-        $id("ops-preview-summary").textContent = "refused";
-        devices.appendChild(el("div", "ops-sentence is-bad", res.headline || "The change was refused"));
-        if (res.detail) devices.appendChild(el("div", "ops-muted mt-1", res.detail));
+  previewBtn.addEventListener("click", async () => {
+    if (!currentOp) return;
+    previewBtn.disabled = true;
+    previewBtn.textContent = "Previewing...";
+    resultCard.hidden = true;
+    try {
+      const resp = await fetch(URLS.preview, { method: "POST", body: collectFormValues() });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) {
+        previewCard.hidden = true;
+        showSentence(data.headline || data.detail || "Preview failed", true);
         return;
       }
 
-      state.preview = res;
-      $id("ops-preview-summary").textContent =
-        res.no_drift ? "nothing to do" : (res.changed_lines || 0) + " line(s)";
+      stagedChangeId = data.change_id || "";
+      showSentence(data.sentence || data.headline, false);
+      previewCard.hidden = false;
+      previewSummary.textContent = data.headline || "";
 
-      if (res.sentence) {
-        var s = $id("ops-sentence");
-        s.hidden = false;
-        clear(s);
-        s.classList.remove("is-bad");
-        s.appendChild(el("strong", null, res.sentence));
+      const nbList = (data.netbox_changes || []).map(item => `<li>${esc(item)}</li>`).join("");
+      nbChangesEl.innerHTML = nbList
+        ? `<div class="small fw-semibold mb-1">NetBox Source-of-Truth update:</div><ul class="small mb-0">${nbList}</ul>`
+        : "";
+
+      devicesEl.innerHTML = (data.devices || []).map(d => {
+        const cls = d.status === "needs_change" ? "needs-change" : (d.status === "already" ? "already" : "unreachable");
+        const diffHtml = d.diff
+          ? `<div class="ops-diff">${d.diff.split("\n").map(ln => `<div class="${ln.startsWith("+") ? "add" : ln.startsWith("-") ? "del" : ""}">${esc(ln)}</div>`).join("")}</div>`
+          : "";
+        return `<div class="ops-device ${cls}"><strong>${esc(d.headline)}</strong>${diffHtml}</div>`;
+      }).join("");
+
+      approveRow.hidden = !(data.needs_change_count > 0);
+      if (applyNbBtn) {
+        applyNbBtn.hidden = (currentOp && currentOp.key === "remediate_drift");
       }
+    } catch (err) {
+      showSentence("Preview error: " + err, true);
+    } finally {
+      previewBtn.disabled = false;
+      previewBtn.textContent = "Preview NetBox & EOS diff";
+    }
+  });
 
-      (res.devices || []).forEach(function (d) {
-        var row = el("div", "ops-device " + (d.state || ""));
-        var head = el("div");
-        head.appendChild(el("code", null, d.device));
-        head.appendChild(el("span", "ms-2", d.detail || d.state || ""));
-        row.appendChild(head);
-        if (d.diff) {
-          var det = document.createElement("details");
-          det.appendChild(el("summary", "ops-field-help", "Show the change"));
-          renderDiff(det, d.diff);
-          row.appendChild(det);
-        }
-        devices.appendChild(row);
-      });
-
-      if (res.unreachable && res.unreachable.length) {
-        devices.appendChild(el("div", "ops-muted mt-2", "Did not answer: " + res.unreachable.join(", ")));
-      }
-
-      if (res.no_drift) {
-        devices.appendChild(el("div", "ops-muted mt-2",
-          "Nothing to approve \u2014 the network already matches this."));
-      } else {
-        $id("ops-approve-row").hidden = false;
-        var n = (res.to_change || []).length;
-        $id("ops-apply").textContent = n === 1
-          ? "Approve and apply to 1 switch"
-          : "Approve and apply to " + n + " switches";
-      }
-    });
-  }
-
-  /* ----------------------------------------------------------------- apply */
-
-  function doApply() {
-    var approver = ($id("ops-approver").value || "").trim();
+  async function submitApply(netboxOnly) {
+    if (!currentOp || !stagedChangeId) return;
+    const approver = (approverInput.value || "").trim();
     if (!approver) {
-      $id("ops-approver").focus();
-      $id("ops-approver").classList.add("is-invalid");
+      showSentence("Enter your name in 'Approved by' before applying.", true);
       return;
     }
-    $id("ops-approver").classList.remove("is-invalid");
+    applyBtn.disabled = true;
+    if (applyNbBtn) applyNbBtn.disabled = true;
+    const activeBtn = netboxOnly ? applyNbBtn : applyBtn;
+    const origLabel = activeBtn.textContent;
+    activeBtn.textContent = netboxOnly ? "Saving to NetBox..." : "Applying...";
+    try {
+      const fd = new FormData();
+      fd.append("csrfmiddlewaretoken", csrfToken());
+      fd.append("operation", currentOp.key);
+      fd.append("change_id", stagedChangeId);
+      fd.append("approver", approver);
+      fd.append("netbox_only", netboxOnly ? "1" : "0");
 
-    var body = $id("ops-result-body");
-    $id("ops-result").hidden = false;
-    clear(body);
-    body.appendChild(el("div", "ops-muted", "Applying to every switch in scope\u2026"));
-
-    var payload = valuesPayload();
-    payload.change_id = state.preview.change_id;
-    payload.approver = approver;
-
-    post("{% url 'plugins:netbox_ops:actions_apply' %}", payload).then(function (res) {
-      clear(body);
-      body.appendChild(el("h5", "card-title " + (res.ok ? "text-success" : "text-danger"),
-        res.headline || ""));
-      if (res.detail) body.appendChild(el("div", "ops-muted mb-2", res.detail));
-
-      (res.applied || []).forEach(function (a) {
-        var row = el("div", "ops-device needs-change");
-        row.appendChild(el("code", null, a.device));
-        row.appendChild(el("span", "ms-2", "applied and read back"));
-        if (a.diff) {
-          var det = document.createElement("details");
-          det.appendChild(el("summary", "ops-field-help", "Show what the switch became"));
-          renderDiff(det, a.diff);
-          row.appendChild(det);
-        }
-        body.appendChild(row);
-      });
-
-      (res.no_op || []).forEach(function (a) {
-        var row = el("div", "ops-device already");
-        row.appendChild(el("code", null, a.device));
-        row.appendChild(el("span", "ms-2", "already matched \u2014 nothing sent"));
-        body.appendChild(row);
-      });
-
-      (res.failures || []).forEach(function (f) {
-        var row = el("div", "ops-device unreachable");
-        row.appendChild(el("code", null, f.device));
-        row.appendChild(el("span", "ms-2", f.detail || "failed"));
-        body.appendChild(row);
-      });
-
-      if (res.ipam) {
-        body.appendChild(el("div", "ops-muted mt-2", res.ipam.ok
-          ? "NetBox records it: " + (res.ipam.updated || []).join(", ")
-          : "NetBox could not be updated: " + (res.ipam.note || "")));
+      const resp = await fetch(URLS.apply, { method: "POST", body: fd });
+      const data = await resp.json();
+      resultCard.hidden = false;
+      const alertCls = data.ok ? "alert-success" : "alert-danger";
+      const devRows = (data.devices || []).map(d =>
+        `<li><code>${esc(d.device)}</code>: ${d.ok ? "OK" : "FAIL"} — ${esc(d.headline)}</li>`
+      ).join("");
+      const nbRows = (data.netbox_notes || []).map(n => `<li>${esc(n)}</li>`).join("");
+      const driftBtnHtml = (data.ok && data.netbox_only)
+        ? `<div class="mt-2"><button class="btn btn-sm btn-primary" type="button" id="ops-jump-drift">Inspect Drift &amp; Remediate Now &rarr;</button></div>`
+        : "";
+      resultBody.innerHTML = `
+        <div class="alert ${alertCls} mb-2">
+          <strong>${esc(data.headline || "Done")}</strong>
+          ${data.detail ? `<div class="small mt-1">${esc(data.detail)}</div>` : ""}
+        </div>
+        ${nbRows ? `<div class="small fw-semibold">NetBox updates:</div><ul class="small">${nbRows}</ul>` : ""}
+        ${devRows ? `<div class="small fw-semibold">Switch results:</div><ul class="small mb-0">${devRows}</ul>` : ""}
+        ${driftBtnHtml}
+      `;
+      const jumpBtn = document.getElementById("ops-jump-drift");
+      if (jumpBtn) {
+        jumpBtn.addEventListener("click", () => {
+          const driftOp = (catalogueData && catalogueData.operations || []).find(o => o.key === "remediate_drift");
+          if (driftOp) {
+            selectOperation(driftOp);
+            const targetSel = document.getElementById("ops-field-target");
+            if (targetSel) targetSel.value = "all-fabric";
+            previewBtn.click();
+          }
+        });
       }
-
-      body.appendChild(el("div", "ops-muted mt-2",
-        "Recorded against " + (res.approver || approver) + ". See the Audit trail tab."));
-    });
+      if (data.ok) {
+        stagedChangeId = "";
+        approveRow.hidden = true;
+        loadCatalogue(false);
+      }
+    } catch (err) {
+      showSentence("Apply error: " + err, true);
+    } finally {
+      applyBtn.disabled = false;
+      if (applyNbBtn) applyNbBtn.disabled = false;
+      activeBtn.textContent = origLabel;
+    }
   }
 
-  /* ------------------------------------------------------------------ init */
-
-  function init() {
-    $id("ops-apply").addEventListener("click", doApply);
-
-    fetch("{% url 'plugins:netbox_ops:actions_catalogue' %}", { headers: { "Accept": "application/json" } })
-      .then(function (r) { return r.json(); })
-      .then(function (res) {
-        state.catalogue = (res && res.operations) || [];
-        renderOperations();
-        if (state.catalogue.length) chooseOperation(state.catalogue[0].key);
-      })
-      .catch(function () {
-        var grid = $id("ops-op-grid");
-        clear(grid);
-        grid.appendChild(el("div", "ops-muted",
-          "Could not load the operation list. Check that NetBox can reach its own IPAM."));
-      });
+  applyBtn.addEventListener("click", () => submitApply(false));
+  if (applyNbBtn) {
+    applyNbBtn.addEventListener("click", () => submitApply(true));
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
+  async function loadCatalogue(selectFirst) {
+    try {
+      const resp = await fetch(URLS.catalogue);
+      const data = await resp.json();
+      if (!data.ok) {
+        gridEl.innerHTML = `<div class="alert alert-danger mb-0">${esc(data.headline || "Could not load operations")}</div>`;
+        return;
+      }
+      catalogueData = data;
+      renderGrid();
+      if (selectFirst && data.operations && data.operations.length > 0) {
+        selectOperation(data.operations[0]);
+      }
+    } catch (err) {
+      gridEl.innerHTML = `<div class="alert alert-danger mb-0">Failed to load Day 2 catalogue: ${esc(err)}</div>`;
+    }
   }
+
+  loadCatalogue(true);
 })();
 </script>

@@ -40,10 +40,10 @@ class OpsHomeView(ReadOnlyOperatorMixin, View):
     #: reverse a route carrying a query string or an argument from the nav, so each tab is a
     #: named route of its own.
     TABS = (
-        ("devices", "Devices", "home"),
+        ("workshop", "Workshop", "workshop"),
+        ("devices", "Devices", "devices"),
         ("actions", "Day-two actions", "actions"),
         ("live", "Live config", "live"),
-        ("change", "Change (classic)", "change"),
         ("labs", "Container labs", "labs"),
         ("lifecycle", "Lifecycle", "lifecycle"),
         ("awx", "AWX jobs", "awx"),
@@ -84,14 +84,15 @@ class OpsHomeView(ReadOnlyOperatorMixin, View):
     def _render_tab(self, request, tab: str, context: dict):
         # Load only the tab being shown. Each of these can take seconds against real devices,
         # and loading all six on every request would make the page feel broken.
-        if tab == "devices":
+        if tab == "workshop":
+            context["workshop"] = engine.workshop_status().to_dict()
+        elif tab == "devices":
             context["fabric"] = engine.fabric_overview().to_dict()
             context["setup"] = engine.devices_status().to_dict()
         elif tab == "actions":
-            # The interactive page fetches its own data via JSON, so the server only needs the
-            # fabric state for its "is anything reachable" banner. Loading the catalogue here
-            # would duplicate the call the page makes on load.
-            context["fabric"] = engine.fabric_overview().to_dict()
+            # The interactive Day-two actions page fetches its own live NetBox catalogue via JSON;
+            # skipping `fabric_overview()` avoids 10s of sequential eAPI polling on tab open.
+            pass
         elif tab == "labs":
             context["lab"] = engine.lab_status().to_dict()
         elif tab == "live":
@@ -477,7 +478,8 @@ class OperationApplyView(ChangeOperatorMixin, View):
                 status=400,
             )
 
-        result = engine.apply_operation(operation, {}, approver, change_id)
+        netbox_only = str(request.POST.get("netbox_only") or "0").strip().lower() in ("1", "true", "yes")
+        result = engine.apply_operation(operation, {}, approver, change_id, netbox_only=netbox_only)
         status = 200 if result.ok else 400
         return JsonResponse(result.to_dict(), status=status)
 
@@ -513,5 +515,209 @@ class StatusJsonView(ReadOnlyOperatorMixin, View):
             "labs": engine.lab_status().to_dict(),
             "awx": engine.awx_status().to_dict(),
             "itsm": engine.itsm_status().to_dict(),
+            "workshop": engine.workshop_status().to_dict(),
         }
         return JsonResponse(payload)
+
+
+# --------------------------------------------------------------------------- #
+# Guided Workshop Quick Start & Day-2 Operations views (INIT-004/SPEC-003)
+# --------------------------------------------------------------------------- #
+
+
+def _render_workshop_result(request, title: str, result: engine.OpsResult, *, kind: str = "generic"):
+    """Render any workshop action result cleanly inside NetBox's layout."""
+    return render(
+        request,
+        "netbox_ops/_workshop_result.html",
+        {
+            "title": title,
+            "kind": kind,
+            "result": result.to_dict(),
+        },
+    )
+
+
+@method_decorator(csrf_protect, name="post")
+class WorkshopCleanView(ChangeOperatorMixin, View):
+    """Step 1: destroy lab, delete generated files, and optionally wipe NetBox fabric data."""
+
+    def post(self, request, *args, **kwargs):
+        clear_netbox = str(request.POST.get("clear_netbox", "1")).strip().lower() not in ("0", "false", "no")
+        result = engine.workshop_clean(clear_netbox=clear_netbox)
+        return _render_workshop_result(request, "Step 1 — Clean Slate", result)
+
+
+@method_decorator(csrf_protect, name="post")
+class WorkshopImportView(ChangeOperatorMixin, View):
+    """Step 3: import the fabric topology into NetBox via `scripts/full_import.py`."""
+
+    def post(self, request, *args, **kwargs):
+        result = engine.workshop_import()
+        return _render_workshop_result(request, "Step 3 — Import Network Data into NetBox", result)
+
+
+@method_decorator(csrf_protect, name="post")
+class WorkshopTopologyGenView(ChangeOperatorMixin, View):
+    """Step 4: generate `clab/topology-docker.clab.yml` from NetBox."""
+
+    def post(self, request, *args, **kwargs):
+        result = engine.workshop_generate_topology()
+        return _render_workshop_result(request, "Step 4 — Generate ContainerLab Topology", result)
+
+
+@method_decorator(csrf_protect, name="post")
+class WorkshopConfigsGenView(ChangeOperatorMixin, View):
+    """Step 5 / Day 2: generate all 6 Arista EOS configs via Ansible."""
+
+    def post(self, request, *args, **kwargs):
+        result = engine.workshop_generate_configs()
+        return _render_workshop_result(request, "Step 5 — Generate Device Configurations", result)
+
+
+@method_decorator(csrf_protect, name="post")
+class WorkshopDeployView(ChangeOperatorMixin, View):
+    """Step 6: deploy the generated `topology-docker.clab.yml` in ContainerLab."""
+
+    def post(self, request, *args, **kwargs):
+        result = engine.workshop_deploy()
+        return _render_workshop_result(request, "Step 6 — Deploy ContainerLab Fabric", result)
+
+
+@method_decorator(csrf_protect, name="post")
+class WorkshopDestroyView(ChangeOperatorMixin, View):
+    """Cleanup: destroy the running ContainerLab fabric."""
+
+    def post(self, request, *args, **kwargs):
+        result = engine.workshop_destroy()
+        return _render_workshop_result(request, "Destroy ContainerLab Fabric", result)
+
+
+@method_decorator(csrf_protect, name="post")
+class WorkshopPushView(ChangeOperatorMixin, View):
+    """Step 7 / Day 2: push full rendered configs to all 6 switches."""
+
+    def post(self, request, *args, **kwargs):
+        result = engine.workshop_push_configs()
+        return _render_workshop_result(
+            request, "Step 7 — Push Full Configurations", result, kind="devices"
+        )
+
+
+class WorkshopVerifyView(ReadOnlyOperatorMixin, View):
+    """Step 8: live BGP, MLAG, VXLAN, EVPN, VLAN/VRF, and fabric ping checks over eAPI."""
+
+    def get(self, request, *args, **kwargs):
+        result = engine.workshop_verify()
+        return _render_workshop_result(
+            request, "Step 8 — Live Fabric Verification", result, kind="checks"
+        )
+
+    def post(self, request, *args, **kwargs):
+        return self.get(request, *args, **kwargs)
+
+
+@method_decorator(csrf_protect, name="post")
+class WorkshopValidateView(ChangeOperatorMixin, View):
+    """Step 9 / Day 2: run `playbooks/test_all.yml` (full or quick)."""
+
+    def post(self, request, *args, **kwargs):
+        quick = str(request.POST.get("quick", "0")).strip().lower() in ("1", "true", "yes")
+        result = engine.workshop_validate(quick=quick)
+        title = "Day 2 — Quick Validation Suite" if quick else "Step 9 — Full Validation Suite"
+        return _render_workshop_result(request, title, result)
+
+
+@method_decorator(csrf_protect, name="post")
+class WorkshopBackupView(ChangeOperatorMixin, View):
+    """Day 2: save running-config to `flash:backup.cfg` on all 6 switches."""
+
+    def post(self, request, *args, **kwargs):
+        result = engine.workshop_backup()
+        return _render_workshop_result(
+            request, "Day 2 — Backup Switch Configs", result, kind="devices"
+        )
+
+
+@method_decorator(csrf_protect, name="post")
+class WorkshopRollbackView(ChangeOperatorMixin, View):
+    """Day 2: restore `flash:backup.cfg` on all 6 switches via `configure replace`."""
+
+    def post(self, request, *args, **kwargs):
+        result = engine.workshop_rollback()
+        return _render_workshop_result(
+            request, "Day 2 — Rollback Switch Configs", result, kind="devices"
+        )
+
+
+class WorkshopDiffView(ReadOnlyOperatorMixin, View):
+    """Day 2: diff each switch's live running config against its generated config."""
+
+    def get(self, request, *args, **kwargs):
+        result = engine.workshop_diffs()
+        return _render_workshop_result(
+            request, "Day 2 — Running vs. Generated Config Diff", result, kind="diffs"
+        )
+
+
+class WorkshopTopologyInspectView(ReadOnlyOperatorMixin, View):
+    """Step 4: inspect generated `topology-docker.clab.yml`."""
+
+    def get(self, request, *args, **kwargs):
+        result = engine.workshop_read_topology()
+        return _render_workshop_result(
+            request, "Generated ContainerLab Topology", result, kind="file"
+        )
+
+
+class WorkshopConfigInspectView(ReadOnlyOperatorMixin, View):
+    """Step 5: inspect one generated device `.cfg` file."""
+
+    def get(self, request, device: str, *args, **kwargs):
+        result = engine.workshop_read_config(device)
+        return _render_workshop_result(
+            request, f"Generated Config — {device}", result, kind="file"
+        )
+
+
+class WorkshopStatusJsonView(ReadOnlyOperatorMixin, View):
+    """Fast live status JSON for Workshop KPIs & step badges (no AWX/ITSM overhead)."""
+
+    def get(self, request, *args, **kwargs):
+        return JsonResponse(engine.workshop_status().to_dict())
+
+
+@method_decorator(csrf_protect, name="post")
+class WorkshopStandardConfigView(ChangeOperatorMixin, View):
+    """Step 10: preview, save to NetBox only, or apply standard fabric baseline (Syslog, SNMP, NTP, DNS, LLDP, Hardening)."""
+
+    def post(self, request, *args, **kwargs):
+        mode = str(request.POST.get("mode") or "apply").strip().lower()
+        params = {
+            k: v
+            for k, v in request.POST.items()
+            if k not in ("csrfmiddlewaretoken", "mode")
+        }
+        if mode == "preview":
+            result = engine.workshop_preview_standard_config(params)
+            return _render_workshop_result(
+                request,
+                "Step 10 — Preview Standard Fabric Config",
+                result,
+                kind="diffs",
+            )
+        if mode == "netbox_only":
+            result = engine.workshop_apply_standard_config(params, netbox_only=True)
+            return _render_workshop_result(
+                request,
+                "Step 10 — Standard Fabric Config (Saved to NetBox Only)",
+                result,
+                kind="generic",
+            )
+        result = engine.workshop_apply_standard_config(params, netbox_only=False)
+        return _render_workshop_result(
+            request,
+            "Step 10 — Apply Standard Fabric Config",
+            result,
+            kind="devices",
+        )
