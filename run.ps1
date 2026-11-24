@@ -75,6 +75,9 @@ Optional add-on - Autonomy Workbench (executive demo; see wiki/Autonomy-Workbenc
   eapi               Turn eAPI on so NetBox can read the switches (run after workbench-lab)
   itsm               Start Zammad for the ticket story (http://localhost:8090)
   itsm-down          Stop Zammad, leaving NetBox and its data alone
+  tickets            Seed the demo ticket queue (idempotent; --list, --reset)
+  verify-change      Prove change control end to end, including the refusals
+  clean-fabric       Return the demo trunks to their starting state (--apply)
   workbench-live     The real rehearsal: walk the demo against the live switches
   workbench-walk     Prove the demo flow with no lab running (no switches needed)
   workbench-check    Is the lab ready to present from?
@@ -310,6 +313,29 @@ for cfg in sorted(Path('output/configs').glob('*.cfg')):
         # cannot work until this runs. It waits for the schema rather than assuming it.
         Write-Host "`nConfiguring Zammad (first run takes a few minutes)..." -ForegroundColor Cyan
         python scripts/zammad_setup.py
+        exit $LASTEXITCODE
+    }
+
+    "tickets" {
+        # The Tickets tab is a demo surface; an almost-empty list makes the integration look
+        # theoretical. This seeds the queue a hospital network team would plausibly have open,
+        # then applies the states the seed describes (Zammad always creates in `new`).
+        python scripts/seed_tickets.py @Rest
+        exit $LASTEXITCODE
+    }
+
+    "verify-change" {
+        # Proves the gate refuses what it must, then walks a real change through a real ticket.
+        # The refusals are the point: a demo of the happy path only proves the buttons work.
+        Write-Host "Verifying change control end to end..." -ForegroundColor Cyan
+        python scripts/verify_change_control.py @Rest
+        exit $LASTEXITCODE
+    }
+
+    "clean-fabric" {
+        # Removes the residue that testing leaves behind. `workbench-reset` is additive by
+        # design and will never take a VLAN away, so this is the explicit opposite.
+        python scripts/clean_demo_fabric.py @Rest
         exit $LASTEXITCODE
     }
 

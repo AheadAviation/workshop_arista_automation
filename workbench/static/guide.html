@@ -538,8 +538,8 @@
                   config as the before-state and shows the diff.</li>
                 <li>Step 2 &mdash; <strong>Open the ticket</strong>. A real Zammad ticket with
                   the diff in the body.</li>
-                <li>Step 3 &mdash; type your name, <strong>select that ticket</strong> in the
-                  dropdown, then <strong>Approve &amp; push</strong>.</li>
+                <li>Step 3 &mdash; type your name, <strong>choose that ticket</strong>, then
+                  <strong>Approve &amp; push</strong>.</li>
               </ol>
               <p class="step-class-good">
                 <strong>Good:</strong> step 3 shows the switch's own config before and after,
@@ -547,9 +547,11 @@
                 then closed. All three are read back, not asserted.
               </p>
               <p class="step-note">
-                Selecting the ticket is what makes the state changes happen. Without it the
-                push still works &mdash; it just has no ticket to move, which is a quieter
-                demo than you want.
+                <strong>Choosing the ticket is not optional.</strong> Step 3 refuses to push
+                without one, and says so. That refusal is the demo's best answer to "how do
+                you know nobody changed the network without a change record?" &mdash; it is
+                worth triggering on purpose once, because a button that cannot act without a
+                ticket is more persuasive than a slide claiming it cannot.
               </p>
             </div>
           </li>
@@ -709,6 +711,18 @@
             <tr>
               <td>Ticket creation fails with 403</td>
               <td>The Zammad user has no <em>group</em> access. Roles alone are not enough; the setup script sets it. Re-run it.</td>
+            </tr>
+            <tr>
+              <td>Step 3 refuses: "A change ticket is required"</td>
+              <td>Working as intended. Choose the ticket from step 2. Worth showing on purpose.</td>
+            </tr>
+            <tr>
+              <td>Ticket queue is empty or looks untidy</td>
+              <td><span class="mono">.\run.ps1 tickets</span> seeds a realistic queue (idempotent).</td>
+            </tr>
+            <tr>
+              <td>Leaves carry VLANs from testing</td>
+              <td><span class="mono">.\run.ps1 clean-fabric --apply</span> returns the trunks to their declared state.</td>
             </tr>
             <tr>
               <td>Ticket links are dead</td>

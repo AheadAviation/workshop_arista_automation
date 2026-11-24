@@ -126,6 +126,35 @@ def status() -> dict[str, Any]:
     }
 
 
+def _state_names(session, base: str) -> dict[int, str]:
+    """Map ticket state ids to their names, so the page can say "open" instead of "state 4".
+
+    Zammad's ticket list returns `state_id` but not always a usable `state` string, and the
+    earlier version fell back to printing `state 4` — which is what a CISO would see on a page
+    whose entire purpose is to show that the approval process is legible.
+
+    One extra call per listing, cached for the duration of that call. A failure returns an empty
+    map and the page degrades to the id rather than failing.
+    """
+    import requests
+
+    try:
+        response = session.get(f"{base}/api/v1/ticket_states", timeout=15)
+    except requests.RequestException:
+        return {}
+    if response.status_code != 200:
+        return {}
+    try:
+        states = response.json()
+    except ValueError:
+        return {}
+    return {
+        int(state["id"]): str(state.get("name") or "")
+        for state in (states if isinstance(states, list) else [])
+        if state.get("id") is not None
+    }
+
+
 def tickets(limit: int = 25) -> dict[str, Any]:
     """Recent tickets, newest first."""
     try:
@@ -135,21 +164,30 @@ def tickets(limit: int = 25) -> dict[str, Any]:
     except ItsmError as exc:
         return {"ok": False, "configured": True, "tickets": [], "headline": "Could not read tickets", "detail": str(exc)}
 
+    try:
+        session, base = _session_and_base()
+        names = _state_names(session, base)
+    except ItsmError:
+        names = {}
+
     items = payload.get("tickets") if isinstance(payload, dict) else payload
     tickets_out: list[dict[str, Any]] = []
     for item in items or []:
         if not isinstance(item, dict):
             continue
-        # Zammad returns state/priority as *ids*, not names. Resolving them costs extra calls
-        # per ticket, so the raw id is shown with a readable fallback rather than pretending
-        # to know the name.
-        state = item.get("state_id")
+        state_id = item.get("state_id")
+        state_label = (
+            item.get("state")
+            or (names.get(int(state_id)) if state_id is not None else None)
+            or (f"state {state_id}" if state_id else "")
+        )
         tickets_out.append(
             {
                 "id": item.get("id"),
                 "number": item.get("number") or "",
                 "title": item.get("title") or "",
-                "state": item.get("state") or (f"state {state}" if state else ""),
+                "state": state_label,
+                "state_id": state_id,
                 "priority": item.get("priority") or "",
                 "group": item.get("group") or "",
                 "created_at": item.get("created_at") or "",

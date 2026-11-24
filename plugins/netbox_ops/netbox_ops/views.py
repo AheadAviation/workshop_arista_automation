@@ -351,6 +351,27 @@ class ApproveAndPushView(ChangeOperatorMixin, View):
         except (TypeError, ValueError):
             ticket_id = None
 
+        # Refuse before reaching the engine, so the reason is rendered next to the button
+        # instead of buried. The engine refuses too; this is the second lock, not the only one.
+        if not ticket_id:
+            return render(
+                request,
+                "netbox_ops/_flow_result.html",
+                {
+                    "result": {
+                        "ok": False,
+                        "headline": "A change ticket is required",
+                        "detail": (
+                            "Choose the ticket this change was requested under, or use step 2 "
+                            "to open one. Nothing is sent to a device without a change record."
+                        ),
+                    },
+                    "device": device,
+                    "step": "push",
+                },
+                status=400,
+            )
+
         return render(
             request,
             "netbox_ops/_flow_result.html",

@@ -126,6 +126,16 @@ def approve_and_push(
 
     The push is what makes this a deployment rather than a record of one. The diff and the
     read-back are what make it verifiable rather than a claim.
+
+    **A ticket is mandatory, and that is the whole point of this module.** An earlier version
+    treated `ticket_id` as optional and pushed happily without one — verified by pushing VLAN
+    347 to leaf-02 with `ticket_id=None`, which returned `applied: True, verified: True`. A
+    change that can reach a switch with no change record is not change control, it is a button
+    with an audit line attached, and no network director would accept it. The ticket is what
+    turns "somebody clicked approve" into "this change exists in the system our process governs".
+
+    The refusal is explicit rather than a silent downgrade, because the alternative — pushing
+    anyway and annotating — is the failure mode this exists to prevent.
     """
     if not approver or not approver.strip():
         return {
@@ -134,13 +144,35 @@ def approve_and_push(
             "detail": "No change is applied without a named person on the record.",
         }
 
-    # Approve in the ticket first, when there is one: the record of the decision belongs in
-    # the customer's system of record, not only in ours.
-    ticket_result: dict[str, Any] = {}
-    if ticket_id:
-        ticket_result = itsm.approve_ticket(
-            int(ticket_id), f"Approved by {approver.strip()} via NetBox Ops"
-        )
+    if not ticket_id:
+        # Not a warning. A change without a change record is the thing this flow is for.
+        return {
+            "ok": False,
+            "refused": True,
+            "headline": "A change ticket is required",
+            "detail": (
+                "Request the change first (step 2), then approve it against that ticket. "
+                "Nothing is sent to a device without a change record behind it."
+            ),
+        }
+
+    # Approve in the ticket first: the record of the decision belongs in the customer's system
+    # of record, not only in ours. A failure here is fatal to the change, because approving in
+    # NetBox while the ticket says otherwise would leave the two disagreeing — which is worse
+    # than not changing anything.
+    ticket_result = itsm.approve_ticket(
+        int(ticket_id), f"Approved by {approver.strip()} via NetBox Ops"
+    )
+    if not ticket_result.get("ok"):
+        return {
+            "ok": False,
+            "refused": True,
+            "headline": "The ticket could not be approved, so the change was not applied",
+            "detail": (
+                f"Ticket {ticket_id}: {ticket_result.get('headline', 'refused')} "
+                f"{ticket_result.get('detail', '')}".strip()
+            ),
+        }
 
     # The push itself.
     applied = engine.approve_vlan(
@@ -168,18 +200,32 @@ def approve_and_push(
     # approval alone would claim success before there is any evidence of it, which is the exact
     # thing the rest of this flow exists to avoid.
     closed = False
-    if ticket_id and verified and applied.ok:
+    close_headline = ""
+    if verified and applied.ok:
         close_result = itsm.close_ticket(
             int(ticket_id),
             f"Change applied to {device} and verified: VLAN {vlan or conf.demo_vlan()}",
         )
         closed = bool(close_result.get("ok"))
+        close_headline = str(close_result.get("headline") or "")
+    elif applied.ok:
+        # The change went in but the read-back disagrees. Leave the ticket OPEN: a closed ticket
+        # would assert a success nobody has evidence for.
+        close_headline = (
+            "change applied but not verified, so the ticket was left open for investigation"
+        )
+
+    # The note describes the *outcome*, not just the approval. Reporting the approval here was a
+    # real defect: a change that could not be verified closed nothing yet said "approved", which
+    # reads as success.
+    note = close_headline or str(ticket_result.get("headline") or "")
 
     return {
         "ok": applied.ok,
         "applied": bool((applied.data or {}).get("applied")),
         "approver": approver.strip(),
         "device": device,
+        "ticket_id": int(ticket_id),
         "headline": applied.headline or "Change applied",
         "detail": applied.detail or "",
         "config_diff": diff.get("diff") or "",
@@ -188,7 +234,7 @@ def approve_and_push(
         "verified": verified,
         "ticket_state_changed": bool(ticket_result.get("state_changed")),
         "ticket_closed": closed,
-        "ticket_note": ticket_result.get("headline", ""),
+        "ticket_note": note,
     }
 
 

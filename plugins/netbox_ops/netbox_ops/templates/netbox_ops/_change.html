@@ -123,12 +123,19 @@
       </div>
       <div class="col-auto">
         <label class="form-label small text-muted" for="push-ticket">Ticket</label>
-        <select class="form-select form-select-sm" id="push-ticket" name="ticket_id">
-          <option value="">— none —</option>
-          {% for t in tickets.tickets %}
-            <option value="{{ t.id }}">{{ t.number }} · {{ t.title|truncatechars:40 }}</option>
-          {% endfor %}
+        <select class="form-select form-select-sm" id="push-ticket" name="ticket_id" required>
+          {% if not tickets.tickets %}
+            <option value="">— request the change first —</option>
+          {% else %}
+            <option value="">— choose the ticket —</option>
+            {% for t in tickets.tickets %}
+              <option value="{{ t.id }}">{{ t.number }} · {{ t.title|truncatechars:40 }}</option>
+            {% endfor %}
+          {% endif %}
         </select>
+        <div class="form-text small">
+          Required. A change cannot be pushed without a change record behind it.
+        </div>
       </div>
       <div class="col-auto">
         <button class="btn btn-sm btn-success" type="submit">Approve &amp; push</button>
