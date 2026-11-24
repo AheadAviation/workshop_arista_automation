@@ -1,0 +1,88 @@
+{% if not result.ok %}
+  <div class="alert alert-danger">
+    <strong>{{ result.headline }}</strong>
+    {% if result.detail %}<div class="small mt-1">{{ result.detail }}</div>{% endif %}
+  </div>
+
+{% elif result.no_drift %}
+  <div class="alert alert-warning">
+    <strong>{{ result.headline }}</strong>
+    {% if result.detail %}<div class="small mt-1">{{ result.detail }}</div>{% endif %}
+  </div>
+
+{% else %}
+
+  {% if step == 'begin' %}
+    <div class="alert alert-info">
+      <strong>{{ result.headline }}</strong>
+      <div class="small mt-1">
+        Snapshot held: {{ result.snapshot_lines }} lines. Change to apply:
+        {{ result.proposed_changes }} line(s) — VLAN {{ result.vlan }} ({{ result.vlan_name }}).
+      </div>
+    </div>
+    {% if result.proposed_diff %}
+      <div class="small text-muted mb-1">What would change</div>
+      <pre class="small bg-body-tertiary border rounded p-2 mb-3"
+           style="max-height:18rem;overflow:auto">{{ result.proposed_diff }}</pre>
+    {% endif %}
+
+  {% elif step == 'request' %}
+    <div class="alert {% if result.ticket_id %}alert-success{% else %}alert-warning{% endif %}">
+      <strong>{{ result.headline }}</strong>
+      {% if result.detail %}<div class="small mt-1">{{ result.detail }}</div>{% endif %}
+      {% if result.number %}
+        <div class="small mt-1">
+          Ticket <strong>{{ result.number }}</strong> is now open in ITSM. Find it on the
+          <a href="{% url 'plugins:netbox_ops:tickets' %}">ITSM tickets</a> tab.
+        </div>
+      {% endif %}
+    </div>
+    {% if result.diff %}
+      <div class="small text-muted mb-1">Included in the ticket</div>
+      <pre class="small bg-body-tertiary border rounded p-2 mb-3"
+           style="max-height:18rem;overflow:auto">{{ result.diff }}</pre>
+    {% endif %}
+
+  {% elif step == 'push' %}
+    <div class="alert alert-success">
+      <strong>{{ result.headline }}</strong>
+      <div class="small mt-1">
+        Applied by <strong>{{ result.approver }}</strong>.
+        {% if result.verified %}
+          Re-read afterwards: <strong>compliant</strong> with intent.
+        {% else %}
+          Re-read afterwards: <strong>{{ result.verified_state|default:"unknown" }}</strong>.
+        {% endif %}
+      </div>
+    </div>
+
+    {% if result.config_diff %}
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <div class="small text-muted">
+          The device's configuration, before and after — from the switch itself
+        </div>
+        <div class="small">
+          <span class="badge bg-success">{{ result.config_changed_lines }} line(s) changed</span>
+        </div>
+      </div>
+      <pre class="small bg-body-tertiary border rounded p-2 mb-3"
+           style="max-height:26rem;overflow:auto">{% for line in result.config_diff.splitlines %}<span class="{% if line|slice:':1' == '+' %}text-success{% elif line|slice:':1' == '-' %}text-danger{% else %}text-muted{% endif %}">{{ line }}
+</span>{% endfor %}</pre>
+    {% else %}
+      <div class="alert alert-secondary small">
+        No configuration diff to show — the device already matched, or no snapshot was taken.
+        Capture one with step 1 first.
+      </div>
+    {% endif %}
+
+    <div class="d-flex gap-2">
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'plugins:netbox_ops:live' %}">
+        See the live config
+      </a>
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'plugins:netbox_ops:audit' %}">
+        See the audit record
+      </a>
+    </div>
+  {% endif %}
+
+{% endif %}

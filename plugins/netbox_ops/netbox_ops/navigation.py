@@ -10,8 +10,9 @@ from netbox.plugins import PluginMenu, PluginMenuItem
 
 _menu_items = (
     PluginMenuItem(link="plugins:netbox_ops:home", link_text="Devices"),
-    PluginMenuItem(link="plugins:netbox_ops:labs", link_text="Container labs"),
+    PluginMenuItem(link="plugins:netbox_ops:live", link_text="Live config"),
     PluginMenuItem(link="plugins:netbox_ops:change", link_text="Day-two change"),
+    PluginMenuItem(link="plugins:netbox_ops:labs", link_text="Container labs"),
     PluginMenuItem(link="plugins:netbox_ops:lifecycle", link_text="Lifecycle"),
     PluginMenuItem(link="plugins:netbox_ops:awx", link_text="AWX jobs"),
     PluginMenuItem(link="plugins:netbox_ops:tickets", link_text="ITSM tickets"),

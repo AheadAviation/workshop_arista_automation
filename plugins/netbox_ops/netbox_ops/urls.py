@@ -20,6 +20,7 @@ urlpatterns = [
 
     # One route per tab, each named, so both the nav and the tab strip can reverse them.
     path("labs/", views.OpsHomeView.as_view(), {"tab": "labs"}, name="labs"),
+    path("live/", views.OpsHomeView.as_view(), {"tab": "live"}, name="live"),
     path("change/", views.OpsHomeView.as_view(), {"tab": "change"}, name="change"),
     path("lifecycle/", views.OpsHomeView.as_view(), {"tab": "lifecycle"}, name="lifecycle"),
     path("awx/", views.OpsHomeView.as_view(), {"tab": "awx"}, name="awx"),
@@ -34,6 +35,10 @@ urlpatterns = [
     path("action/lab/destroy/", views.LabDestroyView.as_view(), name="lab_destroy"),
     path("action/import/", views.ImportDevicesView.as_view(), name="import_devices"),
     path("action/apply/", views.ApplyConfigsView.as_view(), name="apply_configs"),
+    path("action/begin/", views.BeginChangeView.as_view(), name="begin_change"),
+    path("action/request/", views.RequestChangeView.as_view(), name="request_change"),
+    path("action/push/", views.ApproveAndPushView.as_view(), name="approve_push"),
+    path("action/reset/", views.ResetDemoView.as_view(), name="reset_demo"),
 
     path("status.json", views.StatusJsonView.as_view(), name="status"),
 ]

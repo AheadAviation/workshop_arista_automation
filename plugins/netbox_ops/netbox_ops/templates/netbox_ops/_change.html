@@ -5,76 +5,128 @@
   </div>
 {% else %}
 
+<p class="text-muted small mb-3">
+  The whole change, in the order it happens. Each step refuses if the one before it was not
+  done, so what you see is a request, then a push, then proof — not a claim.
+</p>
+
+{# ---------------------------------------------------------------- step 1 #}
 <div class="card mb-3">
   <div class="card-body">
-    <h5 class="card-title">Add VLAN {{ demo_vlan }} ({{ demo_vlan_name }})</h5>
-    <p class="text-muted small mb-3">
-      A new clinical system needs a VLAN on every server trunk. Preview first — nothing reaches
-      a switch until someone puts their name on it. The preview is the real change minus the
-      commit, not an estimate of it.
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <span class="badge bg-primary">1</span>
+      <h5 class="card-title mb-0">Capture the before-state</h5>
+    </div>
+    <p class="text-muted small mb-2">
+      Reads the switch's running config right now and keeps it, so the change can be shown as a
+      real diff afterwards. Also works out exactly what would change.
     </p>
-
-    <form method="post" action="{% url 'plugins:netbox_ops:change_preview' %}" class="row g-2 align-items-end">
+    <form method="post" action="{% url 'plugins:netbox_ops:begin_change' %}"
+          class="row g-2 align-items-end">
       {% csrf_token %}
       <div class="col-auto">
-        <label class="form-label small text-muted" for="device">Switch</label>
-        <select class="form-select form-select-sm" id="device" name="device">
-          {% for device in fabric.devices %}
-            {% if device.role == 'leaf' %}
-              <option value="{{ device.device }}">{{ device.device }}</option>
-            {% endif %}
+        <label class="form-label small text-muted" for="begin-device">Switch</label>
+        <select class="form-select form-select-sm" id="begin-device" name="device">
+          {% for d in fabric.devices %}{% if d.role == 'leaf' %}
+            <option value="{{ d.device }}">{{ d.device }}</option>
+          {% endif %}{% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-sm btn-primary" type="submit">Capture &amp; plan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ---------------------------------------------------------------- step 2 #}
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <span class="badge bg-primary">2</span>
+      <h5 class="card-title mb-0">Request it in ITSM</h5>
+    </div>
+    <p class="text-muted small mb-2">
+      Opens a real change ticket in Zammad with the proposed diff in the body. This is the
+      request your process already governs.
+    </p>
+    <form method="post" action="{% url 'plugins:netbox_ops:request_change' %}"
+          class="row g-2 align-items-end">
+      {% csrf_token %}
+      <div class="col-auto">
+        <label class="form-label small text-muted" for="req-device">Switch</label>
+        <select class="form-select form-select-sm" id="req-device" name="device">
+          {% for d in fabric.devices %}{% if d.role == 'leaf' %}
+            <option value="{{ d.device }}">{{ d.device }}</option>
+          {% endif %}{% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label small text-muted" for="req-by">Requested by</label>
+        <input class="form-control form-control-sm" id="req-by" name="requester"
+               placeholder="your name" autocomplete="off">
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-sm btn-primary" type="submit">Open the ticket</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ------------------------------------------------------------ steps 3-6 #}
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <span class="badge bg-primary">3</span>
+      <h5 class="card-title mb-0">Approve, push, and show what changed</h5>
+    </div>
+    <p class="text-muted small mb-2">
+      Applies the change to the device over eAPI, then shows the device's configuration
+      <em>after</em> against the snapshot, and re-reads the fabric to confirm it matches intent.
+    </p>
+    <form method="post" action="{% url 'plugins:netbox_ops:approve_push' %}"
+          class="row g-2 align-items-end">
+      {% csrf_token %}
+      <div class="col-auto">
+        <label class="form-label small text-muted" for="push-device">Switch</label>
+        <select class="form-select form-select-sm" id="push-device" name="device">
+          {% for d in fabric.devices %}{% if d.role == 'leaf' %}
+            <option value="{{ d.device }}">{{ d.device }}</option>
+          {% endif %}{% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label small text-muted" for="push-approver">Approved by</label>
+        <input class="form-control form-control-sm" id="push-approver" name="approver"
+               placeholder="your name" autocomplete="off" required>
+      </div>
+      <div class="col-auto">
+        <label class="form-label small text-muted" for="push-ticket">Ticket</label>
+        <select class="form-select form-select-sm" id="push-ticket" name="ticket_id">
+          <option value="">— none —</option>
+          {% for t in tickets.tickets %}
+            <option value="{{ t.id }}">{{ t.number }} · {{ t.title|truncatechars:44 }}</option>
           {% endfor %}
         </select>
       </div>
       <div class="col-auto">
-        <button class="btn btn-sm btn-primary" type="submit">Preview change</button>
+        <button class="btn btn-sm btn-success" type="submit">Approve &amp; push</button>
       </div>
     </form>
   </div>
 </div>
 
 <div class="card mb-3">
-  <div class="card-body">
-    <h5 class="card-title">Break it, then fix it</h5>
-    <p class="text-muted small mb-3">
-      Remove an intended VLAN from a live switch. The Devices tab will catch it without being
-      told which switch or what changed. Remediation goes through the same gate.
-    </p>
-    <div class="d-flex gap-2 flex-wrap">
-      <form method="post" action="{% url 'plugins:netbox_ops:drift_inject' %}" class="d-flex gap-2 align-items-end">
-        {% csrf_token %}
-        <div>
-          <label class="form-label small text-muted" for="inject-device">Switch</label>
-          <select class="form-select form-select-sm" id="inject-device" name="device">
-            {% for device in fabric.devices %}
-              {% if device.role == 'leaf' %}<option value="{{ device.device }}">{{ device.device }}</option>{% endif %}
-            {% endfor %}
-          </select>
-        </div>
-        <button class="btn btn-sm btn-outline-warning" type="submit">Inject drift</button>
-      </form>
-
-      <form method="post" action="{% url 'plugins:netbox_ops:drift_remediate' %}" class="d-flex gap-2 align-items-end">
-        {% csrf_token %}
-        <div>
-          <label class="form-label small text-muted" for="remediate-device">Remediate</label>
-          <select class="form-select form-select-sm" id="remediate-device" name="device">
-            {% for device in fabric.devices %}
-              {% if device.role == 'leaf' %}<option value="{{ device.device }}">{{ device.device }}</option>{% endif %}
-            {% endfor %}
-          </select>
-        </div>
-        <div>
-          <label class="form-label small text-muted" for="remediate-approver">Approved by</label>
-          <input class="form-control form-control-sm" id="remediate-approver" name="approver"
-                 placeholder="your name" autocomplete="off" required>
-        </div>
-        <button class="btn btn-sm btn-outline-primary" type="submit">Approve &amp; remediate</button>
-      </form>
+  <div class="card-body d-flex justify-content-between align-items-center">
+    <div>
+      <strong class="small">Reset the demo</strong>
+      <div class="text-muted small">Removes the added VLAN from the trunks and clears the snapshot.</div>
     </div>
+    <form method="post" action="{% url 'plugins:netbox_ops:reset_demo' %}">
+      {% csrf_token %}
+      <button class="btn btn-sm btn-outline-danger" type="submit">Reset</button>
+    </form>
   </div>
 </div>
-
-<div id="change-result"></div>
 
 {% endif %}

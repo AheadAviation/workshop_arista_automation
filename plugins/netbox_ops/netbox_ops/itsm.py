@@ -130,8 +130,16 @@ def tickets(limit: int = 25) -> dict[str, Any]:
     }
 
 
-def create_change_ticket(title: str, body: str, *, group: str = "Network Operations") -> dict[str, Any]:
-    """Open a change ticket. Returns its id so the change can be tied to it."""
+def create_change_ticket(
+    title: str, body: str, *, group: str = "Users"
+) -> dict[str, Any]:
+    """Open a change ticket. Returns its id so the change can be tied to it.
+
+    The group defaults to `Users` because that is the group a stock Zammad seeds; inventing a
+    name like "Network Operations" produced a 422 `No lookup value found for 'group'`, which is
+    a confusing way to say the group does not exist. A site with its own groups sets this in
+    config.
+    """
     import requests
 
     try:
@@ -154,7 +162,18 @@ def create_change_ticket(title: str, body: str, *, group: str = "Network Operati
         return {"ok": False, "headline": "Could not reach the ITSM system", "detail": str(exc)}
 
     if response.status_code >= 400:
-        return {"ok": False, "headline": "ITSM refused the ticket", "detail": f"{response.status_code}"}
+        # Include the body: Zammad's 422s name the exact missing or invalid field, and throwing
+        # that away turns a one-line fix into a guessing game.
+        try:
+            detail = response.json()
+            message = str(detail.get("error_human") or detail.get("error") or detail)
+        except ValueError:
+            message = response.text[:200]
+        return {
+            "ok": False,
+            "headline": "ITSM refused the ticket",
+            "detail": f"{response.status_code}: {message[:250]}",
+        }
 
     try:
         ticket = response.json()

@@ -154,17 +154,18 @@ def rendered_configs() -> dict[str, Any]:
 def apply_config(device: str) -> dict[str, Any]:
     """Push a device's rendered config to it, then prove it took.
 
-    **Honest scope note.** A full rendered config (≈380 lines) is too large to push reliably
-    over eAPI: each stanza is its own commit and the request times out partway. That is not a
-    limitation worth fighting, because the repo already has a correct, fast path for a full
-    config — `containerlab` / `configure replace` from the host, which is what `run.ps1 apply`
-    does. This action therefore pushes only the *deltas* it can prove (VLANs and trunk
-    membership) and is explicit about the rest.
+    **This pushes deltas only, and that is a hard-won constraint, not a simplification.**
 
-    What it does do, and what the demo needs: take the rendered config, work out which VLANs it
-    declares and which trunks it allows, apply just those, then read the device back and report
-    whether it now matches. A device that already matches is reported as matching rather than
-    being written to again.
+    Pushing a whole rendered config (~300-380 lines) over eAPI does not work: each stanza is
+    its own commit, the request times out partway, and the switch is left *partially
+    configured* — hostname and VLANs present, and BGP, MLAG and VXLAN gone. That looks
+    configured and is not, which is the worst outcome available. It happened here and cost
+    three leaf switches; `scripts/restore_configs.py` repairs it from the host, where a whole
+    config can be applied atomically in one CLI session.
+
+    So: this action reads what the rendered config declares, applies only the VLANs and trunk
+    memberships that are missing, and then reads the device back and reports whether it now
+    matches. A full-config push stays on the host via `run.ps1 apply`.
     """
     path = CONFIGS / f"{device}.cfg"
     if not path.exists():

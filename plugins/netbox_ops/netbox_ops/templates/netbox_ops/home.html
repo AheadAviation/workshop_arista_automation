@@ -22,13 +22,15 @@
 </ul>
 
 {% if tab == 'devices' %}
-  {% include 'netbox_ops/_devices.html' with fabric=fabric %}
+  {% include 'netbox_ops/_devices.html' with fabric=fabric setup=setup %}
+{% elif tab == 'live' %}
+  {% include 'netbox_ops/_live.html' with live=live %}
 {% elif tab == 'labs' %}
   {% include 'netbox_ops/_labs.html' with lab=lab %}
 {% elif tab == 'lifecycle' %}
   {% include 'netbox_ops/_lifecycle.html' with lifecycle=lifecycle vendors=vendors drifted=drifted %}
 {% elif tab == 'change' %}
-  {% include 'netbox_ops/_change.html' with demo_vlan=demo_vlan demo_vlan_name=demo_vlan_name %}
+  {% include 'netbox_ops/_change.html' with fabric=fabric tickets=tickets demo_vlan=demo_vlan demo_vlan_name=demo_vlan_name %}
 {% elif tab == 'awx' %}
   {% include 'netbox_ops/_awx.html' with awx=awx templates=templates %}
 {% elif tab == 'tickets' %}

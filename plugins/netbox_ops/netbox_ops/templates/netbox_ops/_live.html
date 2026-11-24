@@ -1,0 +1,53 @@
+{% if not live.ok %}
+  <div class="alert alert-warning">
+    <strong>{{ live.headline }}</strong>
+    {% if live.detail %}<div class="small mt-1">{{ live.detail }}</div>{% endif %}
+  </div>
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <p class="text-muted small mb-0">
+    Each switch's running configuration, read live over eAPI as you load this page — not
+    cached, not stored. Watch it change as you make a change on the Change tab.
+  </p>
+  <button class="btn btn-sm btn-outline-secondary" type="button"
+          onclick="window.location.reload()">Refresh</button>
+</div>
+
+<ul class="nav nav-pills mb-2" role="tablist">
+  {% for d in live.devices %}
+    <li class="nav-item">
+      <a class="nav-link py-1 px-2 {% if forloop.first %}active{% endif %}"
+         data-bs-toggle="pill" href="#cfg-{{ d.device }}" role="tab">
+        {{ d.device }}
+        {% if d.ok %}
+          <span class="badge bg-secondary ms-1">{{ d.lines }}</span>
+        {% else %}
+          <span class="badge bg-danger ms-1">!</span>
+        {% endif %}
+      </a>
+    </li>
+  {% endfor %}
+</ul>
+
+<div class="tab-content">
+  {% for d in live.devices %}
+    <div class="tab-pane fade {% if forloop.first %}show active{% endif %}" id="cfg-{{ d.device }}" role="tabpanel">
+      {% if d.ok %}
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <div class="text-muted small">
+            <code>{{ d.device }}</code> — {{ d.lines }} lines, secrets redacted
+          </div>
+          <div class="text-muted small">read live from the device</div>
+        </div>
+        <pre class="small bg-body-tertiary border rounded p-2"
+             style="max-height:34rem;overflow:auto">{{ d.config }}</pre>
+      {% else %}
+        <div class="alert alert-danger">
+          <strong>{{ d.headline }}</strong>
+          <div class="small mt-1">{{ d.detail }}</div>
+        </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+</div>

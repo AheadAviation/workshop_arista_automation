@@ -40,8 +40,9 @@ class OpsHomeView(View):
     #: named route of its own.
     TABS = (
         ("devices", "Devices", "home"),
-        ("labs", "Container labs", "labs"),
+        ("live", "Live config", "live"),
         ("change", "Day-two change", "change"),
+        ("labs", "Container labs", "labs"),
         ("lifecycle", "Lifecycle", "lifecycle"),
         ("awx", "AWX jobs", "awx"),
         ("tickets", "ITSM tickets", "tickets"),
@@ -86,8 +87,11 @@ class OpsHomeView(View):
             context["setup"] = engine.devices_status().to_dict()
         elif tab == "labs":
             context["lab"] = engine.lab_status().to_dict()
+        elif tab == "live":
+            context["live"] = engine.live_configs().to_dict()
         elif tab == "change":
             context["fabric"] = engine.fabric_overview().to_dict()
+            context["tickets"] = engine.itsm_tickets(limit=10).to_dict()
         elif tab == "lifecycle":
             life = engine.lifecycle().to_dict()
             context["lifecycle"] = life
@@ -261,6 +265,82 @@ class ApplyConfigsView(View):
         result = engine.apply_configs(device)
         _report(request, result)
         return redirect("plugins:netbox_ops:home")
+
+
+@method_decorator(csrf_protect, name="post")
+class BeginChangeView(View):
+    """Step 1: capture the before-state and work out the change."""
+
+    def post(self, request, *args, **kwargs):
+        device = str(request.POST.get("device") or "").strip()
+        if not device:
+            messages.error(request, "A device is required.")
+            return redirect("plugins:netbox_ops:change")
+        return render(
+            request,
+            "netbox_ops/_flow_result.html",
+            {"result": engine.begin_change(device).to_dict(), "device": device, "step": "begin"},
+        )
+
+
+@method_decorator(csrf_protect, name="post")
+class RequestChangeView(View):
+    """Step 2: open the ticket that requests the change."""
+
+    def post(self, request, *args, **kwargs):
+        device = str(request.POST.get("device") or "").strip()
+        requester = str(request.POST.get("requester") or "").strip()
+        if not device:
+            messages.error(request, "A device is required.")
+            return redirect("plugins:netbox_ops:change")
+        return render(
+            request,
+            "netbox_ops/_flow_result.html",
+            {
+                "result": engine.request_change(device, requester=requester).to_dict(),
+                "device": device,
+                "step": "request",
+            },
+        )
+
+
+@method_decorator(csrf_protect, name="post")
+class ApproveAndPushView(View):
+    """Steps 3-6: approve by name, push, show the config diff, verify."""
+
+    def post(self, request, *args, **kwargs):
+        device = str(request.POST.get("device") or "").strip()
+        approver = str(request.POST.get("approver") or "").strip()
+        ticket = request.POST.get("ticket_id") or None
+        if not device:
+            messages.error(request, "A device is required.")
+            return redirect("plugins:netbox_ops:change")
+
+        try:
+            ticket_id = int(ticket) if ticket else None
+        except (TypeError, ValueError):
+            ticket_id = None
+
+        return render(
+            request,
+            "netbox_ops/_flow_result.html",
+            {
+                "result": engine.approve_and_push(device, approver, ticket_id).to_dict(),
+                "device": device,
+                "step": "push",
+            },
+        )
+
+
+@method_decorator(csrf_protect, name="post")
+class ResetDemoView(View):
+    """Put the demo back: remove the added VLAN, clear the snapshot."""
+
+    def post(self, request, *args, **kwargs):
+        device = str(request.POST.get("device") or "").strip() or None
+        result = engine.reset_demo(device)
+        _report(request, result)
+        return redirect("plugins:netbox_ops:change")
 
 
 class StatusJsonView(View):

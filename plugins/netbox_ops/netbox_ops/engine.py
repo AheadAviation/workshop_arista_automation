@@ -216,6 +216,56 @@ def apply_configs(device: str | None = None) -> OpsResult:
     return _wrap(devices_admin.apply_all)
 
 
+# --------------------------------------------------------------------------- #
+# Live config (the "here it is" view)
+# --------------------------------------------------------------------------- #
+
+
+def live_configs(device: str | None = None) -> OpsResult:
+    """Each switch's running config, read live."""
+    from netbox_ops import live_config
+
+    if device:
+        return _wrap(live_config.running_config, device)
+    return _wrap(live_config.running_configs)
+
+
+def config_diff(device: str) -> OpsResult:
+    """What the device's config became, against the snapshot taken before the change."""
+    from netbox_ops import live_config
+
+    return _wrap(live_config.diff_against_snapshot, device)
+
+
+# --------------------------------------------------------------------------- #
+# The visible change flow: request -> push -> show
+# --------------------------------------------------------------------------- #
+
+
+def begin_change(device: str) -> OpsResult:
+    from netbox_ops import change_flow
+
+    return _wrap(change_flow.begin_change, device)
+
+
+def request_change(device: str, requester: str = "") -> OpsResult:
+    from netbox_ops import change_flow
+
+    return _wrap(change_flow.request_change, device, requester=requester)
+
+
+def approve_and_push(device: str, approver: str, ticket_id: int | None = None) -> OpsResult:
+    from netbox_ops import change_flow
+
+    return _wrap(change_flow.approve_and_push, device, approver, ticket_id=ticket_id)
+
+
+def reset_demo(device: str | None = None) -> OpsResult:
+    from netbox_ops import change_flow
+
+    return _wrap(change_flow.reset, device)
+
+
 def lab_deploy() -> OpsResult:
     from netbox_ops.labs import deploy as _deploy
 
