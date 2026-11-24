@@ -6,8 +6,9 @@
 {% else %}
 
 <p class="text-muted small mb-3">
-  The whole change, in the order it happens. Each step refuses if the one before it was not
-  done, so what you see is a request, then a push, then proof — not a claim.
+  Add a VLAN to a switch: pick the switch, type the VLAN, see exactly what would change, request
+  it, approve it, and watch the switch's own configuration change. Nothing is sent to a device
+  until a name is on it.
 </p>
 
 {# ---------------------------------------------------------------- step 1 #}
@@ -15,11 +16,11 @@
   <div class="card-body">
     <div class="d-flex align-items-center gap-2 mb-2">
       <span class="badge bg-primary">1</span>
-      <h5 class="card-title mb-0">Capture the before-state</h5>
+      <h5 class="card-title mb-0">Choose the change and see what it would do</h5>
     </div>
     <p class="text-muted small mb-2">
-      Reads the switch's running config right now and keeps it, so the change can be shown as a
-      real diff afterwards. Also works out exactly what would change.
+      Captures the switch's configuration as the "before", then works out exactly what adding this
+      VLAN would change. Nothing is sent.
     </p>
     <form method="post" action="{% url 'plugins:netbox_ops:begin_change' %}"
           class="row g-2 align-items-end">
@@ -33,7 +34,17 @@
         </select>
       </div>
       <div class="col-auto">
-        <button class="btn btn-sm btn-primary" type="submit">Capture &amp; plan</button>
+        <label class="form-label small text-muted" for="begin-vlan">VLAN</label>
+        <input class="form-control form-control-sm" id="begin-vlan" name="vlan"
+               type="number" min="2" max="4094" value="{{ demo_vlan }}" style="width:6rem">
+      </div>
+      <div class="col-auto">
+        <label class="form-label small text-muted" for="begin-vlan-name">Name</label>
+        <input class="form-control form-control-sm" id="begin-vlan-name" name="vlan_name"
+               value="{{ demo_vlan_name }}" style="width:12rem">
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-sm btn-primary" type="submit">Preview the change</button>
       </div>
     </form>
   </div>
@@ -44,11 +55,11 @@
   <div class="card-body">
     <div class="d-flex align-items-center gap-2 mb-2">
       <span class="badge bg-primary">2</span>
-      <h5 class="card-title mb-0">Request it in ITSM</h5>
+      <h5 class="card-title mb-0">Request it</h5>
     </div>
     <p class="text-muted small mb-2">
-      Opens a real change ticket in Zammad with the proposed diff in the body. This is the
-      request your process already governs.
+      Opens a real change ticket in Zammad with the proposed diff in the body. This is the request
+      your process already governs.
     </p>
     <form method="post" action="{% url 'plugins:netbox_ops:request_change' %}"
           class="row g-2 align-items-end">
@@ -62,9 +73,14 @@
         </select>
       </div>
       <div class="col-auto">
+        <label class="form-label small text-muted" for="req-vlan">VLAN</label>
+        <input class="form-control form-control-sm" id="req-vlan" name="vlan"
+               type="number" min="2" max="4094" value="{{ demo_vlan }}" style="width:6rem">
+      </div>
+      <div class="col-auto">
         <label class="form-label small text-muted" for="req-by">Requested by</label>
         <input class="form-control form-control-sm" id="req-by" name="requester"
-               placeholder="your name" autocomplete="off">
+               placeholder="your name" autocomplete="off" style="width:11rem">
       </div>
       <div class="col-auto">
         <button class="btn btn-sm btn-primary" type="submit">Open the ticket</button>
@@ -78,11 +94,11 @@
   <div class="card-body">
     <div class="d-flex align-items-center gap-2 mb-2">
       <span class="badge bg-primary">3</span>
-      <h5 class="card-title mb-0">Approve, push, and show what changed</h5>
+      <h5 class="card-title mb-0">Approve, push, and see the switch's config change</h5>
     </div>
     <p class="text-muted small mb-2">
-      Applies the change to the device over eAPI, then shows the device's configuration
-      <em>after</em> against the snapshot, and re-reads the fabric to confirm it matches intent.
+      Applies the change over eAPI, then shows the switch's configuration <em>after</em> against
+      the snapshot, and re-reads the fabric to confirm it matches intent.
     </p>
     <form method="post" action="{% url 'plugins:netbox_ops:approve_push' %}"
           class="row g-2 align-items-end">
@@ -96,16 +112,21 @@
         </select>
       </div>
       <div class="col-auto">
+        <label class="form-label small text-muted" for="push-vlan">VLAN</label>
+        <input class="form-control form-control-sm" id="push-vlan" name="vlan"
+               type="number" min="2" max="4094" value="{{ demo_vlan }}" style="width:6rem">
+      </div>
+      <div class="col-auto">
         <label class="form-label small text-muted" for="push-approver">Approved by</label>
         <input class="form-control form-control-sm" id="push-approver" name="approver"
-               placeholder="your name" autocomplete="off" required>
+               placeholder="your name" autocomplete="off" required style="width:11rem">
       </div>
       <div class="col-auto">
         <label class="form-label small text-muted" for="push-ticket">Ticket</label>
         <select class="form-select form-select-sm" id="push-ticket" name="ticket_id">
           <option value="">— none —</option>
           {% for t in tickets.tickets %}
-            <option value="{{ t.id }}">{{ t.number }} · {{ t.title|truncatechars:44 }}</option>
+            <option value="{{ t.id }}">{{ t.number }} · {{ t.title|truncatechars:40 }}</option>
           {% endfor %}
         </select>
       </div>
@@ -120,7 +141,7 @@
   <div class="card-body d-flex justify-content-between align-items-center">
     <div>
       <strong class="small">Reset the demo</strong>
-      <div class="text-muted small">Removes the added VLAN from the trunks and clears the snapshot.</div>
+      <div class="text-muted small">Removes the VLAN from the trunks and clears the snapshot.</div>
     </div>
     <form method="post" action="{% url 'plugins:netbox_ops:reset_demo' %}">
       {% csrf_token %}

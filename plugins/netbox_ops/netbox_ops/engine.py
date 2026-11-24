@@ -136,18 +136,29 @@ def two_vendors() -> OpsResult:
 # --------------------------------------------------------------------------- #
 
 
-def propose_vlan(device: str, vlan: int = 150) -> OpsResult:
+def propose_vlan(device: str, vlan: int = 150, vlan_name: str = "") -> OpsResult:
     """Stage a VLAN change on one switch and show its diff. Applies nothing."""
     from workbench.scenarios import propose_vlan as _propose
 
-    return _wrap(_propose, _engine_lab(), device, vlan=vlan)
+    kwargs: dict[str, Any] = {"vlan": vlan}
+    if vlan_name:
+        # `propose_vlan` takes the name as `name`; passing it is what stops a new VLAN being
+        # created with the demo VLAN's name, which is what happened before this was wired.
+        kwargs["name"] = vlan_name
+    return _wrap(_propose, _engine_lab(), device, **kwargs)
 
 
-def approve_vlan(device: str, approver: str, vlan: int = 150) -> OpsResult:
+def approve_vlan(
+    device: str, approver: str, vlan: int = 150, vlan_name: str = ""
+) -> OpsResult:
     """Apply a previewed change, with a named human on the record."""
     from workbench.scenarios import approve as _approve
 
-    return _wrap(_approve, _engine_lab(), device, approver=approver, vlan=vlan)
+    kwargs: dict[str, Any] = {"approver": approver, "vlan": vlan}
+    if vlan_name:
+        # Same wiring as `propose_vlan`: without this a new VLAN inherits the demo VLAN's name.
+        kwargs["name"] = vlan_name
+    return _wrap(_approve, _engine_lab(), device, **kwargs)
 
 
 def inject_drift(device: str, vlan: int | None = None) -> OpsResult:
@@ -242,28 +253,43 @@ def config_diff(device: str) -> OpsResult:
 # --------------------------------------------------------------------------- #
 
 
-def begin_change(device: str) -> OpsResult:
+def begin_change(device: str, vlan: int | None = None, vlan_name: str = "") -> OpsResult:
     from netbox_ops import change_flow
 
-    return _wrap(change_flow.begin_change, device)
+    return _wrap(change_flow.begin_change, device, vlan=vlan, vlan_name=vlan_name)
 
 
-def request_change(device: str, requester: str = "") -> OpsResult:
+def request_change(
+    device: str, requester: str = "", vlan: int | None = None, vlan_name: str = ""
+) -> OpsResult:
     from netbox_ops import change_flow
 
-    return _wrap(change_flow.request_change, device, requester=requester)
+    return _wrap(change_flow.request_change, device, requester=requester, vlan=vlan, vlan_name=vlan_name)
 
 
-def approve_and_push(device: str, approver: str, ticket_id: int | None = None) -> OpsResult:
+def approve_and_push(
+    device: str,
+    approver: str,
+    ticket_id: int | None = None,
+    vlan: int | None = None,
+    vlan_name: str = "",
+) -> OpsResult:
     from netbox_ops import change_flow
 
-    return _wrap(change_flow.approve_and_push, device, approver, ticket_id=ticket_id)
+    return _wrap(
+        change_flow.approve_and_push,
+        device,
+        approver,
+        ticket_id=ticket_id,
+        vlan=vlan,
+        vlan_name=vlan_name,
+    )
 
 
-def reset_demo(device: str | None = None) -> OpsResult:
+def reset_demo(device: str | None = None, vlan: int | None = None) -> OpsResult:
     from netbox_ops import change_flow
 
-    return _wrap(change_flow.reset, device)
+    return _wrap(change_flow.reset, device, vlan=vlan)
 
 
 def lab_deploy() -> OpsResult:

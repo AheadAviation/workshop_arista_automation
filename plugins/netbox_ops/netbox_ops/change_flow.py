@@ -30,7 +30,9 @@ class StepRefused(RuntimeError):
 # --------------------------------------------------------------------------- #
 
 
-def begin_change(device: str) -> dict[str, Any]:
+def begin_change(
+    device: str, vlan: int | None = None, vlan_name: str = ""
+) -> dict[str, Any]:
     """Start a change: capture the device's config as the before-state."""
     snap = live_config.snapshot(device)
     if not snap["ok"]:
@@ -38,7 +40,9 @@ def begin_change(device: str) -> dict[str, Any]:
 
     # Work out the change at the same time, so the page can show "this is what we will do"
     # immediately after capturing the before-state.
-    proposal = engine.propose_vlan(device, conf.demo_vlan())
+    proposal = engine.propose_vlan(
+        device, (vlan or conf.demo_vlan()), (vlan_name or conf.demo_vlan_name())
+    )
     return {
         "ok": proposal.ok,
         "device": device,
@@ -50,8 +54,8 @@ def begin_change(device: str) -> dict[str, Any]:
             f"{proposal.headline or 'Nothing to change.'}"
         ),
         "detail": proposal.detail or "",
-        "vlan": conf.demo_vlan(),
-        "vlan_name": conf.demo_vlan_name(),
+        "vlan": (vlan or conf.demo_vlan()),
+        "vlan_name": (vlan_name or conf.demo_vlan_name()),
     }
 
 
@@ -60,9 +64,13 @@ def begin_change(device: str) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 
-def request_change(device: str, *, requester: str = "") -> dict[str, Any]:
+def request_change(
+    device: str, *, requester: str = "", vlan: int | None = None, vlan_name: str = ""
+) -> dict[str, Any]:
     """Open a ticket for the change — the request the customer's process sees."""
-    proposal = engine.propose_vlan(device, conf.demo_vlan())
+    proposal = engine.propose_vlan(
+        device, (vlan or conf.demo_vlan()), (vlan_name or conf.demo_vlan_name())
+    )
     if not proposal.ok:
         return {"ok": False, "headline": "Could not work out the change", "detail": proposal.detail}
 
@@ -70,13 +78,13 @@ def request_change(device: str, *, requester: str = "") -> dict[str, Any]:
         return {
             "ok": True,
             "no_drift": True,
-            "headline": f"{device} already carries VLAN {conf.demo_vlan()}",
+            "headline": f"{device} already carries VLAN {(vlan or conf.demo_vlan())}",
             "detail": "Nothing to request.",
         }
 
     diff = (proposal.data or {}).get("diff") or ""
     title = (
-        f"[CHANGE] Add VLAN {conf.demo_vlan()} ({conf.demo_vlan_name()}) to {device}"
+        f"[CHANGE] Add VLAN {(vlan or conf.demo_vlan())} ({(vlan_name or conf.demo_vlan_name())}) to {device}"
     )
     body = (
         f"Requested{' by ' + requester if requester else ''} via NetBox Ops.\n\n"
@@ -111,6 +119,8 @@ def approve_and_push(
     approver: str,
     *,
     ticket_id: int | None = None,
+    vlan: int | None = None,
+    vlan_name: str = "",
 ) -> dict[str, Any]:
     """Approve by name, push, then show the diff and verify the device.
 
@@ -130,7 +140,12 @@ def approve_and_push(
         itsm.approve_ticket(int(ticket_id), f"Approved by {approver.strip()} via NetBox Ops")
 
     # The push itself.
-    applied = engine.approve_vlan(device, approver.strip(), vlan=conf.demo_vlan())
+    applied = engine.approve_vlan(
+        device,
+        approver.strip(),
+        vlan=(vlan or conf.demo_vlan()),
+        vlan_name=(vlan_name or conf.demo_vlan_name()),
+    )
 
     # What the device's config actually became.
     diff = live_config.diff_against_snapshot(device)
@@ -163,23 +178,23 @@ def approve_and_push(
 # --------------------------------------------------------------------------- #
 
 
-def reset(device: str | None = None) -> dict[str, Any]:
+def reset(device: str | None = None, vlan: int | None = None) -> dict[str, Any]:
     """Undo the demo change: remove the VLAN from the trunk and clear the snapshot.
 
-    Deliberately narrow. It removes exactly what the demo adds, and touches nothing else — a
+    Deliberately narrow. It removes exactly what a change added, and touches nothing else — a
     reset that restored a whole config would be a second change, and a riskier one.
     """
     targets = [device] if device else list(devices.EXPECTED if hasattr(devices, "EXPECTED") else [])
     if not targets:
         targets = ["leaf-01", "leaf-02", "leaf-03", "leaf-04"]
 
-    vlan = conf.demo_vlan()
+    target_vlan = vlan or conf.demo_vlan()
     results: list[dict[str, Any]] = []
     for target in targets:
         try:
             plan_config = [
                 "interface Ethernet5",
-                f"   switchport trunk allowed vlan remove {vlan}",
+                f"   switchport trunk allowed vlan remove {target_vlan}",
             ]
             eapi_exec._eapi(
                 target, ["enable", "configure"] + plan_config + ["end", "write memory"], timeout=90
@@ -193,7 +208,7 @@ def reset(device: str | None = None) -> dict[str, Any]:
     return {
         "ok": failures == 0,
         "headline": (
-            f"Demo reset: VLAN {vlan} removed from the trunks"
+            f"Demo reset: VLAN {target_vlan} removed from the trunks"
             if failures == 0
             else f"Reset: {failures} device(s) failed"
         ),

@@ -64,7 +64,29 @@ def awx_token() -> str:
 
 
 def itsm_url() -> str:
+    """The ITSM API address, as seen **from inside the NetBox container**.
+
+    This is a Docker-internal name (`zammad-nginx:8080`) and is deliberately not what a browser
+    link should use — see `itsm_public_url`.
+    """
     return str(get_setting("itsm_url", "") or "").rstrip("/")
+
+
+def itsm_public_url() -> str:
+    """The ITSM address a **browser** can reach, for links the page renders.
+
+    These are two different things and conflating them is why every "Open" link was dead. The
+    plugin talks to `http://zammad-nginx:8080` because that is the service name inside the Docker
+    network; a user's browser has no idea what `zammad-nginx` is, and `127.0.0.1:8080` is not
+    where Zammad is published either — it is on the host at 8090.
+
+    Defaults to the host-published address. Falls back to the internal one so a deployment that
+    sets only `itsm_url` still produces something rather than an empty href.
+    """
+    public = str(get_setting("itsm_public_url", "") or "").rstrip("/")
+    if public:
+        return public
+    return itsm_url()
 
 
 def itsm_token() -> str:
@@ -143,6 +165,7 @@ __all__ = [
     "eapi_password",
     "eapi_username",
     "get_setting",
+    "itsm_public_url",
     "itsm_token",
     "itsm_url",
     "lab_runner_url",

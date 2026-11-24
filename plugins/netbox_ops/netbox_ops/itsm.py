@@ -117,7 +117,12 @@ def tickets(limit: int = 25) -> dict[str, Any]:
                 "priority": item.get("priority") or "",
                 "group": item.get("group") or "",
                 "created_at": item.get("created_at") or "",
-                "url": f"{conf.itsm_url()}/#ticket/zoom/{item.get('id')}" if item.get("id") else "",
+                # The link a *browser* follows, which is not the API address the plugin uses.
+                "url": (
+                    f"{conf.itsm_public_url()}/#ticket/zoom/{item.get('id')}"
+                    if item.get("id")
+                    else ""
+                ),
             }
         )
 

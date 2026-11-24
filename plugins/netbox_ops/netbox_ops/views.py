@@ -268,6 +268,24 @@ class ApplyConfigsView(ChangeOperatorMixin, View):
         return redirect("plugins:netbox_ops:home")
 
 
+def _vlan_from(request) -> tuple[int | None, str]:
+    """Read the VLAN and its name from a POST, falling back to the configured default.
+
+    Validated here because it reaches a switch: anything outside 2-4094, or anything that is not
+    a number, becomes None and the configured default is used instead of being sent.
+    """
+    raw = str(request.POST.get("vlan") or "").strip()
+    vlan: int | None = None
+    if raw:
+        try:
+            value = int(raw)
+            if 2 <= value <= 4094:
+                vlan = value
+        except ValueError:
+            vlan = None
+    return vlan, str(request.POST.get("vlan_name") or "").strip()
+
+
 @method_decorator(csrf_protect, name="post")
 class BeginChangeView(ChangeOperatorMixin, View):
     """Step 1: capture the before-state and work out the change."""
@@ -280,7 +298,13 @@ class BeginChangeView(ChangeOperatorMixin, View):
         return render(
             request,
             "netbox_ops/_flow_result.html",
-            {"result": engine.begin_change(device).to_dict(), "device": device, "step": "begin"},
+            {
+                "result": engine.begin_change(
+                    device, vlan=_vlan_from(request)[0], vlan_name=_vlan_from(request)[1]
+                ).to_dict(),
+                "device": device,
+                "step": "begin",
+            },
         )
 
 
@@ -298,7 +322,12 @@ class RequestChangeView(ChangeOperatorMixin, View):
             request,
             "netbox_ops/_flow_result.html",
             {
-                "result": engine.request_change(device, requester=requester).to_dict(),
+                "result": engine.request_change(
+                    device,
+                    requester=requester,
+                    vlan=_vlan_from(request)[0],
+                    vlan_name=_vlan_from(request)[1],
+                ).to_dict(),
                 "device": device,
                 "step": "request",
             },
@@ -326,7 +355,13 @@ class ApproveAndPushView(ChangeOperatorMixin, View):
             request,
             "netbox_ops/_flow_result.html",
             {
-                "result": engine.approve_and_push(device, approver, ticket_id).to_dict(),
+                "result": engine.approve_and_push(
+                    device,
+                    approver,
+                    ticket_id=ticket_id,
+                    vlan=_vlan_from(request)[0],
+                    vlan_name=_vlan_from(request)[1],
+                ).to_dict(),
                 "device": device,
                 "step": "push",
             },

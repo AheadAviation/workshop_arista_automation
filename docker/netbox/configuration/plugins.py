@@ -43,9 +43,14 @@ PLUGINS_CONFIG = {
         # AWX was dropped: its 24.6.1 Docker image does not work (see the initiative record).
         'awx_url': '',
         'awx_token': '',
-        # Zammad, brought up with --profile itsm. The token is created by
-        # scripts/zammad_token_perms.rb.
+        # Zammad. TWO addresses, because they are genuinely different and conflating them broke
+        # every ticket link:
+        #   itsm_url        — the API, from inside this container: the compose service name.
+        #   itsm_public_url — where a BROWSER finds Zammad: the host-published port.
+        # A link built from itsm_url is a Docker-internal name the browser cannot resolve, and
+        # 127.0.0.1:8080 is not Zammad's published port either — it is 8090.
         'itsm_url': 'http://zammad-nginx:8080',
+        'itsm_public_url': 'http://localhost:8090',
         'itsm_token': '4aroyvDrKCLlDhnA0C1wPppAakjqICFRHqvCcJo1bfTS5JzxyWUW12aggHjfhqTX',
         # Arista eAPI. The plugin reads and drives switches over HTTPS eAPI rather than
         # through Docker, which is why NetBox needs no Docker privilege for devices at all.

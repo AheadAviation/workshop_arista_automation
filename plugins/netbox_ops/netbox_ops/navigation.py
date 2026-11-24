@@ -24,7 +24,6 @@ _VIEW = ["dcim.view_device"]
 _CHANGE = ["dcim.change_device"]
 
 _menu_items = (
-    PluginMenuItem(link="plugins:netbox_ops:topology", link_text="Fabric topology", permissions=_VIEW),
     PluginMenuItem(link="plugins:netbox_ops:home", link_text="Devices", permissions=_VIEW),
     PluginMenuItem(link="plugins:netbox_ops:live", link_text="Live config", permissions=_VIEW),
     PluginMenuItem(link="plugins:netbox_ops:change", link_text="Day-two change", permissions=_CHANGE),
