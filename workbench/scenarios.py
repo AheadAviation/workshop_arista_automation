@@ -25,6 +25,7 @@ from typing import Any, Callable, Mapping
 from workbench.contracts import (
     Actual,
     AuditEntry,
+    ContractError,
     Intent,
     Plan,
     Preview,
@@ -330,6 +331,294 @@ def approve(
         ),
         "diff": entry.diff_after,
         "entry": entry.to_dict(),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# 3b. Deliver a service to a place - the day-two workflow
+# --------------------------------------------------------------------------- #
+#
+# This is the shape the briefing actually shows, and it exists because the one-switch
+# version above teaches the wrong lesson. "Add VLAN 333 to leaf-02" is a CLI command with a
+# form around it: it asks a person to know a VLAN number and a switch name. The real request
+# is "give the pharmacy system the pharmacy network", and the tool should work out that this
+# means two switches and one VLAN.
+#
+# It is also the only shape that makes the Philips story true. A server is dual-homed across
+# an MLAG pair, so the VLAN has to land on both legs; changing one switch and then the other
+# by hand is the very thing ("four switches, and hoping they got all of them") the demo is
+# arguing against.
+
+
+def plan_service_change(
+    lab: Lab,
+    *,
+    service_key: str,
+    scope: str,
+    pair: str = "",
+    device: str = "",
+) -> dict[str, Any]:
+    """Work out what delivering a service would take, across every switch involved.
+
+    Changes nothing. Returns one preview per switch plus a single sentence describing the
+    change, because that sentence is what a decision-maker reads.
+
+    A switch that already carries the service is reported as `already` rather than dropped:
+    "3 of 4 already have it, 1 needs it" is a genuinely useful answer, and silently ignoring
+    the other three would look like the tool had lost them.
+    """
+    from workbench import catalogue
+
+    try:
+        svc = catalogue.service(service_key)
+        switches = catalogue.targets(scope, pair=pair, device=device)
+    except ContractError as exc:
+        return {
+            "ok": False,
+            "headline": "That is not a change this network offers",
+            "detail": str(exc),
+        }
+
+    sentence = catalogue.describe(service_key, scope, pair=pair, device=device)
+
+    try:
+        intended = lab.read_intent()
+    except Exception as exc:
+        return {"ok": False, "headline": "Could not read intended state", "detail": str(exc)}
+
+    previews: list[dict[str, Any]] = []
+    to_change: list[str] = []
+    already: list[str] = []
+    unreachable: list[str] = []
+    total_lines = 0
+
+    for name in switches:
+        intent = intended.get(name)
+        if intent is None or not intent.trunks:
+            unreachable.append(name)
+            previews.append(
+                {
+                    "device": name,
+                    "state": "unreachable",
+                    "detail": "no server trunk declared for this switch",
+                    "diff": "",
+                    "changed_lines": 0,
+                }
+            )
+            continue
+
+        plan = vlan_across_trunks_plan(name, svc.vlan, svc.name, intent.trunks)
+        try:
+            # Previewing is what proves we can reach the switch, so a failure here is
+            # reported per-device rather than aborting the whole change: "three of four
+            # answered" is exactly the situation a presenter needs to know about.
+            #
+            # Catching broadly on purpose. A switch that is down surfaces as EosApplyError,
+            # but a connection refused or a DNS failure surfaces as whatever the HTTP client
+            # raises — and letting that escape would turn one dead switch into no plan at all,
+            # which is the opposite of useful when the point is to report the fleet honestly.
+            staged = lab.preview(plan)
+        except Exception as exc:
+            previews.append(
+                {
+                    "device": name,
+                    "state": "unreachable",
+                    "detail": f"{type(exc).__name__}: {exc}"[:200],
+                    "diff": "",
+                    "changed_lines": 0,
+                }
+            )
+            unreachable.append(name)
+            continue
+
+        if staged.is_empty:
+            already.append(name)
+            previews.append(
+                {
+                    "device": name,
+                    "state": "already",
+                    "trunks": list(intent.trunks),
+                    "detail": "already carries VLAN {0}".format(svc.vlan),
+                    "diff": "",
+                    "changed_lines": 0,
+                }
+            )
+            continue
+
+        to_change.append(name)
+        total_lines += staged.changed_lines
+        previews.append(
+            {
+                "device": name,
+                "state": "needs-change",
+                "trunks": list(intent.trunks),
+                "detail": "{0} line(s) would change".format(staged.changed_lines),
+                "diff": staged.diff,
+                "changed_lines": staged.changed_lines,
+                "_plan": plan,
+                "_preview": staged,
+            }
+        )
+
+    if not to_change:
+        return {
+            "ok": True,
+            "no_drift": True,
+            "sentence": sentence,
+            "service": svc.to_dict(),
+            "scope": scope,
+            "pair": pair,
+            "switches": switches,
+            "devices": [_public(p) for p in previews],
+            "already": already,
+            "unreachable": unreachable,
+            "changed_lines": 0,
+            "headline": (
+                "{0} is already delivered to every switch in scope".format(svc.name)
+                if not unreachable
+                else "Nothing to change, but some switches did not answer"
+            ),
+            "detail": "the network already matches what you asked for",
+        }
+
+    change_id = new_id("service", svc.key, scope, pair or device)
+    pending: list[Any] = []
+    for p in previews:
+        if p["state"] != "needs-change":
+            continue
+        # Reuse the preview already taken rather than previewing again: the diff shown to the
+        # approver and the change applied must be the same object, or an approval could land
+        # something nobody read.
+        pending.append(request_change("{0}:{1}".format(change_id, p["device"]), p["_plan"], p["_preview"]))
+
+    append_entry(
+        lab.audit,
+        AuditEntry(
+            kind="pending",
+            device=",".join(to_change),
+            summary=(
+                "service {0} (VLAN {1}) to {2} switch(es), awaiting approval".format(
+                    svc.name, svc.vlan, len(to_change)
+                )
+            ),
+            autonomy="assist",
+            event_id=change_id,
+            diff_before="\n".join(p["diff"] for p in previews if p["state"] == "needs-change"),
+        ),
+    )
+
+    _PENDING_SERVICE_CHANGES[change_id] = pending
+
+    return {
+        "ok": True,
+        "change_id": change_id,
+        "sentence": sentence,
+        "service": svc.to_dict(),
+        "scope": scope,
+        "pair": pair,
+        "switches": switches,
+        "devices": [_public(p) for p in previews],
+        "already": already,
+        "unreachable": unreachable,
+        "to_change": to_change,
+        "changed_lines": total_lines,
+        "headline": sentence,
+        "detail": (
+            "{0} switch(es) need the change".format(len(to_change))
+            + (", {0} already have it".format(len(already)) if already else "")
+            + (", {0} did not answer".format(len(unreachable)) if unreachable else "")
+        ),
+    }
+
+
+#: Previewed service changes, waiting for an approval. In-process, like the page's own
+#: session: the demo runs one presenter on one machine, and a restart simply means previewing
+#: again -- which is the behaviour the gate already requires.
+_PENDING_SERVICE_CHANGES: dict[str, list[Any]] = {}
+
+
+def _public(preview: dict[str, Any]) -> dict[str, Any]:
+    """Strip the internal plan and preview from a device row before it reaches a page."""
+    return {k: v for k, v in preview.items() if not k.startswith("_")}
+
+
+def approve_service_change(
+    lab: Lab,
+    *,
+    change_id: str,
+    approver: str,
+) -> dict[str, Any]:
+    """Apply a previewed service change to every switch in scope, on one approval.
+
+    One approval, not four. The person approving is approving *a sentence* -- "give pharmacy
+    the pharmacy network on pair 1" -- and the fact that it lands on two switches is an
+    implementation detail they should not have to click through. That is the difference
+    between a workflow and a script with a button on it.
+
+    Every switch is applied and read back individually, and the result says which succeeded.
+    A partial failure is reported as partial: claiming success because the first switch worked
+    would be the worst possible outcome to show.
+    """
+    if not approver or not approver.strip():
+        return {
+            "ok": False,
+            "headline": "An approver is required",
+            "detail": "no change is applied without a named person on the record",
+        }
+
+    pending = _PENDING_SERVICE_CHANGES.pop(str(change_id or ""), None)
+    if not pending:
+        return {
+            "ok": False,
+            "refused": True,
+            "headline": "This change is no longer staged",
+            "detail": (
+                "Preview the change again. An approval only applies to a change that was "
+                "previewed in this session, so a stale approval cannot land."
+            ),
+        }
+
+    applied: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+
+    for item in pending:
+        try:
+            entry = approve_and_apply(item, approver, audit=lab.audit, apply=lab.apply)
+        except (GateRefused, EosApplyError) as exc:
+            failures.append({"device": item.plan.device, "detail": str(exc)[:200]})
+            continue
+
+        applied.append(
+            {
+                "device": entry.device,
+                "kind": entry.kind,
+                "diff": entry.diff_after or "",
+                "summary": entry.summary,
+            }
+        )
+
+    ok = not failures and bool(applied)
+    if ok:
+        headline = "Applied to {0} switch(es) and recorded".format(len(applied))
+    elif applied:
+        headline = "Applied to {0} of {1} switches".format(len(applied), len(pending))
+    else:
+        headline = "The change did not apply"
+
+    return {
+        "ok": ok,
+        "change_id": change_id,
+        "approver": approver.strip(),
+        "applied": [a for a in applied if a["kind"] == "applied"],
+        "no_op": [a for a in applied if a["kind"] != "applied"],
+        "failures": failures,
+        "device_count": len(pending),
+        "headline": headline,
+        "detail": (
+            "every switch was read back after the change"
+            if ok
+            else "see the per-switch results; nothing was claimed that did not happen"
+        ),
     }
 
 

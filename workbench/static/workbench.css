@@ -297,6 +297,71 @@ select:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 1p
 
 .approve-note { font-size: 0.8rem; color: var(--text-dim); margin: 0; }
 
+/* -------------------------------------------------- deliver a service */
+
+.field-wide { flex: 1 1 16rem; min-width: 14rem; }
+
+/* The purpose line is why an executive should care; it is not decoration, so it gets
+   room and a readable size rather than being a faint caption. */
+.svc-purpose {
+  margin: 0.85rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.87rem;
+  color: var(--text-dim);
+  line-height: 1.55;
+  max-width: 70ch;
+}
+
+.svc-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+}
+
+.svc-device {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 7px;
+  border-left: 3px solid var(--line);
+  background: var(--surface-2);
+  font-size: 0.85rem;
+}
+
+.svc-device-name { font-family: var(--mono); font-weight: 600; min-width: 6rem; }
+.svc-device-state { color: var(--text-dim); flex: 1 1 12rem; }
+
+.svc-device.svc-needs-change { border-left-color: var(--accent); }
+.svc-device.svc-already { border-left-color: var(--ok); }
+.svc-device.svc-already .svc-device-state { color: var(--ok); }
+.svc-device.svc-unreachable { border-left-color: var(--bad); }
+.svc-device.svc-unreachable .svc-device-state { color: var(--bad); }
+
+.svc-device details { flex-basis: 100%; margin-top: 0.2rem; }
+
+.step-warn-text {
+  margin: 0.6rem 0 0;
+  font-size: 0.82rem;
+  color: var(--warn);
+}
+
+/* The one-switch form is deliberately folded away: it is the old path, kept for a
+   maintenance fix, and must not be the thing a presenter's eye lands on. */
+.advanced {
+  margin-top: 1.25rem;
+  padding: 0.85rem 1rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+}
+
+.advanced > summary { cursor: pointer; font-size: 0.85rem; color: var(--text-dim); }
+.advanced > summary:hover { color: var(--accent); }
+.advanced > .field-row { margin-top: 0.85rem; }
+
 /* ----------------------------------------------------------------- table */
 
 .table-wrap { overflow-x: auto; }

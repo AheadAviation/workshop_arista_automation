@@ -35,10 +35,12 @@ from workbench.scenarios import (
     DEMO_DEVICES,
     Lab,
     approve,
+    approve_service_change,
     audit_view,
     fabric_overview,
     inject_drift,
     lifecycle,
+    plan_service_change,
     propose_vlan,
     remediate,
     two_vendors,
@@ -100,6 +102,33 @@ def api_audit(lab: Lab, limit: int = 50) -> dict[str, Any]:
 
 def api_devices() -> dict[str, Any]:
     return {"ok": True, "devices": list(DEMO_DEVICES)}
+
+
+def api_catalogue() -> dict[str, Any]:
+    """What the network can be asked to deliver, and where.
+
+    The page renders this rather than hardcoding a service list, so a site can change the
+    catalogue without touching the front end — and so the page cannot drift from what the
+    engine will actually accept.
+    """
+    from workbench import catalogue
+
+    return {
+        "ok": True,
+        "services": catalogue.catalogue_dicts(),
+        "scopes": catalogue.scope_dicts(),
+    }
+
+
+def api_plan_service(
+    lab: Lab, *, service_key: str, scope: str, pair: str = "", device: str = ""
+) -> dict[str, Any]:
+    return plan_service_change(lab, service_key=service_key, scope=scope, pair=pair, device=device)
+
+
+def api_apply_service(lab: Lab, *, change_id: str, approver: str) -> dict[str, Any]:
+    return approve_service_change(lab, change_id=change_id, approver=approver)
+
 
 
 # --------------------------------------------------------------------------- #
@@ -195,6 +224,64 @@ def create_app(lab_factory: Callable[[], Lab] | None = None) -> Any:
     def devices() -> JSONResponse:
         return JSONResponse(api_devices())
 
+    @app.get("/api/catalogue")
+    def catalogue() -> JSONResponse:
+        return JSONResponse(api_catalogue())
+
+    @app.post("/api/service/plan")
+    async def service_plan(request: Request) -> JSONResponse:
+        """Work out what delivering a service would take, across every switch involved."""
+        body = await _body(request)
+        service_key = str(body.get("service") or "").strip()
+        scope = str(body.get("scope") or "").strip()
+        if not service_key or not scope:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "headline": "Choose what to deliver and where",
+                    "detail": "a service and a scope are both required",
+                },
+                status_code=400,
+            )
+        pair = str(body.get("pair") or "").strip()
+        device = str(body.get("device") or "").strip()
+        return JSONResponse(
+            _guarded(
+                api_plan_service,
+                lab(),
+                service_key=service_key,
+                scope=scope,
+                pair=pair,
+                device=device,
+            )
+        )
+
+    @app.post("/api/service/apply")
+    async def service_apply(request: Request) -> JSONResponse:
+        """Apply a previewed service change to every switch in scope, on one approval."""
+        body = await _body(request)
+        approver = str(body.get("approver") or "").strip()
+        change_id = str(body.get("change_id") or "").strip()
+        if not approver:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "headline": "An approver is required",
+                    "detail": "no change is applied without a named person on the record",
+                },
+                status_code=400,
+            )
+        if not change_id:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "headline": "Preview the change first",
+                    "detail": "an approval only applies to a change that was just previewed",
+                },
+                status_code=400,
+            )
+        return JSONResponse(_guarded(api_apply_service, lab(), change_id=change_id, approver=approver))
+
     @app.get("/api/overview")
     def overview(new_vlan: int | None = None) -> JSONResponse:
         return JSONResponse(_guarded(api_overview, lab(), new_vlan))
@@ -254,14 +341,18 @@ def create_app(lab_factory: Callable[[], Lab] | None = None) -> Any:
     return app
 
 
-def _guarded(fn: Callable[..., dict[str, Any]], *args: Any) -> dict[str, Any]:
+def _guarded(fn: Callable[..., dict[str, Any]], *args: Any, **kwargs: Any) -> dict[str, Any]:
     """Run an API function, turning any escape into a page-shaped error.
 
     A demo must never show a stack trace. If something unexpected breaks, the page gets
     a result it knows how to render, with the real reason in `detail` for the presenter.
+
+    Takes `**kwargs` because the routes pass named arguments, and an earlier version that
+    only accepted positional ones turned every keyword call into a `TypeError` 500 — a bug
+    the tests missed because they exercised the functions directly rather than the routes.
     """
     try:
-        return fn(*args)
+        return fn(*args, **kwargs)
     except Exception as exc:
         return {"ok": False, "headline": "Something went wrong", "detail": f"{type(exc).__name__}: {exc}"}
 

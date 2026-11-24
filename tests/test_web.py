@@ -197,6 +197,110 @@ def test_render_guide_refuses_an_unknown_placeholder():
         render_guide(template="<a href=\"{{nowhere}}\">x</a>")
 
 
+# --------------------------------------------------------------------------- #
+# the service-catalogue routes
+# --------------------------------------------------------------------------- #
+# These exercise the HTTP routes, not the functions behind them. That distinction matters:
+# an earlier version of the routes passed keyword arguments to a helper that only accepted
+# positional ones, and every service-endpoint call became a 500 while the underlying
+# functions were perfectly fine. Unit tests on the functions alone would not have caught it.
+
+
+def test_the_catalogue_route_returns_services_and_scopes(client):
+    c, _, _ = client
+    payload = c.get("/api/catalogue").json()
+
+    assert payload["ok"] is True
+    assert len(payload["services"]) >= 4
+    assert payload["scopes"]
+    keys = {s["key"] for s in payload["services"]}
+    assert "pharmacy" in keys
+
+
+def test_the_catalogue_route_does_not_leak_anything_unexpected(client):
+    """The page renders this directly, so every field has to be something it can show."""
+    c, _, _ = client
+    for svc in c.get("/api/catalogue").json()["services"]:
+        assert set(svc) == {"key", "name", "vlan", "purpose", "default_scope"}
+
+
+def test_planning_a_service_over_http_returns_a_sentence(client):
+    c, _, _ = client
+    payload = c.post(
+        "/api/service/plan",
+        json={"service": "pharmacy", "scope": "mlag-pair", "pair": "pair-1"},
+    ).json()
+
+    assert payload["ok"] is True, payload
+    assert "Pharmacy" in payload["headline"]
+    assert payload["to_change"], "something must need changing"
+
+
+def test_planning_without_a_service_is_a_400_not_a_500(client):
+    c, _, _ = client
+    response = c.post("/api/service/plan", json={"scope": "mlag-pair"})
+    assert response.status_code == 400
+    assert "choose" in response.json()["headline"].lower()
+
+
+def test_planning_an_unknown_service_is_shaped_not_raised(client):
+    """A bad service is a page state, never a stack trace."""
+    c, _, _ = client
+    response = c.post("/api/service/plan", json={"service": "nope", "scope": "all-leaves"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is False
+    assert "not a change this network offers" in payload["headline"]
+
+
+def test_applying_a_service_over_http_requires_an_approver(client):
+    c, fake, _ = client
+    response = c.post("/api/service/apply", json={"change_id": "anything", "approver": "  "})
+    assert response.status_code == 400
+    assert "approver" in response.json()["headline"].lower()
+    assert fake.applied == []
+
+
+def test_applying_without_a_change_id_is_refused(client):
+    c, fake, _ = client
+    response = c.post("/api/service/apply", json={"approver": "Brian Nelson"})
+    assert response.status_code == 400
+    assert "preview" in response.json()["headline"].lower()
+    assert fake.applied == []
+
+
+def test_the_full_service_flow_through_http(client):
+    """Plan then apply, over HTTP, as the page does — two switches from one approval."""
+    c, fake, lab = client
+
+    plan = c.post(
+        "/api/service/plan",
+        json={"service": "pharmacy", "scope": "mlag-pair", "pair": "pair-1"},
+    ).json()
+    assert plan["ok"] is True
+    change_id = plan["change_id"]
+
+    applied = c.post(
+        "/api/service/apply", json={"change_id": change_id, "approver": "Brian Nelson"}
+    ).json()
+
+    assert applied["ok"] is True, applied
+    assert sorted(item["device"] for item in applied["applied"]) == ["leaf-01", "leaf-02"]
+    assert len(fake.applied) == 2
+    assert len(lab.audit.applied_changes()) == 2
+
+
+def test_the_apply_route_refuses_a_change_that_was_never_staged(client):
+    c, fake, _ = client
+    payload = c.post(
+        "/api/service/apply", json={"change_id": "service:made:up", "approver": "Brian"}
+    ).json()
+
+    assert payload["ok"] is False
+    assert payload["refused"] is True
+    assert fake.applied == []
+
+
 def test_the_page_does_not_render_a_diff_without_a_gate(client):
     """The approve control is only rendered for a non-empty, unapplied change."""
     js = (REPO_ROOT / "workbench" / "static" / "workbench.js").read_text(encoding="utf-8")

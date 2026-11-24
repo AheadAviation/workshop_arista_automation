@@ -24,7 +24,7 @@
 
   <nav class="tabs" role="tablist">
     <button class="tab is-active" data-panel="fabric" role="tab" type="button">Fabric</button>
-    <button class="tab" data-panel="change" role="tab" type="button">Day-two change</button>
+    <button class="tab" data-panel="change" role="tab" type="button">Deliver a service</button>
     <button class="tab" data-panel="lifecycle" role="tab" type="button">Lifecycle</button>
     <button class="tab" data-panel="vendors" role="tab" type="button">Two vendors</button>
     <button class="tab" data-panel="audit" role="tab" type="button">Audit trail</button>
@@ -55,15 +55,62 @@
     <section id="panel-change" class="panel" role="tabpanel">
       <div class="section-head">
         <div>
-          <h2>Add a VLAN across the trunks</h2>
+          <h2>Deliver a service</h2>
           <p class="subtle">
-            A new clinical system arrives and needs VLAN&nbsp;150 on every server trunk.
-            Preview it first: nothing reaches a switch until someone approves.
+            Say what the network should carry and where. Everything else &mdash; which
+            switches, which ports, which VLAN &mdash; is worked out for you.
           </p>
         </div>
       </div>
 
       <div class="card form-card">
+        <div class="field-row">
+          <label class="field field-wide">
+            <span>Give this network&hellip;</span>
+            <select id="svc-service"></select>
+          </label>
+          <label class="field field-wide">
+            <span>&hellip;to</span>
+            <select id="svc-scope"></select>
+          </label>
+          <label class="field field-wide" id="svc-place-field" hidden>
+            <span>Which one</span>
+            <select id="svc-place"></select>
+          </label>
+          <button id="svc-preview" class="btn" type="button">Preview the change</button>
+        </div>
+        <p id="svc-purpose" class="svc-purpose"></p>
+      </div>
+
+      <div id="svc-result" class="result" hidden></div>
+
+      <div class="card form-card" id="drift-card">
+        <div class="section-head tight">
+          <div>
+            <h3>Break it on purpose, then fix it</h3>
+            <p class="subtle">
+              Show the loop closing: inject real drift on a switch, watch the fabric view
+              turn red, then remediate it through the same gate.
+            </p>
+          </div>
+        </div>
+        <div class="field-row">
+          <label class="field">
+            <span>Switch</span>
+            <select id="drift-device"></select>
+          </label>
+          <button id="inject" class="btn btn-warn" type="button">Inject drift</button>
+          <button id="remediate" class="btn btn-ghost" type="button">Remediate drift</button>
+        </div>
+        <div id="drift-result" class="result" hidden></div>
+      </div>
+
+      <details class="advanced">
+        <summary>Change one switch by VLAN number (for a maintenance fix)</summary>
+        <p class="subtle">
+          The old way. Useful when you already know the VLAN and are fixing one device, and
+          deliberately not the path the demo leads with &mdash; nobody asks for a VLAN number.
+        </p>
         <div class="field-row">
           <label class="field">
             <span>Switch</span>
@@ -73,28 +120,10 @@
             <span>VLAN</span>
             <input id="change-vlan" type="number" value="150" min="1" max="4094">
           </label>
-          <button id="change-preview" class="btn" type="button">Preview change</button>
+          <button id="change-preview" class="btn btn-ghost" type="button">Preview</button>
         </div>
-      </div>
-
-      <div id="change-result" class="result" hidden></div>
-
-      <div class="card form-card" id="drift-card">
-        <div class="section-head tight">
-          <div>
-            <h3>Break it on purpose, then fix it</h3>
-            <p class="subtle">
-              Show the loop closing: inject real drift on the switch, watch the fabric
-              view turn red, then remediate it through the same gate.
-            </p>
-          </div>
-        </div>
-        <div class="field-row">
-          <button id="inject" class="btn btn-warn" type="button">Inject drift</button>
-          <button id="remediate" class="btn btn-ghost" type="button">Remediate drift</button>
-        </div>
-        <div id="drift-result" class="result" hidden></div>
-      </div>
+        <div id="change-result" class="result" hidden></div>
+      </details>
     </section>
 
     <!-- ============================ LIFECYCLE ============================ -->

@@ -77,6 +77,7 @@ Optional add-on - Autonomy Workbench (executive demo; see wiki/Autonomy-Workbenc
   itsm-down          Stop Zammad, leaving NetBox and its data alone
   tickets            Seed the demo ticket queue (idempotent; --list, --reset)
   verify-change      Prove change control end to end, including the refusals
+  verify-service     Prove the deliver-a-service flow: one sentence, one approval, N switches
   clean-fabric       Return the demo trunks to their starting state (--apply)
   workbench-live     The real rehearsal: walk the demo against the live switches
   workbench-walk     Prove the demo flow with no lab running (no switches needed)
@@ -336,6 +337,14 @@ for cfg in sorted(Path('output/configs').glob('*.cfg')):
         # Removes the residue that testing leaves behind. `workbench-reset` is additive by
         # design and will never take a VLAN away, so this is the explicit opposite.
         python scripts/clean_demo_fabric.py @Rest
+        exit $LASTEXITCODE
+    }
+
+    "verify-service" {
+        # The day-two story specifically: one sentence, one approval, both legs of a pair.
+        # Needs the workbench running (.\run.ps1 workbench) because it drives the HTTP API.
+        Write-Host "Verifying the deliver-a-service flow..." -ForegroundColor Cyan
+        python scripts/verify_service_flow.py @Rest
         exit $LASTEXITCODE
     }
 

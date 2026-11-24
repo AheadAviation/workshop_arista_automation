@@ -297,18 +297,32 @@
           <li class="step">
             <input type="checkbox" id="d2" class="step-tick" data-step="d2">
             <label for="d2">
-              <span class="step-title">Day-two change &mdash; the Philips VLAN, previewed</span>
+              <span class="step-title">Deliver a service &mdash; the Philips VLAN, previewed</span>
               <span class="guide-minutes">2 min</span>
             </label>
             <div class="step-body">
               <p class="step-do">
-                <strong>Do:</strong> <strong>Day-two change</strong> tab. Switch
-                <span class="mono">leaf-01</span>, VLAN <span class="mono">150</span>.
-                Click <strong>Preview change</strong>.
+                <strong>Do:</strong> <strong>Deliver a service</strong> tab. Three dropdowns
+                and a button:
+              </p>
+              <ol class="substeps">
+                <li><strong>Give this network&hellip;</strong> &rarr;
+                  <span class="mono">Philips patient monitoring (VLAN 150)</span></li>
+                <li><strong>&hellip;to</strong> &rarr; <span class="mono">One MLAG pair</span></li>
+                <li><strong>Which one</strong> &rarr;
+                  <span class="mono">MLAG pair 1 (leaf-01 + leaf-02)</span></li>
+                <li>Click <strong>Preview the change</strong>.</li>
+              </ol>
+              <p class="step-note">
+                <strong>Notice what you were not asked for:</strong> a VLAN number, or a
+                switch name. You said what the network should carry and where, and the tool
+                worked out that this is VLAN 150 on two switches. If anyone asks what the
+                day-two experience is, this is it &mdash; the request, not the command.
               </p>
               <p class="step-note">
-                Nothing has happened yet. Read the diff aloud: one VLAN created, and the
-                allow-list added on <span class="mono">Ethernet5</span>.
+                The preview shows one row per switch, because a server is dual-homed across
+                the pair. That is the point of the story: one request, both legs, first
+                time.
               </p>
               <blockquote class="say">
                 This is the answer to the thing you said in our last conversation. Today
@@ -317,9 +331,14 @@
                 source of truth, and the tools work out the rest.
               </blockquote>
               <p class="step-class-good">
-                <strong>Good:</strong> a small diff &mdash; <span class="mono">vlan 150</span>,
-                a name, and one or two <span class="mono">switchport trunk allowed vlan</span>
-                lines.
+                <strong>Good:</strong> a sentence across the top &mdash; "Deliver Philips
+                patient monitoring (VLAN 150) to both switches in MLAG pair 1&hellip;" &mdash;
+                then two rows, both <span class="mono">needs-change</span>.
+              </p>
+              <p class="step-class-fail">
+                <strong>A row says <span class="mono">unreachable</span>:</strong> that switch
+                is not answering. It is reported per switch rather than failing the whole
+                change, so you can still show the rest &mdash; but say so out loud.
               </p>
             </div>
           </li>
@@ -327,13 +346,17 @@
           <li class="step">
             <input type="checkbox" id="d3" class="step-tick" data-step="d3">
             <label for="d3">
-              <span class="step-title">Day-two change &mdash; approve it by name</span>
+              <span class="step-title">Approve it &mdash; one name, both switches</span>
               <span class="guide-minutes">1 min</span>
             </label>
             <div class="step-body">
               <p class="step-do">
                 <strong>Do:</strong> type your name in <strong>Approved by</strong>. Click
-                <strong>Approve and apply</strong>.
+                <strong>Approve and apply to 2 switches</strong>.
+              </p>
+              <p class="step-note">
+                One approval covers both legs. The button says how many switches it will
+                touch, so nobody approves two and gets four.
               </p>
               <p class="step-note">
                 The approve control only appears after a preview, and it will not send
@@ -341,12 +364,13 @@
                 question answered before she asks it.
               </p>
               <p class="step-class-good">
-                <strong>Good:</strong> "Applied by <em>your name</em>" and a green result.
+                <strong>Good:</strong> "Applied to 2 switch(es) and recorded", then a row per
+                switch with the configuration it became.
               </p>
               <p class="step-class-fail">
-                <strong>"Nothing was sent":</strong> the switch already matched. Usually
-                means a previous run left VLAN 150 in place. Fine to talk over, or reset
-                and restart.
+                <strong>"This change is no longer staged":</strong> it was already approved,
+                or the page was reloaded. Preview again. A stale approval cannot land, by
+                design.
               </p>
             </div>
           </li>

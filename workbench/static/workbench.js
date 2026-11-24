@@ -74,16 +74,30 @@ function setFabricState(kind, label) {
 
 /* ---------------------------------------------------------------- tabs */
 
+/** Switch to a tab by its panel name. Also the target of `#change` style URL hashes, so a
+ *  presenter can bookmark or open a link straight to the tab they need on screen. */
+function showTab(panel) {
+  const button = document.querySelector(`.tab[data-panel="${panel}"]`);
+  const target = document.getElementById(`panel-${panel}`);
+  if (!button || !target) return false;
+
+  document.querySelectorAll('.tab').forEach((t) => t.classList.remove('is-active'));
+  document.querySelectorAll('.panel').forEach((p) => p.classList.remove('is-active'));
+  button.classList.add('is-active');
+  target.classList.add('is-active');
+
+  if (panel === 'lifecycle') loadLifecycle();
+  if (panel === 'vendors') loadVendors();
+  if (panel === 'audit') loadAudit();
+  return true;
+}
+
 document.querySelectorAll('.tab').forEach((tab) => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach((t) => t.classList.remove('is-active'));
-    document.querySelectorAll('.panel').forEach((p) => p.classList.remove('is-active'));
-    tab.classList.add('is-active');
-    $(`panel-${tab.dataset.panel}`).classList.add('is-active');
-
-    if (tab.dataset.panel === 'lifecycle') loadLifecycle();
-    if (tab.dataset.panel === 'vendors') loadVendors();
-    if (tab.dataset.panel === 'audit') loadAudit();
+    const panel = tab.dataset.panel;
+    showTab(panel);
+    // Keep the URL honest without adding a history entry per click.
+    if (history.replaceState) history.replaceState(null, '', `#${panel}`);
   });
 });
 
@@ -171,6 +185,223 @@ async function loadFabric(newVlan) {
   (result.devices || []).forEach((device) => grid.appendChild(renderDevice(device)));
 }
 
+/* ------------------------------------------------------- deliver a service */
+
+const catalogue = { services: [], scopes: [] };
+
+function selectedService() {
+  const key = $('svc-service').value;
+  return catalogue.services.find((s) => s.key === key) || null;
+}
+
+function selectedScope() {
+  return $('svc-scope').value;
+}
+
+function renderPurpose() {
+  const svc = selectedService();
+  $('svc-purpose').textContent = svc ? svc.purpose : '';
+}
+
+/** Show the "which one" picker only when the scope needs one. */
+function renderPlace() {
+  const scope = selectedScope();
+  const field = $('svc-place-field');
+  const select = $('svc-place');
+  const chosen = catalogue.scopes.find((s) => s.key === scope);
+  clear(select);
+
+  const places = (chosen && chosen.places) || [];
+  if (places.length === 0) {
+    field.hidden = true;
+    return;
+  }
+
+  field.hidden = false;
+  places.forEach((place) => {
+    const option = document.createElement('option');
+    option.value = place.key;
+    option.textContent = place.label;
+    select.appendChild(option);
+  });
+}
+
+function renderServicePlan(node, result) {
+  clear(node);
+  node.hidden = false;
+
+  if (!result.ok) {
+    node.appendChild(el('div', 'result-head result-bad', result.headline || 'That did not work'));
+    if (result.detail) node.appendChild(el('p', 'subtle', result.detail));
+    return;
+  }
+
+  // The sentence is the headline: it is what the person is deciding to approve.
+  node.appendChild(
+    el('div', `result-head ${result.no_drift ? 'result-warn' : 'result-ok'}`, result.headline || '')
+  );
+  if (result.sentence && result.sentence !== result.headline) {
+    node.appendChild(el('p', 'subtle', result.sentence));
+  }
+
+  const rows = el('div', 'svc-devices');
+  (result.devices || []).forEach((device) => {
+    const row = el('div', `svc-device svc-${device.state}`);
+    row.appendChild(el('span', 'svc-device-name', device.device));
+    row.appendChild(el('span', 'svc-device-state', device.detail || device.state));
+
+    if (device.diff) {
+      const details = document.createElement('details');
+      details.appendChild(el('summary', null, 'Show the change'));
+      renderDiff(details, device.diff);
+      row.appendChild(details);
+    }
+    rows.appendChild(row);
+  });
+  node.appendChild(rows);
+
+  if (result.unreachable && result.unreachable.length) {
+    node.appendChild(
+      el('p', 'step-warn-text', `Did not answer: ${result.unreachable.join(', ')}`)
+    );
+  }
+
+  if (result.no_drift) {
+    node.appendChild(
+      el('p', 'approve-note', 'Nothing to approve — the network already matches this.')
+    );
+    return;
+  }
+
+  // One approval for the whole change, however many switches it touches.
+  const row = el('div', 'approve-row');
+  const field = el('label', 'field');
+  field.appendChild(el('span', null, 'Approved by'));
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.id = 'svc-approver';
+  input.placeholder = 'your name';
+  input.autocomplete = 'off';
+  field.appendChild(input);
+  row.appendChild(field);
+
+  const count = (result.to_change || []).length;
+  const button = el(
+    'button',
+    'btn',
+    count === 1 ? 'Approve and apply to 1 switch' : `Approve and apply to ${count} switches`
+  );
+  button.type = 'button';
+  button.addEventListener('click', () => {
+    const approver = input.value.trim();
+    if (!approver) {
+      input.focus();
+      input.setAttribute('aria-invalid', 'true');
+      return;
+    }
+    doApplyService(result.change_id, approver);
+  });
+  row.appendChild(button);
+  row.appendChild(
+    el(
+      'p',
+      'approve-note',
+      'One approval covers every switch listed. Nothing is sent until this is clicked with a name.'
+    )
+  );
+  node.appendChild(row);
+}
+
+async function doPreviewService() {
+  const node = $('svc-result');
+  node.hidden = false;
+  clear(node);
+  node.appendChild(el('p', 'subtle', 'Working out which switches this needs…'));
+
+  const result = await post('/api/service/plan', {
+    service: selectedService() ? selectedService().key : '',
+    scope: selectedScope(),
+    pair: selectedScope() === 'mlag-pair' ? $('svc-place').value : '',
+    device: selectedScope() === 'one-switch' ? 'leaf-01' : '',
+  });
+  renderServicePlan(node, result);
+}
+
+async function doApplyService(changeId, approver) {
+  const node = $('svc-result');
+  clear(node);
+  node.appendChild(el('p', 'subtle', 'Applying to every switch in scope…'));
+
+  const result = await post('/api/service/apply', { change_id: changeId, approver });
+  clear(node);
+  node.hidden = false;
+
+  const kind = result.ok ? 'result-ok' : 'result-bad';
+  node.appendChild(el('div', `result-head ${kind}`, result.headline || ''));
+  if (result.detail) node.appendChild(el('p', 'subtle', result.detail));
+
+  (result.applied || []).forEach((item) => {
+    const row = el('div', 'svc-device svc-needs-change');
+    row.appendChild(el('span', 'svc-device-name', item.device));
+    row.appendChild(el('span', 'svc-device-state', item.kind));
+    if (item.diff) {
+      const details = document.createElement('details');
+      details.appendChild(el('summary', null, 'Show what the switch became'));
+      renderDiff(details, item.diff);
+      row.appendChild(details);
+    }
+    node.appendChild(row);
+  });
+
+  (result.no_op || []).forEach((item) => {
+    const row = el('div', 'svc-device svc-already');
+    row.appendChild(el('span', 'svc-device-name', item.device));
+    row.appendChild(el('span', 'svc-device-state', 'already matched — nothing sent'));
+    node.appendChild(row);
+  });
+
+  (result.failures || []).forEach((item) => {
+    const row = el('div', 'svc-device svc-unreachable');
+    row.appendChild(el('span', 'svc-device-name', item.device));
+    row.appendChild(el('span', 'svc-device-state', item.detail));
+    node.appendChild(row);
+  });
+
+  node.appendChild(el('p', 'subtle', 'Recorded against ' + result.approver + '. See the audit trail.'));
+  await loadFabric();
+}
+
+async function loadCatalogue() {
+  const result = await api('/api/catalogue');
+  if (!result.ok) return;
+
+  catalogue.services = result.services || [];
+  catalogue.scopes = result.scopes || [];
+
+  const serviceSelect = $('svc-service');
+  clear(serviceSelect);
+  catalogue.services.forEach((svc) => {
+    const option = document.createElement('option');
+    option.value = svc.key;
+    option.textContent = `${svc.name} (VLAN ${svc.vlan})`;
+    serviceSelect.appendChild(option);
+  });
+
+  const scopeSelect = $('svc-scope');
+  clear(scopeSelect);
+  catalogue.scopes.forEach((scope) => {
+    const option = document.createElement('option');
+    option.value = scope.key;
+    option.textContent = scope.label;
+    scopeSelect.appendChild(option);
+  });
+
+  // Open on the pair a clinical system actually attaches to, not on "everything".
+  scopeSelect.value = 'mlag-pair';
+  renderPurpose();
+  renderPlace();
+}
+
 /* --------------------------------------------------------------- change */
 
 function renderDiff(container, diff) {
@@ -233,7 +464,11 @@ function renderResult(node, result, { withApprove = false, action = 'approve' } 
 }
 
 function selectedDevice() {
-  return $('change-device').value;
+  return document.getElementById('change-device').value;
+}
+
+function driftDevice() {
+  return document.getElementById('drift-device').value;
 }
 
 function selectedVlan() {
@@ -277,7 +512,7 @@ async function doInject() {
   node.hidden = false;
   node.appendChild(el('p', 'subtle', 'Breaking it on purpose…'));
 
-  const result = await post('/api/inject', { device: selectedDevice(), vlan: selectedVlan() });
+  const result = await post('/api/inject', { device: driftDevice(), vlan: selectedVlan() });
   renderResult(node, result);
   await loadFabric();
 }
@@ -287,7 +522,7 @@ async function doRemediate(approver) {
   clear(node);
   node.appendChild(el('p', 'subtle', 'Remediating…'));
 
-  const result = await post('/api/remediate', { device: selectedDevice(), approver });
+  const result = await post('/api/remediate', { device: driftDevice(), approver });
   renderResult(node, result);
   await loadFabric();
 }
@@ -305,12 +540,12 @@ async function doRemediatePreview() {
     renderResult(node, result);
     return;
   }
-  const device = result.devices.find((d) => d.device === selectedDevice());
+  const device = result.devices.find((d) => d.device === driftDevice());
   if (!device || (device.verdict || {}).state === 'compliant') {
     renderResult(node, {
       ok: true,
       no_drift: true,
-      headline: `${selectedDevice()} matches intended state`,
+      headline: `${driftDevice()} matches intended state`,
       detail: 'inject drift first, then remediate it',
     });
     return;
@@ -320,7 +555,7 @@ async function doRemediatePreview() {
     {
       ok: true,
       headline: device.verdict.headline,
-      detail: `${device.findings.length} finding(s) on ${selectedDevice()}`,
+      detail: `${device.findings.length} finding(s) on ${driftDevice()}`,
       diff: (device.findings || []).map((f) => `- ${f.detail}`).join('\n'),
     },
     { withApprove: true, action: 'remediate' }
@@ -484,6 +719,9 @@ async function init() {
   const devices = await api('/api/devices');
   const select = $('change-device');
   clear(select);
+  const driftSelect = $('drift-device');
+  clear(driftSelect);
+
   (devices.devices || []).forEach((device) => {
     const option = document.createElement('option');
     option.value = device;
@@ -493,6 +731,21 @@ async function init() {
   // Default to a leaf: the trunk story lives there.
   const leaf = (devices.devices || []).find((d) => d.startsWith('leaf'));
   if (leaf) select.value = leaf;
+
+  // The drift controls act on a leaf too, and need their own copy of the list.
+  (devices.devices || []).filter((d) => d.startsWith('leaf')).forEach((device) => {
+    const option = document.createElement('option');
+    option.value = device;
+    option.textContent = device;
+    driftSelect.appendChild(option);
+  });
+
+  await loadCatalogue();
+  $('svc-service').addEventListener('change', renderPurpose);
+  $('svc-scope').addEventListener('change', () => {
+    renderPlace();
+  });
+  $('svc-preview').addEventListener('click', doPreviewService);
 
   $('refresh').addEventListener('click', () => loadFabric());
   $('change-preview').addEventListener('click', doPreview);
@@ -510,6 +763,11 @@ async function init() {
   api('/api/health').then((health) => {
     if (health && health.audit) $('footer-audit').textContent = `Audit record: ${health.audit}`;
   });
+
+  // Honour a tab in the URL, so `/#change` opens straight to a tab. A presenter can keep
+  // two windows open — the deck and the tab they are about to show — without hunting.
+  const fromHash = (window.location.hash || '').replace('#', '');
+  if (fromHash) showTab(fromHash);
 
   await loadFabric();
 }
