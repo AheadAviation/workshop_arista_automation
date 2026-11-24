@@ -1,0 +1,32 @@
+# Compose override for driving the lab FROM a container (INIT-002/SPEC-002).
+#
+# **Why this file exists, and why the paths look like this.**
+#
+# The lab-runner container calls `docker compose run clab containerlab ...`. Compose resolves
+# relative bind mounts to *absolute* paths before handing them to the Docker daemon — and the
+# daemon runs on the HOST, which has no `/compose`. So the nested call produced:
+#
+#     volume: /compose/clab -> /clab/topology
+#
+# and the daemon mounted a directory that does not exist, leaving the clab service with an empty
+# `/clab/topology`. containerlab then reported
+#
+#     Stat /clab/topology/topology-demo.clab.yml: no such file or directory
+#
+# The remedy is to give compose the HOST paths for the mounts the clab service needs. Compose
+# cannot derive them (a Linux client cannot address `C:\...`), so `lab-runner` reads them from
+# the daemon — where its own `/compose` bind mount came from — and passes them in as environment
+# variables. This file consumes them.
+#
+# Every mount is anchored on ${HOST_REPO}. Only the two the containerlab run actually needs are
+# redeclared, so nothing else about the clab service changes.
+
+services:
+  clab:
+    volumes:
+      # The topology this service will deploy.
+      - ${HOST_REPO}/clab:/clab/topology:rw
+      # Rendered configs, which containerlab reads as startup-configs.
+      - ${HOST_REPO}/output/configs:/clab/configs:ro
+      # Keep the socket, which is how containerlab reaches the daemon at all.
+      - /var/run/docker.sock:/var/run/docker.sock

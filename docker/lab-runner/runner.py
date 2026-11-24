@@ -16,13 +16,78 @@ import os
 import subprocess
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-#: The only topology this service will act on. A request cannot change it.
+#: The topology, addressed by the path the **daemon** can see. The repo is bind-mounted at
+#: /compose here, and the clab sidecar gets ./clab mounted at /clab/topology.
 TOPOLOGY = "/clab/topology/topology-demo.clab.yml"
 
-#: Where the repo is mounted, so `docker compose` finds the compose file and the clab service.
+#: Where the repo is mounted, so `docker compose` finds the compose file.
+COMPOSE_DIR = "/compose"
+
+#: The SAME repo, but by its path on the *host*.
+#:
+#: This is not a duplicate — it is the docker-out-of-docker path problem. Compose resolves
+#: relative bind mounts (`./clab:/clab/topology`) against the host filesystem, not against this
+#: container's view of it. Running compose with `--project-directory /compose` made it look for
+#: `/compose/clab` *on the host*, which does not exist, so containerlab reported
+#: "Stat /clab/topology/topology-demo.clab.yml: no such file or directory".
+#:
+#: It is resolved at run time by asking the daemon where this container's `/compose` mount came
+#: from (see `host_project_dir`), rather than configured — a hardcoded path breaks the moment
+#: someone clones the repo somewhere else, and an env var is one more thing to get wrong.
 COMPOSE_DIR = "/compose"
 
 TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "900"))
+
+
+def restore_host_project_dir() -> str:
+    """The repo's path as the HOST sees it — needed for compose's bind mounts.
+
+    Compose resolves relative bind mounts to absolute paths and hands them to the *daemon*, which
+    runs on the host. The host does not have `/compose`; it has `C:\\Users\\...\\workshop_arista_automation`.
+    So a nested `docker compose run` must be given host paths, and the only reliable way to learn
+    them is to ask the daemon where this container's own `/compose` bind came from.
+
+    This was the first thing tried, then abandoned in favour of the container path — which was
+    wrong for the mounts and right only for locating the compose file. Both are needed: the file
+    by its container path, the mounts by their host path.
+    """
+    cached = getattr(restore_host_project_dir, "_cached", "")
+    if cached:
+        return cached
+
+    container = os.environ.get("HOSTNAME", "")
+    try:
+        proc = subprocess.run(  # noqa: S603 - argument list, no shell
+            ["docker", "inspect", container, "--format", "{{json .Mounts}}"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return ""
+
+    if proc.returncode == 0:
+        try:
+            mounts = json.loads(proc.stdout or "[]")
+        except ValueError:
+            mounts = []
+        for mount in mounts:
+            if str(mount.get("Destination", "")).rstrip("/") == COMPOSE_DIR:
+                found = str(mount.get("Source", ""))
+                restore_host_project_dir._cached = found  # type: ignore[attr-defined]
+                return found
+    return ""
+
+
+def host_project_dir() -> str:
+    """The project directory to hand `docker compose` — the **container's** path, for `-f`.
+
+    Resolves the opposite way to `restore_host_project_dir`, and both are needed: compose is told
+    where the compose *file* is by its container path, and the file's mounts are rewritten to host
+    paths by the override file below.
+    """
+    return COMPOSE_DIR
 
 
 def run_clab(verb: str) -> dict:
@@ -30,12 +95,20 @@ def run_clab(verb: str) -> dict:
     if verb not in ("deploy", "destroy"):
         return {"ok": False, "error": f"unknown verb {verb!r}"}
 
+    # Compose is pointed at the compose FILE by its container path, and at the override file that
+    # rewrites the clab service's mounts to HOST paths. Both are required: compose runs here and
+    # reads the file here, but hands mount sources to the daemon, which runs on the host.
+    host_repo = restore_host_project_dir()
     args = [
         "docker", "compose",
         "--project-directory", COMPOSE_DIR,
-        "run", "--rm", "clab",
-        "containerlab", verb,
+        "-f", f"{COMPOSE_DIR}/docker-compose.yml",
     ]
+    if host_repo:
+        args += ["-f", f"{COMPOSE_DIR}/docker-compose.lab-from-container.yml"]
+    env = dict(os.environ, HOST_REPO=host_repo)
+
+    args += ["run", "--rm", "clab", "containerlab", verb]
     if verb == "deploy":
         args.append("--reconfigure")
     else:
@@ -49,6 +122,7 @@ def run_clab(verb: str) -> dict:
             text=True,
             timeout=TIMEOUT,
             check=False,
+            env=env,
         )
     except FileNotFoundError as exc:
         return {"ok": False, "error": f"docker is not available: {exc}"}

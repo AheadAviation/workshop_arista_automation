@@ -268,6 +268,7 @@ services:
       REQUEST_TIMEOUT: "900"
     volumes:
       # The repo, so `docker compose run clab` finds the compose file and the clab service.
+      # The topology lives under ./clab, which the clab service mounts at /clab/topology.
       - .:/compose:ro
       # The same Docker access the clab service already has, which is what makes deploy possible.
       - /var/run/docker.sock:/var/run/docker.sock
