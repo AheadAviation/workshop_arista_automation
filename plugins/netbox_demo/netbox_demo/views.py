@@ -204,7 +204,11 @@ def run_step(request: HttpRequest, key: str) -> HttpResponse:
 
 @require_GET
 def runbook_status(request: HttpRequest) -> JsonResponse:
-    """Small JSON polled by the page so step state survives a refresh."""
+    """Small JSON polled by the page so KPI cards and step badges stay live."""
+    health = lab.health_or_none()
+    documented = len(intent.demo_devices())
+    expected = len(design.ALL_DEVICES)
+    assur = assurance.summary()
     return JsonResponse(
         {
             "steps": [
@@ -216,7 +220,14 @@ def runbook_status(request: HttpRequest) -> JsonResponse:
                 }
                 for row in _steps()
             ],
-            "agent_reachable": lab.health_or_none() is not None,
+            "agent_reachable": health is not None,
+            "devices_documented": documented,
+            "devices_expected": expected,
+            "running_devices": int(health.get("running_devices", 0)) if health else 0,
+            "expected_devices": int(health.get("expected_devices", expected)) if health else expected,
+            "orb_running": bool((health or {}).get("orb", {}).get("running", False)),
+            "assurance_available": bool(assur.get("available", False)),
+            "assurance_open": int(assur.get("open", 0)) if assur.get("available") else 0,
         }
     )
 
