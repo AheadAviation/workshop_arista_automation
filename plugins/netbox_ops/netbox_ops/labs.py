@@ -33,8 +33,8 @@ from . import conf
 #: used as a general-purpose container browser.
 LAB_PREFIX = "clab-netbox-arista-lab-"
 
-#: The topology file, relative to the `clab` service's `/clab/topology` mount.
-TOPOLOGY_IN_CONTAINER = "/clab/topology/topology-demo.clab.yml"
+#: The lab-runner sidecar. The only service with Docker access, and it accepts two verbs.
+LAB_RUNNER_URL = "http://lab-runner:8077"
 
 #: A node is "up" when Docker reports it running. Anything else is reported as-is rather than
 #: guessed at, because "unknown" is more useful than a wrong green.
@@ -142,48 +142,46 @@ def lab_status() -> dict[str, Any]:
 
 
 def _run_clab(verb: str) -> dict[str, Any]:
-    """Run `containerlab <verb>` inside the repo's own `clab` runner container.
+    """Ask the lab-runner service to run `containerlab <verb>`.
 
-    The plugin does not get Docker privileges for this: it invokes `docker compose run` on the
-    host, exactly as `run.ps1` does, and containerlab does the work inside the container that
-    already owns that privilege.
+    NetBox has no Docker CLI and must not get one, so it does not shell out to compose. The
+    lab-runner sidecar is the only thing holding Docker access, and it accepts exactly two
+    verbs — deploy and destroy — so the surface NetBox can reach is two fixed operations rather
+    than "run anything".
     """
+    import requests
+
     if verb not in ("deploy", "destroy"):
         raise LabError(f"refusing an unknown containerlab verb {verb!r}")
 
-    args = [
-        "docker", "compose", "run", "--rm", "clab",
-        "containerlab", verb,
-    ]
-    if verb == "deploy":
-        args += ["--reconfigure"]
-    else:
-        args += ["--cleanup"]
-    args += ["--topo", TOPOLOGY_IN_CONTAINER]
-
+    url = f"{conf.lab_runner_url()}/{verb}"
     try:
-        proc = subprocess.run(  # noqa: S603 - fixed argument list, no shell
-            args,
-            capture_output=True,
-            text=True,
-            timeout=600,
-            check=False,
-        )
-    except FileNotFoundError as exc:
-        raise LabError(f"docker is not available: {exc}") from exc
-    except subprocess.TimeoutExpired as exc:
+        # Generous: a first deploy pulls and starts six switches plus two servers.
+        response = requests.post(url, timeout=900)
+    except requests.RequestException as exc:
         raise LabError(
-            f"containerlab {verb} did not finish in ten minutes. Check `docker compose logs clab`."
+            f"Could not reach the lab runner at {conf.lab_runner_url()}: {exc}. "
+            "Is the lab-runner service running? (docker compose up -d lab-runner)"
         ) from exc
 
-    if proc.returncode != 0:
-        tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-3:]
-        raise LabError(f"containerlab {verb} failed: {' / '.join(tail) or 'no output'}")
+    if response.status_code >= 400:
+        raise LabError(f"The lab runner answered {response.status_code} for {verb}")
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise LabError("The lab runner returned something that is not JSON") from exc
+
+    if not payload.get("ok"):
+        tail = (payload.get("output") or "").strip().splitlines()[-3:]
+        raise LabError(
+            f"containerlab {verb} failed: {' / '.join(tail) or payload.get('error', 'no output')}"
+        )
 
     return {
         "ok": True,
         "headline": f"containerlab {verb} completed",
-        "detail": "",
+        "detail": "The switches are booting; give them a minute before reading configs.",
         **lab_status(),
     }
 

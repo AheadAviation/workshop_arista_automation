@@ -47,6 +47,10 @@ def docker_proxy_url() -> str:
     return str(get_setting("docker_proxy_url", "http://docker-proxy:2375")).rstrip("/")
 
 
+def lab_runner_url() -> str:
+    return str(get_setting("lab_runner_url", "http://lab-runner:8077")).rstrip("/")
+
+
 def lab_topology() -> str:
     return str(get_setting("lab_topology", "clab/topology-demo.clab.yml"))
 
@@ -141,6 +145,7 @@ __all__ = [
     "get_setting",
     "itsm_token",
     "itsm_url",
+    "lab_runner_url",
     "lab_topology",
     "netbox_token",
     "netbox_url",

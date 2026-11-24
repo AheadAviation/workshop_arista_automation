@@ -56,8 +56,16 @@ services:
       # Skip CSRF for local dev
       CSRF_TRUSTED_ORIGINS: http://localhost:8888 http://127.0.0.1:8888
       CORS_ORIGIN_ALLOW_ALL: "true"
-      # Login settings
-      LOGIN_REQUIRED: "false"
+      # Login settings.
+      #
+      # This is `true`, and it must stay true. It was `false` for the original workshop, which
+      # is fine for a lab where the only thing behind the UI is seeded demo data. It is NOT
+      # fine now that a plugin on this instance can push configuration to real switches: with
+      # LOGIN_REQUIRED false, Django treats every request as an anonymous superuser, so an
+      # unauthenticated visitor could read every switch's running config *and* trigger a
+      # config push. That is unauthenticated remote control of network devices, not a cosmetic
+      # leak. `/plugins/ops/` is the page that makes it dangerous.
+      LOGIN_REQUIRED: "true"
       # The workbench engine reads NetBox's own REST API through these. Inside the container
       # the app listens on 8080 (8888 is only the host-side published port).
       NETBOX_URL: http://localhost:8080
@@ -244,6 +252,29 @@ services:
       default:
         aliases:
           - docker-proxy
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Lab Runner (INIT-002/SPEC-002)
+  # ==========================================================================
+  # A two-verb HTTP wrapper around `containerlab deploy|destroy`. NetBox calls this instead of
+  # holding Docker access, which keeps the plugin's security posture: the only service with the
+  # Docker socket (via the proxy below) is this one, and the worst it can be asked to do is
+  # start or stop the demo topology.
+  lab-runner:
+    build:
+      context: ./docker/lab-runner
+    environment:
+      REQUEST_TIMEOUT: "900"
+    volumes:
+      # The repo, so `docker compose run clab` finds the compose file and the clab service.
+      - .:/compose:ro
+      # The same Docker access the clab service already has, which is what makes deploy possible.
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      default:
+        aliases:
+          - lab-runner
     restart: unless-stopped
 
   # ==========================================================================

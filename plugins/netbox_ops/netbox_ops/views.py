@@ -21,11 +21,12 @@ from django.views import View
 from django.views.decorators.csrf import csrf_protect
 
 from . import conf, engine
+from .access import ChangeOperatorMixin, ReadOnlyOperatorMixin
 
 logger = logging.getLogger("netbox_ops")
 
 
-class OpsHomeView(View):
+class OpsHomeView(ReadOnlyOperatorMixin, View):
     """One page with tabs: devices, labs, change, AWX, tickets, audit.
 
     The tab is a **path component**, not a query string. `{% url %}` cannot reverse a name
@@ -115,7 +116,7 @@ class OpsHomeView(View):
 
 
 @method_decorator(csrf_protect, name="post")
-class ChangePreviewView(View):
+class ChangePreviewView(ChangeOperatorMixin, View):
     """Stage a VLAN change and show its diff. Applies nothing."""
 
     def post(self, request, *args, **kwargs):
@@ -133,7 +134,7 @@ class ChangePreviewView(View):
 
 
 @method_decorator(csrf_protect, name="post")
-class ChangeApproveView(View):
+class ChangeApproveView(ChangeOperatorMixin, View):
     """Apply a staged change, with a named approver.
 
     The approver is required here as well as in the engine's gate. Two locks, deliberately:
@@ -173,7 +174,7 @@ class ChangeApproveView(View):
 
 
 @method_decorator(csrf_protect, name="post")
-class DriftInjectView(View):
+class DriftInjectView(ChangeOperatorMixin, View):
     """Break a switch on purpose, so the devices view can catch it."""
 
     def post(self, request, *args, **kwargs):
@@ -191,7 +192,7 @@ class DriftInjectView(View):
 
 
 @method_decorator(csrf_protect, name="post")
-class DriftRemediateView(View):
+class DriftRemediateView(ChangeOperatorMixin, View):
     """Put back whatever the device is missing, through the same gate."""
 
     def post(self, request, *args, **kwargs):
@@ -223,7 +224,7 @@ class DriftRemediateView(View):
 
 
 @method_decorator(csrf_protect, name="post")
-class LabDeployView(View):
+class LabDeployView(ChangeOperatorMixin, View):
     def post(self, request, *args, **kwargs):
         result = engine.lab_deploy()
         _report(request, result)
@@ -231,7 +232,7 @@ class LabDeployView(View):
 
 
 @method_decorator(csrf_protect, name="post")
-class LabDestroyView(View):
+class LabDestroyView(ChangeOperatorMixin, View):
     def post(self, request, *args, **kwargs):
         result = engine.lab_destroy()
         _report(request, result)
@@ -247,7 +248,7 @@ def _report(request, result) -> None:
 
 
 @method_decorator(csrf_protect, name="post")
-class ImportDevicesView(View):
+class ImportDevicesView(ChangeOperatorMixin, View):
     """Populate NetBox from the fabric topology."""
 
     def post(self, request, *args, **kwargs):
@@ -257,7 +258,7 @@ class ImportDevicesView(View):
 
 
 @method_decorator(csrf_protect, name="post")
-class ApplyConfigsView(View):
+class ApplyConfigsView(ChangeOperatorMixin, View):
     """Push rendered configs to the devices and prove they took."""
 
     def post(self, request, *args, **kwargs):
@@ -268,7 +269,7 @@ class ApplyConfigsView(View):
 
 
 @method_decorator(csrf_protect, name="post")
-class BeginChangeView(View):
+class BeginChangeView(ChangeOperatorMixin, View):
     """Step 1: capture the before-state and work out the change."""
 
     def post(self, request, *args, **kwargs):
@@ -284,7 +285,7 @@ class BeginChangeView(View):
 
 
 @method_decorator(csrf_protect, name="post")
-class RequestChangeView(View):
+class RequestChangeView(ChangeOperatorMixin, View):
     """Step 2: open the ticket that requests the change."""
 
     def post(self, request, *args, **kwargs):
@@ -305,7 +306,7 @@ class RequestChangeView(View):
 
 
 @method_decorator(csrf_protect, name="post")
-class ApproveAndPushView(View):
+class ApproveAndPushView(ChangeOperatorMixin, View):
     """Steps 3-6: approve by name, push, show the config diff, verify."""
 
     def post(self, request, *args, **kwargs):
@@ -333,7 +334,7 @@ class ApproveAndPushView(View):
 
 
 @method_decorator(csrf_protect, name="post")
-class ResetDemoView(View):
+class ResetDemoView(ChangeOperatorMixin, View):
     """Put the demo back: remove the added VLAN, clear the snapshot."""
 
     def post(self, request, *args, **kwargs):
@@ -343,7 +344,7 @@ class ResetDemoView(View):
         return redirect("plugins:netbox_ops:change")
 
 
-class StatusJsonView(View):
+class StatusJsonView(ReadOnlyOperatorMixin, View):
     """A machine-readable health check, so a rehearsal script can ask without scraping."""
 
     def get(self, request, *args, **kwargs):
