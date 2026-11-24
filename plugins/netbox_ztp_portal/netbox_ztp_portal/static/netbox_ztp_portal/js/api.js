@@ -1,10 +1,25 @@
 /* AHEAD ZTP Portal - thin fetch wrapper over the plugin API (/api/plugins/ztp).
-   Same-origin, authenticated via the NetBox session cookie. No dependencies. */
+   Same-origin, authenticated via the NetBox session cookie. No dependencies.
+
+   Sends the CSRF token on every unsafe method. The API used to be `csrf_exempt` because this
+   wrapper did not send one; exempting a session-authenticated write endpoint means any page a
+   logged-in user visits could POST here on their behalf. The token costs four lines and closes
+   that, so the API no longer exempts anything. */
 window.ZTP = (function () {
   const base = "/api/plugins/ztp";
 
+  /** The CSRF token NetBox renders into the page, or "" outside a browser context. */
+  function csrfToken() {
+    const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : "";
+  }
+
   async function req(method, path, body) {
     const opts = { method, headers: { Accept: "application/json" }, credentials: "same-origin" };
+    if (method !== "GET" && method !== "HEAD") {
+      const token = csrfToken();
+      if (token) opts.headers["X-CSRFToken"] = token;
+    }
     if (body !== undefined) {
       opts.headers["Content-Type"] = "application/json";
       opts.body = JSON.stringify(body);

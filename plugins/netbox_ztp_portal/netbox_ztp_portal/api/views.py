@@ -29,12 +29,28 @@ def _json_body(request):
 
 
 def _auth_error(request):
-    # In an open lab (LOGIN_REQUIRED=False) the whole NetBox instance is
-    # browsable without a session, so don't gate the portal API more tightly
-    # than NetBox itself. When LOGIN_REQUIRED is on, require an authenticated user.
-    if request.user.is_authenticated or not getattr(settings, "LOGIN_REQUIRED", True):
-        return None
-    return JsonResponse({"ok": False, "error": "authentication required"}, status=403)
+    """Refuse an anonymous or under-privileged caller.
+
+    This used to say: if `LOGIN_REQUIRED` is false the whole instance is browsable anyway,
+    so do not gate the portal more tightly than NetBox. That reasoning was wrong for two
+    reasons.
+
+    First, it delegated the portal's security to a global setting that exists for demo
+    convenience, so flipping one compose variable silently opened every write endpoint here.
+    Second, the escape hatch was reachable: with `LOGIN_REQUIRED` false, Django treats an
+    anonymous request as a superuser, so `request.user.is_authenticated` was true and the
+    check passed on its own.
+
+    So it no longer consults `LOGIN_REQUIRED` at all. An authenticated user with the
+    permission NetBox requires to change a device is the only caller that proceeds, and the
+    plugin's own settings cannot weaken that.
+    """
+    user = getattr(request, "user", None)
+    if user is None or not user.is_authenticated:
+        return JsonResponse({"ok": False, "error": "authentication required"}, status=403)
+    if not user.has_perm("dcim.change_device"):
+        return JsonResponse({"ok": False, "error": "permission denied"}, status=403)
+    return None
 
 
 @method_decorator(csrf_exempt, name="dispatch")
@@ -56,7 +72,6 @@ class HealthView(View):
             return JsonResponse({"ok": False, "error": e.to_dict()}, status=502)
 
 
-@method_decorator(csrf_exempt, name="dispatch")
 class SitesView(View):
     def get(self, request):
         err = _auth_error(request)
@@ -89,7 +104,6 @@ class SitesView(View):
             return JsonResponse({"ok": False, "error": str(e)}, status=400)
 
 
-@method_decorator(csrf_exempt, name="dispatch")
 class PreviewView(View):
     def post(self, request):
         err = _auth_error(request)
@@ -106,7 +120,6 @@ class PreviewView(View):
             return JsonResponse({"ok": False, "error": str(e)}, status=400)
 
 
-@method_decorator(csrf_exempt, name="dispatch")
 class TrackingView(View):
     def get(self, request):
         err = _auth_error(request)
@@ -129,7 +142,6 @@ def _ensure_deploy_fields():
                                       object_types=["dcim.site"])
 
 
-@method_decorator(csrf_exempt, name="dispatch")
 class DeployView(View):
     """GET: deploy status of every portal fabric. POST {site_id}: request a
     ContainerLab deploy (the host-side ztp_agent picks it up)."""
@@ -165,7 +177,6 @@ class DeployView(View):
             return JsonResponse({"ok": False, "error": e.to_dict()}, status=502)
 
 
-@method_decorator(csrf_exempt, name="dispatch")
 class DevicesView(View):
     """Per-device ZTP pipeline state, optionally filtered to one site."""
     def get(self, request):
