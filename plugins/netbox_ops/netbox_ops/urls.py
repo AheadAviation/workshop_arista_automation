@@ -32,6 +32,8 @@ urlpatterns = [
     path("action/remediate/", views.DriftRemediateView.as_view(), name="drift_remediate"),
     path("action/lab/deploy/", views.LabDeployView.as_view(), name="lab_deploy"),
     path("action/lab/destroy/", views.LabDestroyView.as_view(), name="lab_destroy"),
+    path("action/import/", views.ImportDevicesView.as_view(), name="import_devices"),
+    path("action/apply/", views.ApplyConfigsView.as_view(), name="apply_configs"),
 
     path("status.json", views.StatusJsonView.as_view(), name="status"),
 ]

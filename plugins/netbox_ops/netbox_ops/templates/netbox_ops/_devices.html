@@ -1,5 +1,44 @@
 {% load helpers %}
 
+{# ===================== Setup: devices, configs, boot ===================== #}
+<div class="card mb-3">
+  <div class="card-body">
+    <h5 class="card-title">Set up the demo</h5>
+    <p class="text-muted small mb-2">
+      Add the devices, render their configs from NetBox, push them, and prove each device
+      matches what was rendered. Each button reports what it actually did.
+    </p>
+
+    <div class="d-flex gap-3 flex-wrap align-items-end">
+      <div>
+        <div class="text-muted small text-uppercase">In NetBox</div>
+        <div class="fw-bold">{{ setup.devices.count }} device(s)</div>
+      </div>
+      <div>
+        <div class="text-muted small text-uppercase">Rendered configs</div>
+        <div class="fw-bold">{{ setup.configs.configs|length }}</div>
+      </div>
+
+      <form method="post" action="{% url 'plugins:netbox_ops:import_devices' %}">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-outline-primary" type="submit">1. Add devices</button>
+      </form>
+
+      <form method="post" action="{% url 'plugins:netbox_ops:apply_configs' %}">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-outline-primary" type="submit">2. Push configs &amp; verify</button>
+      </form>
+    </div>
+
+    {% if setup.configs.configs %}
+      <div class="mt-2 small text-muted">
+        Ready to push:
+        {% for c in setup.configs.configs %}<code>{{ c }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+
 {% if not fabric.ok %}
   <div class="alert alert-danger">
     <strong>{{ fabric.headline }}</strong>

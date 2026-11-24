@@ -183,6 +183,39 @@ def lab_status() -> OpsResult:
     return _wrap(_lab_status)
 
 
+def devices_status() -> OpsResult:
+    """Whether the devices are in NetBox, and which configs are rendered."""
+    from netbox_ops.devices_admin import device_status, rendered_configs
+
+    status = _wrap(device_status)
+    configs = _wrap(rendered_configs)
+    return OpsResult(
+        ok=status.ok and configs.ok,
+        data={
+            "devices": status.data,
+            "configs": configs.data,
+        },
+        headline=f"{status.headline} · {configs.headline}",
+        detail=status.detail or configs.detail,
+    )
+
+
+def import_devices() -> OpsResult:
+    """Populate NetBox from the fabric topology."""
+    from netbox_ops.devices_admin import import_fabric
+
+    return _wrap(import_fabric)
+
+
+def apply_configs(device: str | None = None) -> OpsResult:
+    """Push rendered configs to devices and prove they took."""
+    from netbox_ops import devices_admin
+
+    if device:
+        return _wrap(devices_admin.apply_config, device)
+    return _wrap(devices_admin.apply_all)
+
+
 def lab_deploy() -> OpsResult:
     from netbox_ops.labs import deploy as _deploy
 

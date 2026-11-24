@@ -85,6 +85,9 @@ services:
       # happened once and produced a 500 with nothing in the logs.
       - ./plugins/netbox_ops/netbox_ops:/opt/netbox/plugins/netbox_ops/netbox_ops:ro
       - ./workbench:/opt/netbox/engine/workbench:ro
+      # Rendered configs, so the plugin can push one to a device and prove it took. Read-only:
+      # rendering runs in the ansible container and the plugin only ever reads the result.
+      - ./output/configs:/opt/netbox/configs:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/"]
       interval: 30s

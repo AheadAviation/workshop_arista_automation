@@ -83,6 +83,7 @@ class OpsHomeView(View):
         # and loading all six on every request would make the page feel broken.
         if tab == "devices":
             context["fabric"] = engine.fabric_overview().to_dict()
+            context["setup"] = engine.devices_status().to_dict()
         elif tab == "labs":
             context["lab"] = engine.lab_status().to_dict()
         elif tab == "change":
@@ -239,6 +240,27 @@ def _report(request, result) -> None:
         messages.success(request, result.headline)
     else:
         messages.error(request, f"{result.headline}: {result.detail}")
+
+
+@method_decorator(csrf_protect, name="post")
+class ImportDevicesView(View):
+    """Populate NetBox from the fabric topology."""
+
+    def post(self, request, *args, **kwargs):
+        result = engine.import_devices()
+        _report(request, result)
+        return redirect("plugins:netbox_ops:home")
+
+
+@method_decorator(csrf_protect, name="post")
+class ApplyConfigsView(View):
+    """Push rendered configs to the devices and prove they took."""
+
+    def post(self, request, *args, **kwargs):
+        device = str(request.POST.get("device") or "").strip() or None
+        result = engine.apply_configs(device)
+        _report(request, result)
+        return redirect("plugins:netbox_ops:home")
 
 
 class StatusJsonView(View):
