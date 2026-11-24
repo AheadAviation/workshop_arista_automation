@@ -129,6 +129,10 @@ def read_fabric_intent(
         cf = device.get("custom_fields") or {}
         role = _role_slug(device)
         trunks = DEMO_TRUNKS.get(name, ())
+        # A spine is a fabric device: it carries no server VLANs and no server trunks. Asking
+        # it for tenant VLANs made two perfectly healthy spines report as drifted, which is a
+        # false finding on screen and exactly the sort of thing that costs credibility.
+        tenant_vlans = tuple(vlans) if trunks else ()
         intended[name] = Intent(
             device=name,
             platform="eos",
@@ -137,9 +141,9 @@ def read_fabric_intent(
             role=role,
             asn=int(cf.get("bgp_asn") or 0),
             router_id=cf.get("router_id") or "",
-            vlans=tuple(vlans),
+            vlans=tenant_vlans,
             trunks=trunks,
-            trunk_allowed={port: tuple(vlans) for port in trunks},
+            trunk_allowed={port: tenant_vlans for port in trunks},
         )
     return intended
 
