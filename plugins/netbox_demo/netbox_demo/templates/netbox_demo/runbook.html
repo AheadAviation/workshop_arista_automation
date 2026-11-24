@@ -1,0 +1,205 @@
+{% extends 'base/layout.html' %}
+
+{% block title %}NetBox Demo{% endblock %}
+
+{% block tabs %}
+  {% include 'netbox_demo/_tabs.html' %}
+{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+  <div class="col-12">
+    <div class="card">
+      <h2 class="card-header d-flex justify-content-between align-items-center">
+        <span>Demo runbook</span>
+        {% if health %}
+          <span class="badge bg-green">Lab agent reachable</span>
+        {% else %}
+          <span class="badge bg-red">Lab agent unreachable</span>
+        {% endif %}
+      </h2>
+      <div class="card-body">
+        {% if not configured %}
+          <div class="alert alert-danger">
+            <strong>The plugin is not configured.</strong>
+            <div class="mt-1"><code>{{ config_problem }}</code></div>
+            <div class="mt-2 small">
+              Set <code>lab_agent_url</code> and <code>lab_agent_token</code> in
+              <code>PLUGINS_CONFIG['netbox_demo']</code>. The token must match
+              <code>LAB_AGENT_TOKEN</code> on the lab host.
+            </div>
+          </div>
+        {% elif not health %}
+          <div class="alert alert-warning">
+            <strong>The lab agent is not answering.</strong>
+            <div class="mt-1 small">
+              Expected at <code>{{ agent_url }}</code>. Check that the lab-agent container is
+              running on the lab host and that Tailscale is up on both ends.
+            </div>
+          </div>
+        {% else %}
+          <dl class="row mb-0">
+            <dt class="col-sm-3">Lab agent</dt>
+            <dd class="col-sm-9">
+              {{ health.hostname }} &middot; agent {{ health.agent_version }} &middot;
+              topology <code>{{ health.topology }}</code>
+            </dd>
+
+            <dt class="col-sm-3">Switches running</dt>
+            <dd class="col-sm-9">
+              {{ health.running_devices }} of {{ health.expected_devices }}
+              {% if health.running_devices == health.expected_devices %}
+                <span class="badge bg-green ms-2">all up</span>
+              {% elif health.running_devices == 0 %}
+                <span class="badge bg-secondary ms-2">lab is down</span>
+              {% else %}
+                <span class="badge bg-yellow ms-2">partially up</span>
+              {% endif %}
+            </dd>
+
+            <dt class="col-sm-3">Orb Agent</dt>
+            <dd class="col-sm-9">
+              mode <code>{{ health.orb.mode }}</code> &middot;
+              {% if health.orb.running %}
+                <span class="text-success">{{ health.orb.status }}</span>
+              {% else %}
+                <span class="text-muted">{{ health.orb.status }}</span>
+              {% endif %}
+            </dd>
+
+            <dt class="col-sm-3">Devices in NetBox</dt>
+            <dd class="col-sm-9">
+              {{ devices_documented }} of {{ devices_expected }} documented
+              {% if missing_devices %}
+                <div class="small text-warning mt-1">
+                  Missing: {{ missing_devices|join:", " }}
+                </div>
+              {% endif %}
+            </dd>
+
+            <dt class="col-sm-3">Assurance</dt>
+            <dd class="col-sm-9">
+              {% if assurance.available %}
+                {% if assurance.open %}
+                  <span class="badge bg-yellow">{{ assurance.open }} open deviation{{ assurance.open|pluralize }}</span>
+                {% else %}
+                  <span class="badge bg-green">no open deviations</span>
+                {% endif %}
+                <a href="{{ assurance.url }}" class="ms-2">Review in Assurance</a>
+              {% else %}
+                <span class="text-muted">{{ assurance.reason }}</span>
+              {% endif %}
+            </dd>
+          </dl>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <h2 class="card-header">Steps</h2>
+      <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th style="width: 3rem;">#</th>
+              <th>Step</th>
+              <th>What happens</th>
+              <th style="width: 10rem;">State</th>
+              <th style="width: 12rem;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for step in steps %}
+              <tr>
+                <td class="text-muted">{{ forloop.counter }}</td>
+                <td><strong>{{ step.label }}</strong></td>
+                <td class="text-muted small">{{ step.detail }}</td>
+                <td>
+                  {% if step.done %}
+                    <span class="badge bg-green">done</span>
+                    {% if step.detail_recorded %}
+                      <div class="small text-muted text-truncate" style="max-width: 14rem;"
+                           title="{{ step.detail_recorded }}">{{ step.detail_recorded }}</div>
+                    {% endif %}
+                  {% elif step.key == 'assurance' %}
+                    <span class="badge bg-secondary">review</span>
+                  {% else %}
+                    <span class="badge bg-secondary">not run</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  {% if step.key == 'seed' %}
+                    <form method="post" action="{% url 'plugins:netbox_demo:seed_fabric' %}" class="d-inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-primary">Document the fabric</button>
+                    </form>
+                  {% elif step.key == 'assurance' %}
+                    <a href="{{ assurance.url }}" class="btn btn-sm btn-outline-primary">Open Assurance</a>
+                  {% elif step.key == 'push' %}
+                    <a href="{% url 'plugins:netbox_demo:preview' %}" class="btn btn-sm btn-outline-primary">Preview first</a>
+                  {% endif %}
+                  {% if step.action %}
+                    <form method="post" action="{% url 'plugins:netbox_demo:run_step' step.key %}" class="d-inline"
+                          onsubmit="this.querySelector('button').disabled = true; this.querySelector('button').innerHTML = 'Running…';">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-{% if step.done %}outline-secondary{% else %}primary{% endif %}"
+                              {% if not configured %}disabled{% endif %}>
+                        {% if step.done %}Run again{% else %}Run{% endif %}
+                      </button>
+                    </form>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer d-flex justify-content-between">
+        <div>
+          <form method="post" action="{% url 'plugins:netbox_demo:reset_runbook' %}"
+                onsubmit="return confirm('Clear demo progress? The lab and NetBox data are not touched.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Clear progress</button>
+          </form>
+        </div>
+        <div class="d-flex gap-2">
+          <a href="{% url 'plugins:netbox_demo:drift' %}" class="btn btn-sm btn-outline-primary">Drift</a>
+          <a href="{% url 'plugins:netbox_demo:job_list' %}" class="btn btn-sm btn-outline-primary">Jobs</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if recent_jobs %}
+<div class="row mt-3">
+  <div class="col-12">
+    <div class="card">
+      <h2 class="card-header">Recent activity</h2>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <tbody>
+            {% for job in recent_jobs %}
+              <tr>
+                <td style="width: 12rem;">
+                  <a href="{% url 'plugins:netbox_demo:job_detail' job.pk %}">{{ job.action }}</a>
+                </td>
+                <td style="width: 8rem;">
+                  <span class="badge bg-{{ job.get_status_color }}">{{ job.status }}</span>
+                </td>
+                <td class="text-muted small">{{ job.created|date:"Y-m-d H:i:s" }}</td>
+                <td class="text-truncate" style="max-width: 30rem;">{{ job.error|default:job.output|truncatechars:110 }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

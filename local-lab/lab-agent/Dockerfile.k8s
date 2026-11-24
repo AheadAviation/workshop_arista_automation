@@ -1,0 +1,28 @@
+# Kubernetes/c9s image for NetBox Demo Lab Agent.
+# Runs in-cluster alongside the c9s cEOS fabric and persistent Orb Agent.
+FROM python:3.12-alpine
+
+ARG KUBECTL_VERSION=v1.31.4
+ARG CLAB_VERSION=0.68.0
+ARG TARGETARCH=amd64
+
+RUN apk add --no-cache ca-certificates curl bash \
+    && pip install --no-cache-dir requests \
+    && curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
+       -o /usr/local/bin/kubectl \
+    && chmod +x /usr/local/bin/kubectl \
+    && curl -fsSL "https://github.com/srl-labs/containerlab/releases/download/v${CLAB_VERSION}/containerlab_${CLAB_VERSION}_linux_${TARGETARCH}.tar.gz" \
+       | tar -xz -C /usr/local/bin containerlab \
+    && chmod +x /usr/local/bin/containerlab
+
+WORKDIR /app
+COPY contract.py /app/contract.py
+COPY agent.py /app/agent.py
+
+ENV PYTHONUNBUFFERED=1
+ENV LAB_BACKEND=k8s
+ENV LAB_AGENT_BIND_HOST=0.0.0.0
+ENV LAB_AGENT_PORT=8085
+
+EXPOSE 8085
+CMD ["python3", "/app/agent.py"]

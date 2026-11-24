@@ -1,0 +1,92 @@
+# NetBox Discovery (Orb Agent) - on-demand sweep
+# =============================================================================
+# Identical to agent.yaml with the `schedule` keys removed, so the agent runs
+# each policy once and exits. The lab-agent's "Run discovery" action starts this
+# during a live demo, so the audience does not wait for a cron tick.
+
+orb:
+  config_manager:
+    active: local
+  backends:
+    common:
+      diode:
+        target: ${DIODE_TARGET}
+        client_id: ${DIODE_CLIENT_ID}
+        client_secret: ${DIODE_CLIENT_SECRET}
+        agent_name: netbox-demo-local-orb-oneshot
+    device_discovery:
+    snmp_discovery:
+
+  policies:
+    device_discovery:
+      demo_fabric_napalm:
+        config:
+          options:
+            capture_running_config: true
+            sanitize_config: true
+            discover_vrfs: true
+            create_unknown_vlans: true
+            emit_prefix_vlan: svi-name
+            emit_lag_membership: true
+            port_scan_ports: [22, 80, 443]
+            port_scan_timeout: 1.0
+          defaults:
+            site: netbox-demo
+            role: switch
+            tags: [netbox-demo, discovered]
+            description: "Discovered by NetBox Discovery (netbox-demo)"
+            interface_patterns:
+              - match: "^Loopback"
+                type: virtual
+              - match: "^Management"
+                type: 1000base-t
+              - match: "^Vlan"
+                type: virtual
+              - match: "^Port-Channel"
+                type: lag
+              - match: "^Ethernet"
+                type: 10gbase-x-sfpp
+        scope:
+          - driver: eos
+            hostname: 172.31.30.11
+            username: ${EOS_USER}
+            password: ${EOS_PASS}
+          - driver: eos
+            hostname: 172.31.30.12
+            username: ${EOS_USER}
+            password: ${EOS_PASS}
+          - driver: eos
+            hostname: 172.31.30.21
+            username: ${EOS_USER}
+            password: ${EOS_PASS}
+          - driver: eos
+            hostname: 172.31.30.22
+            username: ${EOS_USER}
+            password: ${EOS_PASS}
+          - driver: eos
+            hostname: 172.31.30.23
+            username: ${EOS_USER}
+            password: ${EOS_PASS}
+          - driver: eos
+            hostname: 172.31.30.24
+            username: ${EOS_USER}
+            password: ${EOS_PASS}
+
+    snmp_discovery:
+      demo_fabric_snmp:
+        config:
+          defaults:
+            site: netbox-demo
+            role: switch
+            tags: [netbox-demo, discovered]
+        scope:
+          targets:
+            - host: 172.31.30.11
+            - host: 172.31.30.12
+            - host: 172.31.30.21
+            - host: 172.31.30.22
+            - host: 172.31.30.23
+            - host: 172.31.30.24
+          authentication:
+            protocol_version: SNMPv2c
+            community: ${SNMP_COMMUNITY}
