@@ -57,15 +57,23 @@ def _wrap(fn: Callable[..., dict[str, Any]], *args: Any, **kwargs: Any) -> OpsRe
 
     The plugin's views call this and never a raw engine function, so a NetBox page cannot
     show a stack trace. The same rule applies as in the workbench's own web layer.
+
+    A `ResolveError` is special-cased: it is not an unexpected failure, it is a **refusal** the
+    operator needs to read — "VLAN 999 is not in IPAM" is the message that teaches the workflow.
+    Burying it under "The operation could not be completed" would hide the most useful sentence
+    the page can produce.
     """
     try:
         payload = fn(*args, **kwargs)
     except Exception as exc:  # noqa: BLE001 - a page must never 500 on engine trouble
+        refusal = type(exc).__name__ == "ResolveError"
         return OpsResult(
             ok=False,
-            data={},
-            headline="The operation could not be completed",
-            detail=f"{type(exc).__name__}: {exc}",
+            data={"refused": True} if refusal else {},
+            headline=(
+                str(exc).split(". ")[0] + "." if refusal and str(exc) else "The operation could not be completed"
+            ),
+            detail="" if refusal else f"{type(exc).__name__}: {exc}",
         )
     return OpsResult(
         ok=bool(payload.get("ok", True)),
@@ -333,8 +341,107 @@ def itsm_tickets(limit: int = 25) -> OpsResult:
     return _wrap(_tickets, limit=limit)
 
 
+# --------------------------------------------------------------------------- #
+# Day-two operations (INIT-005) — the interactive page
+# --------------------------------------------------------------------------- #
+#
+# These replace the "pick a switch, type a VLAN" form with a declared operation whose inputs are
+# populated from live NetBox data. The safety properties are not re-implemented: `plan_operation`
+# and `apply_operation` reuse the same preview/approve/record path as the service change, so a
+# change from this page is the same change as a change from the API.
+
+
+def operations_catalogue() -> OpsResult:
+    """Every operation, with each field's options read live from IPAM.
+
+    The read failure case matters here: if IPAM is unreachable the page must say so rather than
+    render an empty VLAN dropdown, which would look like "your source of truth has no VLANs".
+    """
+    from workbench import operations_resolve
+
+    def build() -> dict[str, Any]:
+        return operations_resolve.describe_all()
+
+    return _wrap(build)
+
+
+def resolve_operation(operation_key: str, values: dict[str, Any]) -> OpsResult:
+    """Turn submitted values into a real change, refusing anything not in IPAM."""
+    from workbench import operations_resolve
+
+    def run() -> dict[str, Any]:
+        resolved = operations_resolve.resolve(operation_key=operation_key, values=values)
+        payload = resolved.to_dict()
+        payload["ok"] = True
+        payload["headline"] = resolved.sentence
+        return payload
+
+    return _wrap(run)
+
+
+def plan_operation(operation_key: str, values: dict[str, Any]) -> OpsResult:
+    """Resolve an operation and preview what it would do, on every switch it touches."""
+    from workbench import operations_resolve, scenarios
+
+    def run() -> dict[str, Any]:
+        resolved = operations_resolve.resolve(operation_key=operation_key, values=values)
+
+        lab = _engine_lab()
+        if resolved.operation.kind == "retire":
+            return scenarios.plan_retirement(lab, vid=resolved.vlan_vid)
+        return scenarios.plan_service_change(
+            lab,
+            service_key=_service_key_for(resolved.vlan_vid),
+            scope="all-leaves" if len(resolved.devices) == 4 else "mlag-pair",
+            pair=_pair_for(resolved.devices),
+        )
+
+    return _wrap(run)
+
+
+def apply_operation(operation_key: str, values: dict[str, Any], approver: str, change_id: str) -> OpsResult:
+    """Apply a previewed operation, on the recorded approval."""
+    from workbench import scenarios
+
+    def run() -> dict[str, Any]:
+        lab = _engine_lab()
+        if operation_key == "retire_service":
+            return scenarios.approve_retirement(lab, change_id=change_id, approver=approver)
+        return scenarios.approve_service_change(lab, change_id=change_id, approver=approver)
+
+    return _wrap(run)
+
+
+def _service_key_for(vid: int) -> str:
+    """Map a VLAN number back to the catalogue's service key, for the shared plan path.
+
+    The operation page works in VLAN numbers (that is what IPAM shows a person) while the service
+    planner works in service keys (that is what makes its sentence readable). This bridges them in
+    one place rather than duplicating the planner for each entry point.
+    """
+    from workbench import catalogue
+
+    for svc in catalogue.CATALOGUE:
+        if svc.vlan == vid:
+            return svc.key
+    # A VLAN in IPAM that the service catalogue does not know about. The plan still works — the
+    # catalogue is about naming, not authorization — but it needs a key to run under.
+    return f"vlan-{vid}"
+
+
+def _pair_for(devices: list[str]) -> str:
+    """Which MLAG pair a device list corresponds to, for the plan path."""
+    from workbench import catalogue
+
+    for key, members in catalogue.MLAG_PAIRS.items():
+        if sorted(members) == sorted(devices):
+            return key
+    return list(catalogue.MLAG_PAIRS)[0]
+
+
 __all__ = [
     "OpsResult",
+    "apply_operation",
     "approve_vlan",
     "audit",
     "awx_job_templates",
@@ -347,7 +454,10 @@ __all__ = [
     "lab_destroy",
     "lab_status",
     "lifecycle",
+    "operations_catalogue",
+    "plan_operation",
     "propose_vlan",
     "remediate",
+    "resolve_operation",
     "two_vendors",
 ]

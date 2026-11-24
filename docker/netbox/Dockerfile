@@ -68,3 +68,12 @@ RUN mkdir -p /opt/netbox/netbox/static/netbox_ztp_portal && \
 # Create static directory for topology views plugin images
 RUN mkdir -p /opt/netbox/netbox/static/netbox_topology_views/img && \
     chown -R unit:root /opt/netbox/netbox/static/netbox_topology_views
+
+# --- The workbench audit log directory ---
+# The directory itself is created at *runtime* by `netbox-audit-perms` in docker-compose.yml.
+# A `RUN mkdir && chown` here does NOT work for this path: a named volume is mounted over it, and
+# Docker creates a fresh named volume owned by root, shadowing whatever the image put there. The
+# plugin then fails every change with `Permission denied` because the audit entry is written
+# before anything reaches a switch — a correct refusal pointing at a deployment mistake. So the
+# image just documents the path; the compose service fixes the owner on every start.
+ENV WORKBENCH_AUDIT_LOG=/opt/netbox/audit/audit.jsonl

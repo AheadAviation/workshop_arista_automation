@@ -25,6 +25,8 @@
   {% include 'netbox_ops/_devices.html' with fabric=fabric setup=setup %}
 {% elif tab == 'live' %}
   {% include 'netbox_ops/_live.html' with live=live %}
+{% elif tab == 'actions' %}
+  {% include 'netbox_ops/_actions.html' with fabric=fabric %}
 {% elif tab == 'labs' %}
   {% include 'netbox_ops/_labs.html' with lab=lab %}
 {% elif tab == 'lifecycle' %}

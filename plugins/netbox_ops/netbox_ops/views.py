@@ -41,8 +41,9 @@ class OpsHomeView(ReadOnlyOperatorMixin, View):
     #: named route of its own.
     TABS = (
         ("devices", "Devices", "home"),
+        ("actions", "Day-two actions", "actions"),
         ("live", "Live config", "live"),
-        ("change", "Day-two change", "change"),
+        ("change", "Change (classic)", "change"),
         ("labs", "Container labs", "labs"),
         ("lifecycle", "Lifecycle", "lifecycle"),
         ("awx", "AWX jobs", "awx"),
@@ -86,6 +87,11 @@ class OpsHomeView(ReadOnlyOperatorMixin, View):
         if tab == "devices":
             context["fabric"] = engine.fabric_overview().to_dict()
             context["setup"] = engine.devices_status().to_dict()
+        elif tab == "actions":
+            # The interactive page fetches its own data via JSON, so the server only needs the
+            # fabric state for its "is anything reachable" banner. Loading the catalogue here
+            # would duplicate the call the page makes on load.
+            context["fabric"] = engine.fabric_overview().to_dict()
         elif tab == "labs":
             context["lab"] = engine.lab_status().to_dict()
         elif tab == "live":
@@ -398,6 +404,82 @@ class ResetDemoView(ChangeOperatorMixin, View):
         result = engine.reset_demo(device)
         _report(request, result)
         return redirect("plugins:netbox_ops:change")
+
+
+class OpsCatalogueJsonView(ReadOnlyOperatorMixin, View):
+    """Every operation, with each field's options read live from IPAM.
+
+    The page fetches this once on load and re-renders the form when the operator changes
+    operation. Returning the options *with* the catalogue means no per-field round trip, which
+    matters when the whole point is that the form responds as you go.
+    """
+
+    def get(self, request, *args, **kwargs):
+        result = engine.operations_catalogue()
+        return JsonResponse(result.to_dict())
+
+
+@method_decorator(csrf_protect, name="post")
+class OperationResolveView(ChangeOperatorMixin, View):
+    """Resolve submitted values without previewing anything.
+
+    Separate from the preview so the page can show the resolved sentence — "Give the new storage
+    array STORAGE on MLAG pair 1, at MTU 9214" — before it does any work against a switch. That
+    sentence is what the operator reads to check they asked for the right thing.
+    """
+
+    def post(self, request, *args, **kwargs):
+        operation = str(request.POST.get("operation") or "").strip()
+        values = {k: v for k, v in request.POST.items() if k not in ("csrfmiddlewaretoken", "operation")}
+        result = engine.resolve_operation(operation, values)
+        if not result.ok:
+            return JsonResponse(result.to_dict(), status=400)
+        return JsonResponse(result.to_dict())
+
+
+@method_decorator(csrf_protect, name="post")
+class OperationPreviewView(ChangeOperatorMixin, View):
+    """Resolve an operation and render its diff, on every switch it touches."""
+
+    def post(self, request, *args, **kwargs):
+        operation = str(request.POST.get("operation") or "").strip()
+        values = {k: v for k, v in request.POST.items() if k not in ("csrfmiddlewaretoken", "operation")}
+        result = engine.plan_operation(operation, values)
+        status = 200 if result.ok else 400
+        return JsonResponse(result.to_dict(), status=status)
+
+
+@method_decorator(csrf_protect, name="post")
+class OperationApplyView(ChangeOperatorMixin, View):
+    """Apply a previewed operation, with a named approver on the record."""
+
+    def post(self, request, *args, **kwargs):
+        operation = str(request.POST.get("operation") or "").strip()
+        change_id = str(request.POST.get("change_id") or "").strip()
+        approver = str(request.POST.get("approver") or "").strip()
+
+        if not approver:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "headline": "An approver is required",
+                    "detail": "no change is applied without a named person on the record",
+                },
+                status=400,
+            )
+        if not change_id:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "headline": "Preview the change first",
+                    "detail": "an approval only applies to a change that was just previewed",
+                },
+                status=400,
+            )
+
+        result = engine.apply_operation(operation, {}, approver, change_id)
+        status = 200 if result.ok else 400
+        return JsonResponse(result.to_dict(), status=status)
 
 
 class TopologyRedirectView(ChangeOperatorMixin, View):

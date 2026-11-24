@@ -17,6 +17,32 @@ services:
   # ==========================================================================
   # NetBox Application
   # ==========================================================================
+  # ==========================================================================
+  # Audit log permissions (one-shot, runs before NetBox)
+  # ==========================================================================
+  # A named volume is created owned by root, but NetBox runs as `unit`. The plugin writes its
+  # audit entry *before* anything reaches a switch (that ordering is the safety property), so an
+  # unwritable audit path refuses every change with `Permission denied` — a correct refusal
+  # pointing at a deployment mistake, and one that is confusing to diagnose from the page.
+  #
+  # A `RUN mkdir && chown` in the Dockerfile does not fix this: the volume is mounted over the
+  # image's directory and shadows it. The owner has to be set after the volume exists, which is
+  # what this does. Idempotent, and cheap enough to run on every start.
+  netbox-audit-perms:
+    image: busybox:1.36
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mkdir -p /audit && chown -R 999:0 /audit && echo "audit dir ready: $$(ls -ld /audit)"
+    volumes:
+      - netbox-audit:/audit
+    networks:
+      default:
+        aliases:
+          - netbox-audit-perms
+    restart: "no"
+
   netbox:
     build:
       # Context is the repo root so the image can bundle the local
@@ -28,6 +54,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # The audit directory must be writable before the app starts: the plugin writes an audit
+      # entry before touching a switch, so an unwritable path refuses every change.
+      netbox-audit-perms:
+        condition: service_completed_successfully
     environment:
       # Database - using correct env var names for netbox-docker
       DB_HOST: postgres
@@ -70,6 +100,10 @@ services:
       # the app listens on 8080 (8888 is only the host-side published port).
       NETBOX_URL: http://localhost:8080
       NETBOX_TOKEN: 0123456789abcdef0123456789abcdef01234567
+      # Where the workbench writes its append-only audit record, from inside this container.
+      # Must be a path the `unit` user can write, which the mounted repo is not: see the
+      # netbox-audit volume below for why this is a named volume rather than ./output.
+      WORKBENCH_AUDIT_LOG: /opt/netbox/audit/audit.jsonl
       # The engine's device driver reaches the lab through the scoped Docker proxy, never a
       # socket. It shells out to `docker exec`; this tells it which daemon to talk to.
       DOCKER_HOST: tcp://docker-proxy:2375
@@ -79,6 +113,13 @@ services:
       - netbox-media:/opt/netbox/netbox/media
       - netbox-reports:/opt/netbox/netbox/reports
       - netbox-scripts:/opt/netbox/netbox/scripts
+      # The workbench audit log. A named volume, not a bind mount: the repository is mounted
+      # read-only into this container on purpose (NetBox must not be able to edit the code it
+      # runs), so an audit path resolving inside the repo is unwritable and every change is
+      # refused with `Permission denied`. That is correct fail-closed behaviour for an audit
+      # failure, and the wrong place for the file. The log belongs beside NetBox's own data,
+      # which is where an operator would look for it anyway.
+      - netbox-audit:/opt/netbox/audit
       # Plugin configuration
       - ./docker/netbox/configuration/plugins.py:/etc/netbox/config/plugins.py:ro
       # ZTP portal plugin source (editable-installed in the image); bind-mounted
@@ -357,6 +398,7 @@ volumes:
   netbox-media:
   netbox-reports:
   netbox-scripts:
+  netbox-audit:
   postgres-data:
   redis-data:
 

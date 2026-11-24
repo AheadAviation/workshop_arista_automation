@@ -733,6 +733,224 @@ def _record_in_ipam(devices: list[str], *, vid: int, vlan_name: str) -> dict[str
 
 
 # --------------------------------------------------------------------------- #
+# 3c. Retire a network — the reverse of delivering one
+# --------------------------------------------------------------------------- #
+
+
+def plan_retirement(lab: Lab, *, vid: int) -> dict[str, Any]:
+    """Work out what removing a VLAN from every leaf would take. Changes nothing.
+
+    Retirement is not "delivery with a minus sign", and it needs its own plan because the risk is
+    different: adding a VLAN to a trunk that already carries traffic is nearly always safe, while
+    removing one can take a live service off the network. So the plan reports **where the VLAN is
+    actually in use** and refuses to look like a routine change when it is not.
+
+    It is also the operation most worth having in a demo, because it is the one a network director
+    recognises as the thing that never gets done: the VLAN nobody remembers to remove.
+    """
+    try:
+        intended = lab.read_intent()
+    except Exception as exc:
+        return {"ok": False, "headline": "Could not read intended state", "detail": str(exc)}
+
+    leaves = {
+        name: intent
+        for name, intent in intended.items()
+        if intent.trunks
+    }
+    if not leaves:
+        return {
+            "ok": False,
+            "headline": "No leaf switches found",
+            "detail": "the fabric has no server trunks to retire anything from",
+        }
+
+    carrying: list[dict[str, Any]] = []
+    clear: list[str] = []
+    for name in sorted(leaves):
+        intent = leaves[name]
+        if vid in intent.vlans or any(vid in vids for vids in intent.trunk_allowed.values()):
+            carrying.append(
+                {
+                    "device": name,
+                    "trunks": [port for port, vids in intent.trunk_allowed.items() if vid in vids],
+                }
+            )
+        else:
+            clear.append(name)
+
+    if not carrying:
+        return {
+            "ok": True,
+            "no_drift": True,
+            "headline": f"VLAN {vid} is not on any leaf",
+            "detail": "there is nothing to retire, which is the expected end state",
+            "devices": [],
+        }
+
+    change_id = new_id("retire", str(vid))
+    details = "; ".join(
+        f"{row['device']} on {', '.join(row['trunks'])}" for row in carrying
+    )
+    append_entry(
+        lab.audit,
+        AuditEntry(
+            kind="pending",
+            device=",".join(row["device"] for row in carrying),
+            summary=f"retire VLAN {vid} from {len(carrying)} switch(es), awaiting approval",
+            autonomy="assist",
+            event_id=change_id,
+        ),
+    )
+
+    # The retirement is staged as one item per device, exactly like a delivery, so the approval
+    # path and the audit record are identical. Only the config differs.
+    _PENDING_SERVICE_CHANGES[change_id] = {
+        "pending": _retirement_items(lab, carrying, vid),
+        "service": {"key": f"retire-{vid}", "name": f"VLAN {vid}", "vlan": vid},
+        "scope": "all-leaves",
+        "pair": "",
+        "retire": True,
+    }
+
+    return {
+        "ok": True,
+        "change_id": change_id,
+        "vlan": vid,
+        "devices": [row["device"] for row in carrying],
+        "carrying": carrying,
+        "already_clear": clear,
+        "headline": f"Retire VLAN {vid} from {len(carrying)} switch(es)",
+        "detail": details,
+    }
+
+
+def _retirement_items(lab: Lab, carrying: list[dict[str, Any]], vid: int) -> list[Any]:
+    """One pending change per device, each a previewed removal.
+
+    Built as `PendingChange` objects so `approve_and_apply` can consume them unchanged — the
+    approval gate, the audit entry and the read-back all come for free, and a retirement is
+    recorded exactly like the delivery it undoes.
+    """
+    from workbench.contracts import Plan, Preview
+
+    items: list[Any] = []
+    for row in carrying:
+        device = row["device"]
+        config = "\n".join(
+            f"interface {port}\n   switchport trunk allowed vlan remove {vid}" for port in row["trunks"]
+        )
+        plan = Plan(
+            device=device,
+            platform="eos",
+            usecase="retire-vlan",
+            fmt="text",
+            config=config,
+            mode="merge",
+            reason=f"remove VLAN {vid} from {len(row['trunks'])} trunk(s)",
+        )
+        try:
+            staged = lab.preview(plan)
+        except Exception:
+            continue
+        if staged.is_empty:
+            continue
+        items.append(request_change(f"retire:{vid}:{device}", plan, staged))
+    return items
+
+
+def approve_retirement(lab: Lab, *, change_id: str, approver: str) -> dict[str, Any]:
+    """Apply a staged retirement, and remove the VLAN from the IPAM trunks too.
+
+    The IPAM write happens **first**, for the same reason it does on a delivery: the model must
+    agree before the device changes. See `approve_service_change`.
+    """
+    if not approver or not approver.strip():
+        return {
+            "ok": False,
+            "headline": "An approver is required",
+            "detail": "no change is applied without a named person on the record",
+        }
+
+    staged = _PENDING_SERVICE_CHANGES.pop(str(change_id or ""), None)
+    if not staged or not staged.get("retire"):
+        return {
+            "ok": False,
+            "refused": True,
+            "headline": "This retirement is no longer staged",
+            "detail": "Preview the retirement again.",
+        }
+
+    pending = staged["pending"]
+    vid = int((staged.get("service") or {}).get("vlan") or 0)
+    targets = [item.plan.device for item in pending]
+
+    ipam = _remove_from_ipam(targets, vid=vid)
+
+    applied: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+    for item in pending:
+        try:
+            entry = approve_and_apply(item, approver, audit=lab.audit, apply=lab.apply)
+        except (GateRefused, EosApplyError) as exc:
+            failures.append({"device": item.plan.device, "detail": str(exc)[:200]})
+            continue
+        applied.append({"device": entry.device, "kind": entry.kind, "diff": entry.diff_after or ""})
+
+    ok = not failures and bool(applied)
+    return {
+        "ok": ok,
+        "change_id": change_id,
+        "approver": approver.strip(),
+        "applied": [a for a in applied if a["kind"] == "applied"],
+        "no_op": [a for a in applied if a["kind"] != "applied"],
+        "failures": failures,
+        "ipam": ipam,
+        "device_count": len(pending),
+        "headline": (
+            f"Retired VLAN {vid} from {len(applied)} switch(es)"
+            if ok
+            else (f"Retired from {len(applied)} of {len(pending)} switches" if applied else "The retirement did not apply")
+        ),
+        "detail": "every switch was read back after the change; NetBox records it" if ok else "see the per-switch results",
+    }
+
+
+def _remove_from_ipam(devices: list[str], *, vid: int) -> dict[str, Any]:
+    """Take the VLAN off the trunks in NetBox, via the lab's own write seam."""
+    if not devices or not vid:
+        return {"ok": True, "updated": [], "failures": [], "note": "nothing to remove"}
+
+    try:
+        from netbox_ops import conf
+        from workbench.netbox_ipam_write import NetboxWriter, remove_vlan_from_trunks
+    except Exception as exc:
+        return {
+            "ok": False,
+            "updated": [],
+            "failures": [],
+            "note": f"IPAM write unavailable: {type(exc).__name__}: {exc}",
+        }
+
+    try:
+        client = NetboxWriter(conf.netbox_url(), conf.netbox_token())
+        result = remove_vlan_from_trunks(client, vid=vid, devices=devices)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "updated": [],
+            "failures": [{"device": "*", "detail": f"{type(exc).__name__}: {exc}"[:200]}],
+            "note": "the switches changed but NetBox did not",
+        }
+
+    return {
+        "ok": bool(result.get("ok")),
+        "updated": [r["device"] for r in result.get("results") or [] if r.get("changed")],
+        "failures": [r for r in result.get("results") or [] if not r.get("ok")],
+    }
+
+
+# --------------------------------------------------------------------------- #
 # 4. Inject drift, then repair it
 # --------------------------------------------------------------------------- #
 

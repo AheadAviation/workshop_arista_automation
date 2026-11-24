@@ -41,6 +41,13 @@ urlpatterns = [
     path("action/reset/", views.ResetDemoView.as_view(), name="reset_demo"),
 
     path("status.json", views.StatusJsonView.as_view(), name="status"),
+    # The interactive day-two operation page (INIT-005). JSON because the form re-renders as
+    # the operator changes operation, and a full page reload per keystroke is not a demo.
+    path("actions/", views.OpsHomeView.as_view(), {"tab": "actions"}, name="actions"),
+    path("actions/catalogue.json", views.OpsCatalogueJsonView.as_view(), name="actions_catalogue"),
+    path("actions/resolve/", views.OperationResolveView.as_view(), name="actions_resolve"),
+    path("actions/preview/", views.OperationPreviewView.as_view(), name="actions_preview"),
+    path("actions/apply/", views.OperationApplyView.as_view(), name="actions_apply"),
     # The fabric topology, with the parameters netbox_topology_views needs to draw anything.
     path("topology/", views.TopologyRedirectView.as_view(), name="topology"),
 ]
