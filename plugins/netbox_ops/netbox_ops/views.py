@@ -344,6 +344,27 @@ class ResetDemoView(ChangeOperatorMixin, View):
         return redirect("plugins:netbox_ops:change")
 
 
+class TopologyRedirectView(ChangeOperatorMixin, View):
+    """Open the topology view with the parameters it actually needs to draw the fabric.
+
+    `netbox_topology_views` reads its display options **only from the URL**, not from its saved
+    `IndividualOptions` row — verified in `utils.get_query_settings`, where `show_unconnected`
+    starts `False` and is set true only by `request.GET`. With the defaults, a fabric whose cables
+    are all correct renders `{"nodes": [], "edges": []}`: a device becomes a node only if it sits
+    at the end of a cable, and only when `draw_init` is true.
+
+    So the bare URL the plugin's own menu links to shows an empty canvas, which reads as a broken
+    feature. This route carries the parameters that make it work.
+    """
+
+    def get(self, request, *args, **kwargs):
+        from django.urls import reverse
+
+        base = reverse("plugins:netbox_topology_views:home")
+        query = "draw_init=True&show_unconnected=True&show_cables=True&show_neighbors=True"
+        return redirect(f"{base}?{query}")
+
+
 class StatusJsonView(ReadOnlyOperatorMixin, View):
     """A machine-readable health check, so a rehearsal script can ask without scraping."""
 

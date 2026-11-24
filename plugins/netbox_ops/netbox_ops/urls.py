@@ -41,4 +41,6 @@ urlpatterns = [
     path("action/reset/", views.ResetDemoView.as_view(), name="reset_demo"),
 
     path("status.json", views.StatusJsonView.as_view(), name="status"),
+    # The fabric topology, with the parameters netbox_topology_views needs to draw anything.
+    path("topology/", views.TopologyRedirectView.as_view(), name="topology"),
 ]

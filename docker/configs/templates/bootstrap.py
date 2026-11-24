@@ -85,6 +85,26 @@ def main() -> int:
         print(f"  no installer at {INSTALLER}", flush=True)
         return 1
 
+    # 3. Topology view defaults, so the fabric appears on first open rather than an empty
+    #    canvas. See the script's own header for why the defaults matter that much.
+    topology_installer = Path("/opt/netbox/templates/topology_defaults.py")
+    if topology_installer.exists():
+        print("configuring topology view defaults ...", flush=True)
+        out, code = run(
+            [
+                "/opt/netbox/venv/bin/python",
+                "/opt/netbox/netbox/manage.py",
+                "shell",
+                "-c",
+                f"exec(open('{topology_installer}').read())",
+            ]
+        )
+        for line in out.splitlines():
+            if line.startswith("Topology defaults"):
+                print("  " + line, flush=True)
+        if code != 0:
+            print(f"  topology defaults FAILED (rc={code})", flush=True)
+
     print("=== ready ===", flush=True)
     return 0
 
