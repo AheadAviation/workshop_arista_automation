@@ -55,8 +55,28 @@ class FakeLab:
         self.applied: list[Plan] = []
         self.fail_preview: str = ""
         self.fail_apply: str = ""
+        # The source of truth. A change must be recorded here before a switch is touched, so
+        # this fake records the writes and the order they arrived in.
+        self.ipam_writes: list[dict] = []
+        self.ipam_ok: bool = True
+        self.applied_before_ipam: list[bool] = []
 
-    # --- the four seams ---------------------------------------------------- #
+    # --- the seams --------------------------------------------------------- #
+
+    def record_ipam(self, devices, *, vid: int, vlan_name: str, **_: object) -> dict:
+        """Stand in for NetBox's IPAM write path."""
+        self.applied_before_ipam.append(bool(self.applied))
+        self.ipam_writes.append(
+            {"devices": list(devices), "vid": vid, "vlan_name": vlan_name, "ok": self.ipam_ok}
+        )
+        if not self.ipam_ok:
+            return {
+                "ok": False,
+                "updated": [],
+                "failures": [{"device": "*", "detail": "NetBox refused the write"}],
+                "note": "NetBox refused the write",
+            }
+        return {"ok": True, "updated": list(devices), "failures": [], "note": ""}
 
     def read_intent(self, new_vlan: int | None = None, **_: object) -> dict[str, Intent]:
         """What NetBox says should be true. `new_vlan` proposes a change to it."""

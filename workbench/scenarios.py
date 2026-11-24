@@ -69,10 +69,16 @@ DEMO_DEVICES: tuple[str, ...] = (
 
 @dataclass
 class Lab:
-    """The four things the stories need from the outside world.
+    """The things the stories need from the outside world.
 
-    Injected rather than imported so the tests replace all four with fakes and the whole
+    Injected rather than imported so the tests replace them with fakes and the whole
     demo can be exercised in under a second.
+
+    `write_ipam` is the NetBox write path. It is a seam rather than a direct call because a
+    change must be recorded in the source of truth *before* it reaches a switch, and that
+    ordering has to be testable — including the case where NetBox refuses. Defaults to `None`,
+    which means "not available": callers decide whether that is fatal, and `approve_service_change`
+    treats it as fatal on purpose.
     """
 
     read_intent: Callable[..., dict[str, Intent]]
@@ -80,6 +86,9 @@ class Lab:
     preview: Callable[[Plan], Preview]
     apply: Callable[[Plan], Preview]
     audit: AuditLog
+    #: (devices, vid, vlan_name) -> dict with `ok`, `updated`, `failures`. See
+    #: `_record_in_ipam` for the shape. `None` means NetBox writing is unavailable.
+    write_ipam: Callable[..., dict[str, Any]] | None = None
 
     @classmethod
     def real(cls, audit: AuditLog | None = None) -> "Lab":
@@ -92,6 +101,7 @@ class Lab:
             preview=eos_preview,
             apply=eos_apply,
             audit=audit or AuditLog(),
+            write_ipam=_record_in_ipam,
         )
 
 
@@ -507,7 +517,12 @@ def plan_service_change(
         ),
     )
 
-    _PENDING_SERVICE_CHANGES[change_id] = pending
+    _PENDING_SERVICE_CHANGES[change_id] = {
+        "pending": pending,
+        "service": svc.to_dict(),
+        "scope": scope,
+        "pair": pair,
+    }
 
     return {
         "ok": True,
@@ -566,8 +581,8 @@ def approve_service_change(
             "detail": "no change is applied without a named person on the record",
         }
 
-    pending = _PENDING_SERVICE_CHANGES.pop(str(change_id or ""), None)
-    if not pending:
+    staged = _PENDING_SERVICE_CHANGES.pop(str(change_id or ""), None)
+    if not staged:
         return {
             "ok": False,
             "refused": True,
@@ -576,6 +591,35 @@ def approve_service_change(
                 "Preview the change again. An approval only applies to a change that was "
                 "previewed in this session, so a stale approval cannot land."
             ),
+        }
+
+    pending = staged["pending"]
+    service = staged.get("service") or {}
+    service_key = service.get("key") or ""
+    vid = int(service.get("vlan") or 0)
+    vlan_name = str(service.get("name") or "")
+
+    targets = [item.plan.device for item in pending]
+
+    # **Write the intent to NetBox first.** Order matters and this is the reason: if the model
+    # cannot be updated, nothing is pushed, so a switch can never be left carrying a VLAN that
+    # NetBox does not know about. The reverse order is what produces a "rogue system" — the
+    # network changed, the source of truth did not, and the next reader is misled.
+    ipam = _write_ipam(lab, targets, vid=vid, vlan_name=vlan_name)
+    if not ipam.get("ok"):
+        return {
+            "ok": False,
+            "refused": True,
+            "headline": "NetBox could not be updated, so nothing was pushed",
+            "detail": (
+                "The change was not applied to any switch, because the source of truth must "
+                f"record it first. {ipam.get('note') or ''} "
+                f"{(ipam.get('failures') or [])[:2]}"
+            ).strip(),
+            "ipam": ipam,
+            "applied": [],
+            "failures": [],
+            "device_count": len(pending),
         }
 
     applied: list[dict[str, Any]] = []
@@ -612,13 +656,79 @@ def approve_service_change(
         "applied": [a for a in applied if a["kind"] == "applied"],
         "no_op": [a for a in applied if a["kind"] != "applied"],
         "failures": failures,
+        "ipam": ipam,
         "device_count": len(pending),
         "headline": headline,
         "detail": (
-            "every switch was read back after the change"
+            "every switch was read back after the change; NetBox records it"
             if ok
             else "see the per-switch results; nothing was claimed that did not happen"
         ),
+    }
+
+
+def _write_ipam(lab: Lab, devices: list[str], *, vid: int, vlan_name: str) -> dict[str, Any]:
+    """Record the change in the source of truth, via the lab's own seam.
+
+    A lab with no `write_ipam` cannot record anything, so this returns `ok: False` with a
+    reason rather than silently proceeding. That is the point: on a real install NetBox is
+    always there, and in a test the fake either provides a writer or the test is about the
+    refusal path.
+    """
+    writer = getattr(lab, "write_ipam", None)
+    if writer is None:
+        return {
+            "ok": False,
+            "updated": [],
+            "failures": [],
+            "note": (
+                "no NetBox write path is available, so the change cannot be recorded in the "
+                "source of truth"
+            ),
+        }
+    return writer(devices, vid=vid, vlan_name=vlan_name)
+
+
+def _record_in_ipam(devices: list[str], *, vid: int, vlan_name: str) -> dict[str, Any]:
+    """Write an applied change into NetBox's IPAM.
+
+    This is the real writer used by `Lab.real()`. It reads configuration from the plugin's
+    settings, which only exist inside NetBox, so outside that context it reports why it cannot
+    write rather than raising — the caller turns that into a refusal.
+    """
+    if not devices or not vid:
+        return {"ok": True, "updated": [], "failures": [], "note": "nothing to record"}
+
+    try:
+        from netbox_ops import conf
+        from workbench.netbox_ipam_write import NetboxWriter, record_service_on_devices
+    except Exception as exc:  # running outside NetBox, e.g. from the CLI
+        return {
+            "ok": False,
+            "updated": [],
+            "failures": [],
+            "note": f"IPAM write unavailable: {type(exc).__name__}: {exc}",
+        }
+
+    try:
+        client = NetboxWriter(conf.netbox_url(), conf.netbox_token())
+        result = record_service_on_devices(
+            client, vid=vid, vlan_name=vlan_name, devices=devices
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "updated": [],
+            "failures": [{"device": "*", "detail": f"{type(exc).__name__}: {exc}"[:200]}],
+            "note": "the switches changed but NetBox did not; the model is now behind",
+        }
+
+    return {
+        "ok": bool(result.get("ok")),
+        "updated": [r["device"] for r in result.get("results") or [] if r.get("changed")],
+        "already": [r["device"] for r in result.get("results") or [] if r.get("ok") and not r.get("changed")],
+        "failures": [r for r in result.get("results") or [] if not r.get("ok")],
+        "headline": result.get("headline", ""),
     }
 
 

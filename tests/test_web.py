@@ -40,6 +40,9 @@ def client(tmp_path: Path):
         preview=fake.preview,
         apply=fake.apply,
         audit=AuditLog(tmp_path / "audit.jsonl"),
+        # The page's own flows record into the source of truth before touching a switch, so
+        # the fake needs a writer for the approving paths to work at all.
+        write_ipam=fake.record_ipam,
     )
     app = create_app(lab_factory=lambda: lab)
     return TestClient(app), fake, lab

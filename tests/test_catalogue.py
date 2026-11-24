@@ -149,6 +149,28 @@ class FakeLab:
         self.applied: list[Plan] = []
         self.reachable = {f"leaf-0{n}": True for n in range(1, 5)}
         self.preview_error: dict[str, str] = {}
+        self.ipam_ok = True
+        self.ipam_writes: list[dict] = []
+        self.applied_before_ipam: list[bool] = []
+
+    def record_ipam(self, devices, *, vid, vlan_name):
+        """Stand in for NetBox's IPAM, recording both the call and the ordering.
+
+        `applied_before_ipam` is the interesting bit: it lets a test assert the model was
+        written *before* any switch was touched, which is the safety property.
+        """
+        self.applied_before_ipam.append(bool(self.applied))
+        self.ipam_writes.append(
+            {"devices": list(devices), "vid": vid, "vlan_name": vlan_name, "ok": self.ipam_ok}
+        )
+        if not self.ipam_ok:
+            return {
+                "ok": False,
+                "updated": [],
+                "failures": [{"device": "*", "detail": "NetBox refused the write"}],
+                "note": "NetBox refused the write",
+            }
+        return {"ok": True, "updated": list(devices), "failures": [], "note": ""}
 
     def read_intent(self, new_vlan=None):
         from workbench.contracts import Intent
@@ -196,7 +218,57 @@ def lab(tmp_path):
         preview=fake.preview,
         apply=fake.apply,
         audit=AuditLog(tmp_path / "audit.jsonl"),
+        # The source of truth has to be written before a switch is touched, so every lab that
+        # approves a change needs a writer. `FakeLab.record_ipam` records what it was asked to
+        # write, which lets a test assert that NetBox was updated and in what order.
+        write_ipam=fake.record_ipam,
     ), fake
+
+
+def test_a_netbox_write_failure_stops_the_change_before_any_switch(monkeypatch, tmp_path):
+    """The ordering is the safety property: the model is written first, so a switch can never
+    be left carrying a VLAN that NetBox does not know about."""
+    from workbench.scenarios import approve_service_change, plan_service_change
+
+    fake = FakeLab()
+    fake.ipam_ok = False
+    subject = Lab(
+        read_intent=fake.read_intent,
+        read_actual=fake.read_actual,
+        preview=fake.preview,
+        apply=fake.apply,
+        audit=AuditLog(tmp_path / "audit.jsonl"),
+        write_ipam=fake.record_ipam,
+    )
+
+    out = plan_service_change(subject, service_key="pharmacy", scope="mlag-pair", pair="pair-1")
+    result = approve_service_change(subject, change_id=out["change_id"], approver="Brian Nelson")
+
+    assert result["ok"] is False
+    assert result["refused"] is True
+    assert "NetBox" in result["headline"]
+    assert fake.applied == [], "nothing may be pushed when the source of truth refused"
+
+
+def test_a_lab_with_no_ipam_writer_refuses_rather_than_pushing_untracked(monkeypatch, tmp_path):
+    """No NetBox means no record, and no record means no change."""
+    from workbench.scenarios import approve_service_change, plan_service_change
+
+    fake = FakeLab()
+    subject = Lab(
+        read_intent=fake.read_intent,
+        read_actual=fake.read_actual,
+        preview=fake.preview,
+        apply=fake.apply,
+        audit=AuditLog(tmp_path / "audit.jsonl"),
+        # write_ipam omitted on purpose
+    )
+
+    out = plan_service_change(subject, service_key="pharmacy", scope="mlag-pair", pair="pair-1")
+    result = approve_service_change(subject, change_id=out["change_id"], approver="Brian Nelson")
+
+    assert result["ok"] is False
+    assert fake.applied == []
 
 
 def test_planning_a_pair_produces_one_change_per_switch(lab):
@@ -330,3 +402,48 @@ def test_the_audit_records_the_service_by_name_not_by_vlan(lab):
         f"the service name should be in the record, got: {[e['summary'] for e in entries]}"
     )
     assert all(e["approver"] == "Brian Nelson" for e in entries)
+
+
+def test_netbox_is_written_before_any_switch_is_touched(lab):
+    """The ordering that makes this safe: the model records the change first.
+
+    If the switch were configured first, a Model-write failure would leave a switch carrying a
+    VLAN the source of truth did not know about — the exact "rogue system" failure this work
+    exists to prevent.
+    """
+    from workbench.scenarios import approve_service_change, plan_service_change
+
+    lab_obj, fake = lab
+    out = plan_service_change(lab_obj, service_key="pharmacy", scope="mlag-pair", pair="pair-1")
+    approve_service_change(lab_obj, change_id=out["change_id"], approver="Brian Nelson")
+
+    assert fake.ipam_writes, "NetBox must be written"
+    assert fake.applied_before_ipam, "the ordering must be observable"
+    assert fake.applied_before_ipam[0] is False, (
+        "NetBox must be written before the first switch is touched"
+    )
+
+
+def test_netbox_is_written_for_every_switch_in_scope(lab):
+    from workbench.scenarios import approve_service_change, plan_service_change
+
+    lab_obj, fake = lab
+    out = plan_service_change(lab_obj, service_key="pharmacy", scope="all-leaves")
+    approve_service_change(lab_obj, change_id=out["change_id"], approver="Brian Nelson")
+
+    written = {d for w in fake.ipam_writes for d in w["devices"]}
+    assert written == {"leaf-01", "leaf-02", "leaf-03", "leaf-04"}
+
+
+def test_the_ipam_write_carries_the_service_vlan_and_name(lab):
+    """IPAM needs the number *and* a human name, or the model gains an anonymous VLAN."""
+    from workbench.scenarios import approve_service_change, plan_service_change
+
+    lab_obj, fake = lab
+    out = plan_service_change(lab_obj, service_key="radiology", scope="mlag-pair", pair="pair-2")
+    approve_service_change(lab_obj, change_id=out["change_id"], approver="Brian Nelson")
+
+    assert fake.ipam_writes
+    write = fake.ipam_writes[0]
+    assert write["vid"] == 312
+    assert "Radiology" in write["vlan_name"]

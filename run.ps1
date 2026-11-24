@@ -79,6 +79,8 @@ Optional add-on - Autonomy Workbench (executive demo; see wiki/Autonomy-Workbenc
   verify-change      Prove change control end to end, including the refusals
   verify-service     Prove the deliver-a-service flow: one sentence, one approval, N switches
   clean-fabric       Return the demo trunks to their starting state (--apply)
+  ipam               Model the fabric in NetBox IPAM: VLANs, tenants, prefixes, trunks
+  verify-ipam        Prove NetBox and the switches agree after a change
   workbench-live     The real rehearsal: walk the demo against the live switches
   workbench-walk     Prove the demo flow with no lab running (no switches needed)
   workbench-check    Is the lab ready to present from?
@@ -340,9 +342,18 @@ for cfg in sorted(Path('output/configs').glob('*.cfg')):
         exit $LASTEXITCODE
     }
 
+    "ipam" {
+        # Model the fabric properly in NetBox: IPAM VLANs, tenants, prefixes and trunk
+        # membership. Without this NetBox has no VLANs at all, which is the "rogue system"
+        # problem -- the switches carry things the source of truth has never heard of.
+        Write-Host "Modelling the fabric in NetBox IPAM..." -ForegroundColor Cyan
+        python scripts/seed_ipam.py @Rest
+        exit $LASTEXITCODE
+    }
+
     "verify-service" {
-        # The day-two story specifically: one sentence, one approval, both legs of a pair.
-        # Needs the workbench running (.\run.ps1 workbench) because it drives the HTTP API.
+        # The day-two story: one sentence, one approval, both legs of a pair, and the change
+        # recorded in NetBox before it reaches a switch.
         Write-Host "Verifying the deliver-a-service flow..." -ForegroundColor Cyan
         python scripts/verify_service_flow.py @Rest
         exit $LASTEXITCODE

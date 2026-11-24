@@ -104,6 +104,13 @@ def read_fabric_intent(
 ) -> dict[str, Intent]:
     """The intended state for every switch in one fabric, keyed by device name.
 
+    **IPAM first.** If NetBox has VLANs modelled in IPAM, those VLANs and the interfaces that
+    carry them *are* the intent — nothing in this file is consulted for the VLAN list. That is
+    the whole point of the initiative this belongs to: the source of truth has to be the source.
+    `BASE_VLANS` remains only as a bootstrap fallback for an install where nothing has been
+    modelled yet, and when it is used the `source` field says so, so the page can be honest
+    about where the intent came from.
+
     `new_vlan` adds a VLAN to the intended state without touching NetBox. That is how
     the demo shows "here is the change we are about to make" *before* anything is
     written anywhere — the page can preview a proposed intent against live devices,
@@ -116,6 +123,34 @@ def read_fabric_intent(
         raise IntentSourceError(
             f"NetBox returned no devices for fabric {fabric!r}; run .\\run.ps1 import first"
         )
+
+    names = [d.get("name") for d in devices if d.get("name")]
+    from_ipam = _try_ipam(fetch, names, new_vlan=new_vlan)
+
+    if from_ipam is not None:
+        # Enrich the IPAM intent with the per-device facts IPAM does not hold (ASN, role), so
+        # the page keeps everything it had. Only the VLAN source changes.
+        for device in devices:
+            name = device.get("name") or ""
+            intent = from_ipam.get(name)
+            if intent is None:
+                continue
+            cf = device.get("custom_fields") or {}
+            from_ipam[name] = Intent(
+                device=intent.device,
+                platform=intent.platform,
+                source=intent.source,
+                hostname=intent.hostname,
+                role=_role_slug(device),
+                asn=int(cf.get("bgp_asn") or 0),
+                router_id=cf.get("router_id") or "",
+                vlans=intent.vlans,
+                trunks=intent.trunks,
+                trunk_allowed=intent.trunk_allowed,
+                target_os=intent.target_os,
+                notes=intent.notes,
+            )
+        return from_ipam
 
     vlans = list(BASE_VLANS)
     if new_vlan is not None and new_vlan not in vlans:
@@ -136,7 +171,7 @@ def read_fabric_intent(
         intended[name] = Intent(
             device=name,
             platform="eos",
-            source=f"netbox:{fabric}",
+            source=f"netbox:{fabric} (declared overlay; run seed_ipam.py to model these in IPAM)",
             hostname=name,
             role=role,
             asn=int(cf.get("bgp_asn") or 0),
@@ -146,6 +181,85 @@ def read_fabric_intent(
             trunk_allowed={port: tenant_vlans for port in trunks},
         )
     return intended
+
+
+def _try_ipam(
+    fetch: HttpGetter,
+    devices: list[str],
+    *,
+    new_vlan: int | None = None,
+) -> dict[str, Intent] | None:
+    """Read intent from IPAM, or `None` if IPAM has nothing modelled yet.
+
+    Returning `None` rather than raising is deliberate: an install with no IPAM VLANs is the
+    normal state before anything has been modelled, and failing there would make the demo
+    unusable on a fresh clone. But an IPAM **read failure** is different from an empty IPAM,
+    and that does raise — a source of truth that cannot be reached must never be silently
+    replaced by a fallback, because then the page would show a confident picture built from
+    a tuple while the real source was down.
+    """
+    from workbench import netbox_ipam
+
+    try:
+        per_device, vlans = netbox_ipam.read_ipam_intent(
+            fetch, fabric="", devices=devices, new_vlan=new_vlan
+        )
+    except netbox_ipam.IpamError:
+        # A genuine read failure. Let it surface: see the docstring.
+        raise
+    except Exception:
+        # Anything else — an unexpected payload shape, a missing endpoint — means IPAM is not
+        # usable here, which is a bootstrap situation rather than a lie worth failing on.
+        return None
+
+    if not vlans and new_vlan is None:
+        return None
+
+    intent = netbox_ipam.intent_from_ipam(per_device, vlans)
+
+    # A device with no trunk in IPAM still needs an entry, or it vanishes from the page and
+    # looks like the fabric lost a switch.
+    for name in devices:
+        if name in intent:
+            continue
+        intent[name] = Intent(
+            device=name,
+            platform="eos",
+            source="netbox:ipam",
+            hostname=name,
+            role="spine",
+            asn=0,
+            router_id="",
+            vlans=(),
+            trunks=(),
+            notes="no tagged trunk modelled in IPAM for this device",
+        )
+
+    if new_vlan is not None:
+        # The proposed VLAN is not in IPAM yet. Add it to every trunk so a preview shows the
+        # change that would happen, without writing anything.
+        for name, existing in list(intent.items()):
+            if not existing.trunks:
+                continue
+            if new_vlan in existing.vlans:
+                continue
+            vlans_now = tuple(sorted({*existing.vlans, new_vlan}))
+            intent[name] = Intent(
+                device=existing.device,
+                platform=existing.platform,
+                source=existing.source,
+                hostname=existing.hostname,
+                role=existing.role,
+                asn=existing.asn,
+                router_id=existing.router_id,
+                vlans=vlans_now,
+                trunks=existing.trunks,
+                trunk_allowed={port: vlans_now for port in existing.trunks},
+                target_os=existing.target_os,
+                notes=existing.notes,
+            )
+
+    return intent
 
 
 def _devices(fetch: HttpGetter, fabric: str) -> list[dict[str, Any]]:

@@ -18,6 +18,7 @@
 - [[Troubleshooting]]
 - [[Day 2 Operations]]
 - [[Autonomy Workbench]]
+- [[NetBox IPAM]]
 - [[ITSM Zammad]]
 - [[Add-on Plants Demo]]
 - [[Dual-DC L3LS]]

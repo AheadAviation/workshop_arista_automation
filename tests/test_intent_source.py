@@ -58,8 +58,16 @@ def test_intent_carries_the_asn_from_netbox():
 
 
 def test_intent_carries_the_fabric_source_so_the_page_can_say_where_it_came_from():
+    """With nothing modelled in IPAM, the source says so — it does not pretend to be IPAM.
+
+    The page shows this string, so a fallback that claimed `netbox:ipam` would be the tool
+    lying about where its truth came from, which is precisely the sin this initiative exists
+    to remove.
+    """
     intended = read_fabric_intent(fake_netbox([device("leaf-01")]))
-    assert intended["leaf-01"].source == "netbox:dc1-fabric"
+    source = intended["leaf-01"].source
+    assert source.startswith("netbox:dc1-fabric")
+    assert "declared overlay" in source, f"the fallback must announce itself, got {source!r}"
 
 
 def test_reading_twice_gives_identical_results():
@@ -213,3 +221,70 @@ def test_unreachable_netbox_is_a_plain_error(monkeypatch):
 
     with pytest.raises(IntentSourceError, match="could not reach NetBox"):
         netbox_getter(url="http://nb.example", token="t")("/api/dcim/devices/")
+
+
+# --------------------------------------------------------------------------- #
+# IPAM takes precedence over the declared overlay
+# --------------------------------------------------------------------------- #
+# The point of the whole initiative: when NetBox has VLANs modelled, those VLANs — and the
+# interfaces that carry them — are the intent. The tuple in Python is a bootstrap fallback and
+# must not win once real data exists.
+
+
+def test_intent_comes_from_ipam_when_ipam_has_vlans():
+    def get(path):
+        if path.startswith("/api/dcim/devices/"):
+            return {"results": [{"name": "leaf-01", "role": {"slug": "leaf"}, "custom_fields": {}}]}
+        if path.startswith("/api/ipam/vlans/"):
+            return {"results": [{"vid": 100, "name": "SERVERS"}, {"vid": 150, "name": "PHILIPS"}]}
+        if path.startswith("/api/dcim/interfaces/"):
+            return {
+                "results": [
+                    {"name": "eth5", "mode": {"value": "tagged", "label": "Tagged"},
+                     "tagged_vlans": [{"vid": 100}, {"vid": 150}]},
+                ]
+            }
+        raise AssertionError(f"unexpected {path}")
+
+    intended = read_fabric_intent(get)
+
+    assert intended["leaf-01"].source == "netbox:ipam", "IPAM must win over the overlay"
+    assert set(intended["leaf-01"].vlans) == {100, 150}
+    assert intended["leaf-01"].trunks == ("Ethernet5",)
+
+
+def test_ipam_intent_carries_only_what_ipam_says_not_the_whole_base_set():
+    """With IPAM authoritative, a trunk carrying one VLAN must not report five."""
+    def get(path):
+        if path.startswith("/api/dcim/devices/"):
+            return {"results": [{"name": "leaf-01", "role": {"slug": "leaf"}, "custom_fields": {}}]}
+        if path.startswith("/api/ipam/vlans/"):
+            return {"results": [{"vid": 100, "name": "SERVERS"}]}
+        if path.startswith("/api/dcim/interfaces/"):
+            return {
+                "results": [
+                    {"name": "eth5", "mode": {"value": "tagged", "label": "Tagged"},
+                     "tagged_vlans": [{"vid": 100}]},
+                ]
+            }
+        raise AssertionError(f"unexpected {path}")
+
+    intended = read_fabric_intent(get)
+    assert intended["leaf-01"].vlans == (100,)
+
+
+def test_an_empty_ipam_falls_back_and_says_so():
+    """A fresh install has nothing modelled; the fallback must announce itself, not pretend."""
+
+    def get(path):
+        if path.startswith("/api/dcim/devices/"):
+            return {"results": [{"name": "leaf-01", "role": {"slug": "leaf"}, "custom_fields": {}}]}
+        if path.startswith("/api/ipam/vlans/"):
+            return {"results": []}
+        if path.startswith("/api/dcim/interfaces/"):
+            return {"results": []}
+        raise AssertionError(f"unexpected {path}")
+
+    intended = read_fabric_intent(get)
+    assert "declared overlay" in intended["leaf-01"].source
+    assert intended["leaf-01"].vlans == BASE_VLANS
