@@ -69,6 +69,11 @@ services:
       POSTGRESQL_PASS: zammad
       POSTGRESQL_DB: zammad_production
       REDIS_URL: redis://zammad-redis:6379
+      # Zammad's entrypoint waits for Elasticsearch unless this is explicitly false. There is
+      # no Elasticsearch in this stack (it is the heaviest component and search is not what the
+      # demo shows), so without this the railsserver blocks forever on
+      # 'waiting for elasticsearch server to be ready'.
+      ELASTICSEARCH_ENABLED: "false"
       # Create the admin on first boot with a known password, so the demo does not depend on
       # clicking through a setup wizard.
       AUTOWIZARD_JSON: |
@@ -108,6 +113,11 @@ services:
       POSTGRESQL_PASS: zammad
       POSTGRESQL_DB: zammad_production
       REDIS_URL: redis://zammad-redis:6379
+      # Zammad's entrypoint waits for Elasticsearch unless this is explicitly false. There is
+      # no Elasticsearch in this stack (it is the heaviest component and search is not what the
+      # demo shows), so without this the railsserver blocks forever on
+      # 'waiting for elasticsearch server to be ready'.
+      ELASTICSEARCH_ENABLED: "false"
       RAILS_ENV: production
     volumes:
       - zammad-storage:/opt/zammad/storage
@@ -129,6 +139,11 @@ services:
       POSTGRESQL_PASS: zammad
       POSTGRESQL_DB: zammad_production
       REDIS_URL: redis://zammad-redis:6379
+      # Zammad's entrypoint waits for Elasticsearch unless this is explicitly false. There is
+      # no Elasticsearch in this stack (it is the heaviest component and search is not what the
+      # demo shows), so without this the railsserver blocks forever on
+      # 'waiting for elasticsearch server to be ready'.
+      ELASTICSEARCH_ENABLED: "false"
       RAILS_ENV: production
     networks:
       default:
@@ -148,6 +163,11 @@ services:
       POSTGRESQL_PASS: zammad
       POSTGRESQL_DB: zammad_production
       REDIS_URL: redis://zammad-redis:6379
+      # Zammad's entrypoint waits for Elasticsearch unless this is explicitly false. There is
+      # no Elasticsearch in this stack (it is the heaviest component and search is not what the
+      # demo shows), so without this the railsserver blocks forever on
+      # 'waiting for elasticsearch server to be ready'.
+      ELASTICSEARCH_ENABLED: "false"
       RAILS_ENV: production
       NGINX_SERVER_SCHEME: http
       NGINX_SERVER_NAME: localhost
