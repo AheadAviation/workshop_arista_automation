@@ -1,7 +1,18 @@
 # =============================================================================
 # Zammad — a real ITSM stack for the NetBox Ops plugin (INIT-002/SPEC-006).
 # =============================================================================
-# Started only with `docker compose --profile itsm up -d`.
+# Started only with `--profile itsm`, and always alongside the main file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.itsm.yml --profile itsm up -d
+#
+# or simply `.\\run.ps1 itsm`.
+#
+# **Both files, and the order matters.** Zammad is defined here, so `--profile itsm` against
+# docker-compose.yml alone starts nothing. But this file alone puts Zammad on
+# `workshop_arista_automation_default` while NetBox is on `netbox-arista-lab` — and the
+# plugin's call to `http://zammad-nginx:8080` then cannot resolve, so the Tickets tab says
+# "ITSM is not configured" while Zammad is plainly running on the host port. Passing both
+# files merges them onto the main file's named network, which is where the plugin looks.
 #
 # Zammad normally ships with Elasticsearch; it is disabled here because it is the single
 # heaviest component and search is not what the demo shows. Zammad runs fine without it for

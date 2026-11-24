@@ -3,8 +3,12 @@
     <strong>{{ itsm.headline }}</strong>
     <div class="small mt-1">{{ itsm.detail }}</div>
     <div class="small mt-2">
-      Start it with <code>docker compose --profile itsm up -d</code>, then set
-      <code>itsm_url</code> and <code>itsm_token</code> in <code>PLUGINS_CONFIG</code>.
+      Start it with <code>.\run.ps1 itsm</code> (or
+      <code>docker compose -f docker-compose.yml -f docker-compose.itsm.yml --profile itsm up -d</code>),
+      then set <code>itsm_url</code> and <code>itsm_token</code> in <code>PLUGINS_CONFIG</code>.
+      <br>
+      Both compose files are required: the ITSM file alone puts Zammad on a different Docker
+      network from NetBox, where this plugin cannot reach it.
     </div>
   </div>
 {% elif not itsm.reachable %}

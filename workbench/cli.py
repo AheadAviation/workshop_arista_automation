@@ -128,12 +128,32 @@ def check(*, verbose: bool = False, lab: Lab | None = None) -> int:
     # 6. The page's static files are present
     from workbench.web import STATIC
 
-    missing = [n for n in ("index.html", "workbench.css", "workbench.js") if not (STATIC / n).exists()]
+    missing = [
+        n for n in ("index.html", "workbench.css", "workbench.js", "guide.html", "guide.css", "guide.js")
+        if not (STATIC / n).exists()
+    ]
     if missing:
         _print(FAIL, "page assets", f"missing {', '.join(missing)}")
         failures += 1
     else:
-        _print(OK, "page assets", "index.html, workbench.css, workbench.js")
+        _print(OK, "page assets", "index.html, workbench.css, workbench.js, guide.*")
+
+    # 7. The guide renders. Checked by actually rendering it, because a template
+    # placeholder with no value behind it produces a page that loads and links nowhere —
+    # exactly the failure that is invisible until someone clicks it in front of a customer.
+    from workbench.web import render_guide
+
+    try:
+        page = render_guide()
+    except Exception as exc:
+        _print(FAIL, "presenter guide", f"{type(exc).__name__}: {exc}")
+        failures += 1
+    else:
+        if "{{" in page:
+            _print(FAIL, "presenter guide", "an unfilled placeholder is still in the page")
+            failures += 1
+        else:
+            _print(OK, "presenter guide", f"{len(page)} bytes, every link filled in")
 
     print("=" * 60)
     if failures:

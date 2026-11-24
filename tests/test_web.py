@@ -10,6 +10,7 @@ returns a 500 — a stack trace on screen is the failure mode this page exists t
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -89,6 +90,111 @@ def test_the_page_never_inserts_untrusted_text_as_markup(client):
         if "innerHTML" in line and not line.strip().startswith(("*", "//"))
     ]
     assert code_lines == [], f"innerHTML must not be used to render device data: {code_lines}"
+
+
+# --------------------------------------------------------------------------- #
+# the presenter guide
+# --------------------------------------------------------------------------- #
+
+
+def test_the_guide_is_served(client):
+    c, _, _ = client
+    response = c.get("/guide")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "step by step" in response.text.lower()
+
+
+def test_the_guide_has_no_unfilled_placeholders(client):
+    """A placeholder with no value behind it renders an empty href that nobody notices
+    until they click it during the meeting."""
+    c, _, _ = client
+    assert "{{" not in c.get("/guide").text
+
+
+def test_every_external_link_on_the_guide_resolves_to_a_real_address(client):
+    """The guide links to NetBox and to the ITSM stack. Those ports live in `urls()` and
+    nowhere else, so a deployment that moves one cannot leave a dead link behind."""
+    from workbench.web import urls
+
+    c, _, _ = client
+    page = c.get("/guide").text
+    known = set(urls().values())
+    links = set(re.findall(r'href="(http[^"]+)"', page))
+    assert links, "the guide should link somewhere"
+
+    unknown = [
+        link for link in links
+        if not any(link == url or link.startswith(url + "/") for url in known)
+    ]
+    assert unknown == [], f"links not built from urls(): {unknown} (known: {sorted(known)})"
+
+
+def test_every_in_page_anchor_on_the_guide_has_a_target(client):
+    c, _, _ = client
+    page = c.get("/guide").text
+    anchors = set(re.findall(r'href="#([A-Za-z0-9_-]+)"', page))
+    targets = set(re.findall(r'id="([A-Za-z0-9_-]+)"', page))
+    assert anchors, "the contents rail should have anchors"
+    assert anchors - targets == set(), f"anchors with no target: {sorted(anchors - targets)}"
+
+
+def test_every_guide_step_has_a_unique_id_for_its_tick(client):
+    """The tick state is keyed by `data-step`. A duplicate id makes two steps share one
+    tick, which reads as a bug in the presenter's own checklist."""
+    c, _, _ = client
+    steps = re.findall(r'data-step="([A-Za-z0-9_-]+)"', c.get("/guide").text)
+    assert len(steps) >= 15, f"expected the full run, found {len(steps)} steps"
+    assert len(steps) == len(set(steps)), "duplicate step ids"
+
+
+def test_the_guide_never_prints_a_secret(client):
+    """It is a document shown on a laptop, sometimes projected by accident."""
+    c, _, _ = client
+    page = c.get("/guide").text
+    for secret in ("0123456789abcdef0123456789abcdef01234567", "4aroyvDrKCLlDhnA0C1"):
+        assert secret not in page
+
+
+def test_the_guide_assets_are_served(client):
+    c, _, _ = client
+    assert c.get("/static/guide.css").status_code == 200
+    assert c.get("/static/guide.js").status_code == 200
+
+
+def test_the_guide_js_survives_being_loaded_elsewhere():
+    """It is a shared static file. If it is ever included on a page without the guide's
+    elements it must return, not throw."""
+    js = (REPO_ROOT / "workbench" / "static" / "guide.js").read_text(encoding="utf-8")
+    assert "if (boxes.length === 0) return;" in js
+
+
+def test_the_workbench_links_to_the_guide(client):
+    c, _, _ = client
+    assert 'href="/guide"' in c.get("/").text
+
+
+def test_urls_reads_the_environment_so_links_follow_a_moved_port(monkeypatch):
+    from workbench.web import urls
+
+    monkeypatch.setenv("WORKBENCH_BIND", "0.0.0.0")
+    monkeypatch.setenv("WORKBENCH_PORT", "9100")
+    monkeypatch.setenv("NETBOX_PUBLIC_URL", "http://netbox.internal:8000/")
+    monkeypatch.setenv("ITSM_PUBLIC_URL", "http://itsm.internal/")
+
+    resolved = urls()
+    # A bind address is not a browser address; 0.0.0.0 must become a followable host.
+    assert resolved["workbench"] == "http://127.0.0.1:9100"
+    assert resolved["netbox"] == "http://netbox.internal:8000"
+    assert resolved["itsm"] == "http://itsm.internal"
+
+
+def test_render_guide_refuses_an_unknown_placeholder():
+    """Better a loud failure in the rehearsal than a silently empty href on the page."""
+    from workbench.web import render_guide
+
+    with pytest.raises(KeyError):
+        render_guide(template="<a href=\"{{nowhere}}\">x</a>")
 
 
 def test_the_page_does_not_render_a_diff_without_a_gate(client):

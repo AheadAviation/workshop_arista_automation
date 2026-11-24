@@ -62,12 +62,26 @@ Day 2 Operations:
   rollback    Restore each switch from that saved config
   pipeline    Run full pipeline (generate + deploy)
 
+Dual-DC AVD track (labs/l3ls-dual-dc — does not touch the NetBox fabric):
+  dualdc build    Render both sites and frr-core1 with AVD
+  dualdc start    Deploy the 21-node ContainerLab topology
+  dualdc apply    Push rendered EOS configs, then reload FRR
+  dualdc stop     Destroy the dual-DC topology
+
 Optional add-on - Autonomy Workbench (executive demo; see wiki/Autonomy-Workbench.md):
   workbench          Start the browser page on http://127.0.0.1:8099
-  workbench-walk     Prove the whole demo flow with no lab running (start here)
-  workbench-check    The morning rehearsal: is the lab ready? (under ten minutes)
+  guide              Open the presenter's step-by-step page
+  workbench-lab      Deploy the demo switches and prepare the trunk layer (start here)
+  eapi               Turn eAPI on so NetBox can read the switches (run after workbench-lab)
+  itsm               Start Zammad for the ticket story (http://localhost:8090)
+  itsm-down          Stop Zammad, leaving NetBox and its data alone
+  workbench-live     The real rehearsal: walk the demo against the live switches
+  workbench-walk     Prove the demo flow with no lab running (no switches needed)
+  workbench-check    Is the lab ready to present from?
   workbench-reset    Put the lab back to intended state (the audit log is kept)
   workbench-status   The fabric in the terminal, for a quick smoke test
+  deck               Render the briefing slides (output/fmol-briefing.pptx + .html)
+  deck-show          Render the slides and open them
 
 Optional add-on - Plants Demo (multi-site, owners, approvers; see wiki/Add-on-Plants-Demo.md):
   plants        Create the sample organisation  (extra args pass through, e.g. --link-fabric)
@@ -238,8 +252,8 @@ for cfg in sorted(Path('output/configs').glob('*.cfg')):
         docker compose run --rm ansible ansible-playbook playbooks/full_pipeline.yml
     }
     
-    # Optional add-on: Autonomy Workbench (executive demo). Runs on the host, because
-    # it talks to the running containers and to NetBox from outside them.
+    # Optional add-on: Autonomy Workbench (executive demo). Runs on the host, because it
+    # talks to the running containers and to NetBox from outside them.
     "workbench" {
         Write-Host "Starting the Autonomy Workbench on http://127.0.0.1:8099 ..." -ForegroundColor Cyan
         Write-Host "Press Ctrl+C to stop." -ForegroundColor Yellow
@@ -259,6 +273,59 @@ for cfg in sorted(Path('output/configs').glob('*.cfg')):
         exit $LASTEXITCODE
     }
 
+    "workbench-lab" {
+        Write-Host "Deploying the demo lab and preparing the trunk layer..." -ForegroundColor Cyan
+        $env:MSYS_NO_PATHCONV = "1"
+        python -m workbench.demo_lab @Rest
+        exit $LASTEXITCODE
+    }
+
+    "eapi" {
+        # Turning eAPI on needs the switch's CLI, which means docker exec, which NetBox
+        # deliberately does not have. So this is the one lab step that stays on the host.
+        # Without it every page shows six unreachable devices and nothing says why.
+        Write-Host "Enabling eAPI on the lab switches..." -ForegroundColor Cyan
+        python scripts/prepare_eapi.py @Rest
+        exit $LASTEXITCODE
+    }
+
+    "itsm" {
+        # BOTH compose files, in this order, and the order matters.
+        #
+        # Zammad is defined in docker-compose.itsm.yml, so `--profile itsm` against the main
+        # file alone starts nothing. But starting it with the ITSM file alone puts the
+        # containers on `workshop_arista_automation_default` while NetBox sits on
+        # `netbox-arista-lab` -- and then the plugin's call to http://zammad-nginx:8080
+        # cannot resolve. The Tickets tab says "ITSM is not configured" while Zammad is
+        # clearly running on the host port, which is a confusing failure to debug live.
+        #
+        # Passing both merges them onto the main file's named network, which is where the
+        # plugin expects to find it.
+        Write-Host "Starting the ITSM stack (Zammad) on http://localhost:8090 ..." -ForegroundColor Cyan
+        docker compose -f docker-compose.yml -f docker-compose.itsm.yml --profile itsm up -d @Rest
+        Write-Host "First start takes several minutes (database migrations)." -ForegroundColor Yellow
+        Write-Host "Login: admin@example.com / admin" -ForegroundColor Green
+    }
+
+    "itsm-down" {
+        Write-Host "Stopping the ITSM stack (NetBox is left running)..." -ForegroundColor Cyan
+        # No -v, deliberately: `down -v` on this project also removes NetBox's volumes,
+        # which wipes the source of truth. That mistake cost an hour once.
+        docker compose -f docker-compose.yml -f docker-compose.itsm.yml --profile itsm stop zammad-nginx zammad-websocket zammad-railsserver zammad-init zammad-redis zammad-postgres
+    }
+
+    "guide" {
+        Write-Host "Opening the presenter guide on http://127.0.0.1:8099/guide ..." -ForegroundColor Cyan
+        Write-Host "The workbench must be running:  .\run.ps1 workbench" -ForegroundColor Yellow
+        Start-Process "http://127.0.0.1:8099/guide"
+    }
+
+    "workbench-live" {
+        Write-Host "Walking the demo against the live switches..." -ForegroundColor Cyan
+        python -m workbench.live_check @Rest
+        exit $LASTEXITCODE
+    }
+
     "workbench-reset" {
         Write-Host "Returning the demo fabric to intended state (audit log is kept)..." -ForegroundColor Cyan
         python -m workbench.cli reset @Rest
@@ -268,6 +335,22 @@ for cfg in sorted(Path('output/configs').glob('*.cfg')):
     "workbench-status" {
         python -m workbench.cli overview @Rest
         exit $LASTEXITCODE
+    }
+
+    # The briefing deck (Marp markdown -> PowerPoint and HTML).
+    "deck" {
+        Write-Host "Rendering the briefing slides..." -ForegroundColor Cyan
+        npx --yes @marp-team/marp-cli@latest wiki/fmol-briefing.md --html --output output/fmol-briefing.html
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        npx --yes @marp-team/marp-cli@latest wiki/fmol-briefing.md --pptx --output output/fmol-briefing.pptx
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        Write-Host "Done: output\fmol-briefing.pptx and output\fmol-briefing.html" -ForegroundColor Green
+    }
+
+    "deck-show" {
+        & $MyInvocation.MyCommand.Path deck
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        Start-Process (Join-Path $PSScriptRoot "output\fmol-briefing.html")
     }
 
     # Optional add-on: Plants Demo (never touches the Arista fabric data)
@@ -345,6 +428,77 @@ for cfg in sorted(Path('output/configs').glob('*.cfg')):
     "plants-remove" {
         docker compose run --rm ansible python scripts/plants_demo/cli.py remove @Rest
         exit $LASTEXITCODE
+    }
+
+    # Dual-DC AVD track. Generation uses the Ansible image; push uses the host
+    # Docker socket, same as "apply", because that image is not on the lab mgmt net.
+    "dualdc" {
+        $sub = if ($Rest.Count -gt 0) { $Rest[0].ToLower() } else { "help" }
+        $lab = "/labs/l3ls-dual-dc"
+        switch ($sub) {
+            "build" {
+                Write-Host "Rendering dual-DC configs with AVD..." -ForegroundColor Cyan
+                $env:MSYS_NO_PATHCONV = "1"
+                docker compose run --rm -w $lab -e "ANSIBLE_CONFIG=$lab/ansible.cfg" ansible ansible-playbook playbooks/build.yml -i sites/site_1/inventory.yml -e "target_hosts=SITE1_FABRIC"
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                docker compose run --rm -w $lab -e "ANSIBLE_CONFIG=$lab/ansible.cfg" ansible ansible-playbook playbooks/build.yml -i sites/site_2/inventory.yml -e "target_hosts=SITE2_FABRIC"
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                docker compose run --rm -w $lab -e "ANSIBLE_CONFIG=$lab/ansible.cfg" ansible ansible-playbook playbooks/build-frr.yml -i sites/core/frr-inv.yml -e "target_hosts=CORE"
+                exit $LASTEXITCODE
+            }
+            "start" {
+                Write-Host "Deploying dual-DC ContainerLab topology..." -ForegroundColor Cyan
+                $env:MSYS_NO_PATHCONV = "1"
+                docker compose run --rm clab containerlab deploy --reconfigure --topo /clab/dual-dc/topology.clab.yml
+            }
+            "stop" {
+                Write-Host "Destroying dual-DC ContainerLab topology..." -ForegroundColor Cyan
+                $env:MSYS_NO_PATHCONV = "1"
+                docker compose run --rm clab containerlab destroy --cleanup --topo /clab/dual-dc/topology.clab.yml
+            }
+            "apply" {
+                Write-Host "Applying rendered EOS configs, then FRR..." -ForegroundColor Cyan
+                $root = Join-Path $PSScriptRoot "labs\l3ls-dual-dc"
+                $cfgs = @(
+                    Get-ChildItem "$root\sites\site_1\intended\configs\*.cfg" -ErrorAction SilentlyContinue
+                    Get-ChildItem "$root\sites\site_2\intended\configs\*.cfg" -ErrorAction SilentlyContinue
+                )
+                if (-not $cfgs) {
+                    Write-Host "No rendered configs. Run .\run.ps1 dualdc build first." -ForegroundColor Red
+                    exit 1
+                }
+                foreach ($cfg in $cfgs) {
+                    $node = $cfg.BaseName
+                    $running = docker ps --filter "name=$node" --format "{{.Names}}"
+                    $container = $running | Where-Object { $_ -eq $node -or $_ -eq "clab-ATD-Dual-DC-$node" } | Select-Object -First 1
+                    if (-not $container) {
+                        Write-Host "  ${node}: container not running" -ForegroundColor Red
+                        continue
+                    }
+                    $body = "configure`n" + (Get-Content $cfg.FullName -Raw)
+                    $out = $body | docker exec -i $container Cli -p 15 2>&1 | Out-String
+                    if ($out -match 'invalid input|% Error|% Invalid') {
+                        Write-Host "  ${node}: FAIL" -ForegroundColor Red
+                    } else {
+                        Write-Host "  ${node}: applied" -ForegroundColor Green
+                    }
+                }
+                $frrCfg = Join-Path $root "sites\core\intended\configs\frr-core1.cfg"
+                $frrRunning = docker ps --filter "name=frr-core1" --format "{{.Names}}"
+                $frr = $frrRunning | Where-Object { $_ -eq "frr-core1" -or $_ -eq "clab-ATD-Dual-DC-frr-core1" } | Select-Object -First 1
+                if ((Test-Path $frrCfg) -and $frr) {
+                    docker cp $frrCfg "${frr}:/etc/frr/frr.conf"
+                    docker exec $frr /usr/lib/frr/frr-reload.py --reload /etc/frr/frr.conf
+                    Write-Host "  frr-core1: reloaded" -ForegroundColor Green
+                } elseif (Test-Path $frrCfg) {
+                    Write-Host "  frr-core1: config rendered, container not running" -ForegroundColor Red
+                }
+            }
+            default {
+                Write-Host "Usage: .\run.ps1 dualdc <build|start|apply|stop>" -ForegroundColor Yellow
+                Write-Host "See labs/l3ls-dual-dc/WORKSHOP.md" -ForegroundColor Yellow
+            }
+        }
     }
 
     # Build

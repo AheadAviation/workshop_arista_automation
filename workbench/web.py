@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -27,7 +28,7 @@ from typing import Any, Callable, Mapping
 # `create_app` would leave it unresolvable, and FastAPI would silently treat `request` as a
 # query parameter instead of the request object.
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from workbench.gate import AuditLog
 from workbench.scenarios import (
@@ -49,6 +50,13 @@ STATIC = Path(__file__).resolve().parent / "static"
 #: deliberate choice rather than a convenience.
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8099
+
+#: Where the other two stacks publish themselves. Read from the environment so the guide's
+#: links follow a deployment that moved a port, rather than being hardcoded in the HTML and
+#: silently going stale. These are the host-published ports from the compose files:
+#: NetBox is 8888, and Zammad is 8090 because 8080 is NetBox's inside the container network.
+DEFAULT_NETBOX_URL = "http://localhost:8888"
+DEFAULT_ITSM_URL = "http://localhost:8090"
 
 
 # --------------------------------------------------------------------------- #
@@ -94,6 +102,58 @@ def api_devices() -> dict[str, Any]:
     return {"ok": True, "devices": list(DEMO_DEVICES)}
 
 
+# --------------------------------------------------------------------------- #
+# The presenter guide
+# --------------------------------------------------------------------------- #
+
+
+def urls() -> dict[str, str]:
+    """Every address the guide links to, resolved once.
+
+    The guide is a document a presenter reads at 8am. A link to the wrong port is worse than
+    no link, because it looks like the demo is broken. So the ports come from the
+    environment with the compose files' real defaults, and the template interpolates them
+    rather than hardcoding them.
+    """
+    workbench_host = os.environ.get("WORKBENCH_BIND", DEFAULT_HOST)
+    workbench_port = os.environ.get("WORKBENCH_PORT", str(DEFAULT_PORT))
+    # A page loaded on loopback should link to loopback. `0.0.0.0` is a bind address, not
+    # something a browser can follow, so it becomes 127.0.0.1 in the link.
+    if workbench_host in ("0.0.0.0", "::"):
+        workbench_host = "127.0.0.1"
+    return {
+        "workbench": f"http://{workbench_host}:{workbench_port}",
+        "netbox": os.environ.get("NETBOX_PUBLIC_URL", DEFAULT_NETBOX_URL).rstrip("/"),
+        "itsm": os.environ.get("ITSM_PUBLIC_URL", DEFAULT_ITSM_URL).rstrip("/"),
+    }
+
+
+#: The only placeholders the guide template understands. Anything else is left alone, so a
+#: stray `{{` in the prose cannot raise — and a missing key is caught here rather than
+#: printing an empty href on the page a presenter is trusting.
+GUIDE_PLACEHOLDER_RE = re.compile(r"\{\{([a-z_]+)\}\}")
+
+
+def render_guide(template: str | None = None) -> str:
+    """Fill the guide's placeholders from `urls()`.
+
+    Deliberately not Jinja2. The template needs exactly three substitutions and no
+    conditionals, so a regex over a known key set is less machinery than a template engine
+    and cannot be talked into doing anything else with device data.
+    """
+    text = template or (STATIC / "guide.html").read_text(encoding="utf-8")
+    values = urls()
+
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in values:
+            raise KeyError(f"guide template references unknown placeholder {{{{{key}}}}}")
+        return values[key]
+
+    return GUIDE_PLACEHOLDER_RE.sub(replace, text)
+
+
+
 def create_app(lab_factory: Callable[[], Lab] | None = None) -> Any:
     """The FastAPI app.
 
@@ -113,10 +173,20 @@ def create_app(lab_factory: Callable[[], Lab] | None = None) -> Any:
     def index() -> FileResponse:
         return FileResponse(STATIC / "index.html")
 
+    @app.get("/guide")
+    def guide() -> HTMLResponse:
+        """The presenter's step-by-step page.
+
+        Rendered rather than served as a static file for one reason: it links to NetBox and
+        to the ITSM stack, and those ports belong in exactly one place (`urls()`), not typed
+        into HTML where they rot the moment a deployment moves one.
+        """
+        return HTMLResponse(render_guide())
+
     @app.get("/static/{name}")
     def static_file(name: str) -> FileResponse:
         # Only a fixed allow-list: never build a path from user input.
-        allowed = {"workbench.css", "workbench.js"}
+        allowed = {"workbench.css", "workbench.js", "guide.css", "guide.js"}
         if name not in allowed:
             raise HTTPException(status_code=404, detail="not found")
         return FileResponse(STATIC / name)
@@ -225,6 +295,8 @@ def main() -> int:
     host = os.environ.get("WORKBENCH_BIND", DEFAULT_HOST)
     port = int(os.environ.get("WORKBENCH_PORT", str(DEFAULT_PORT)))
     print(f"NetBox Automation Workbench on http://{host}:{port}")
+    print(f"  The demo page:      http://{host}:{port}/")
+    print(f"  Step-by-step guide: http://{host}:{port}/guide")
     if host != DEFAULT_HOST:
         print(
             "  NOTE: bound to a non-loopback address on purpose. This page drives real "

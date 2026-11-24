@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FMOL briefing &mdash; step by step</title>
+  <link rel="stylesheet" href="/static/workbench.css">
+  <link rel="stylesheet" href="/static/guide.css">
+</head>
+<body class="guide">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>FMOL briefing &mdash; step by step</h1>
+        <p class="subtle">90 minutes &middot; one presenter &middot; every click, in order</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span id="progress-pill" class="pill pill-unknown">0 of 0 done</span>
+      <button id="reset-progress" class="btn btn-ghost" type="button">Reset ticks</button>
+      <a class="btn btn-ghost" href="/">The workbench</a>
+    </div>
+  </header>
+
+  <div class="guide-shell">
+
+    <nav class="guide-nav" aria-label="Sections">
+      <p class="guide-nav-title">Contents</p>
+      <ol class="guide-nav-list">
+        <li><a href="#before">Before anyone joins</a></li>
+        <li><a href="#shape">The shape of the 90 minutes</a></li>
+        <li><a href="#demo">The demo, click by click</a></li>
+        <li><a href="#netbox">The same story inside NetBox</a></li>
+        <li><a href="#questions">The five questions</a></li>
+        <li><a href="#breaks">If something breaks</a></li>
+        <li><a href="#again">Reset and run it again</a></li>
+      </ol>
+
+      <p class="guide-nav-title">Where things are</p>
+      <ul class="guide-nav-list guide-nav-plain">
+        <li><a href="{{workbench}}" target="_blank" rel="noopener">The workbench <span class="mono">{{workbench}}</span></a></li>
+        <li><a href="{{netbox}}" target="_blank" rel="noopener">NetBox <span class="mono">{{netbox}}</span></a></li>
+        <li><a href="{{netbox}}/plugins/ops/" target="_blank" rel="noopener">NetBox Ops <span class="mono">/plugins/ops/</span></a></li>
+        <li><a href="{{itsm}}" target="_blank" rel="noopener">Zammad (ITSM) <span class="mono">{{itsm}}</span></a></li>
+      </ul>
+
+      <p class="guide-tip">
+        Ticks are saved in this browser. Close the tab, come back, the ticks are still
+        there. Nothing on this page reaches a switch.
+      </p>
+    </nav>
+
+    <main class="guide-main">
+
+      <p class="guide-warning">
+        <strong>This page is for you, not for the room.</strong> It has commands on it.
+        Keep it on the laptop screen, and screen-share only the browser window you are
+        actually presenting.
+      </p>
+
+      <!-- =================================================== BEFORE -->
+      <section id="before" class="guide-section">
+        <h2>Before anyone joins <span class="guide-minutes">about 10 minutes</span></h2>
+
+        <p>
+          The lab must already be warm when the call starts. Do not start containers on
+          screen &mdash; a progress bar in front of a CIO is ten minutes you do not get back.
+        </p>
+
+        <ol class="steps">
+          <li class="step">
+            <input type="checkbox" id="p1" class="step-tick" data-step="p1">
+            <label for="p1">
+              <span class="step-title">Start the NetBox stack</span>
+            </label>
+            <div class="step-body">
+              <pre class="cmd"><code>.\run.ps1 up</code></pre>
+              <p class="step-note">
+                NetBox, Postgres, Redis, the lab runner and the scoped Docker proxy. Wait
+                until <span class="mono">{{netbox}}</span> answers and you can log in as
+                <span class="mono">admin / admin</span>.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="p2" class="step-tick" data-step="p2">
+            <label for="p2">
+              <span class="step-title">Deploy the switches and their trunks</span>
+            </label>
+            <div class="step-body">
+              <pre class="cmd"><code>.\run.ps1 workbench-lab</code></pre>
+              <p class="step-note">
+                Eight nodes: six cEOS switches plus the two Philips servers, dual-homed
+                across each MLAG pair. It also turns off ZeroTouch and configures the
+                server trunk on <span class="mono">Ethernet5</span> of every leaf. Allow a
+                minute for the switches to settle.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="p3" class="step-tick" data-step="p3">
+            <label for="p3">
+              <span class="step-title">Turn eAPI on</span>
+            </label>
+            <div class="step-body">
+              <pre class="cmd"><code>.\run.ps1 eapi</code></pre>
+              <p class="step-note">
+                <strong>Do not skip this.</strong> A freshly deployed switch answers
+                nothing on eAPI, and every page that reads the fabric will show six
+                unreachable devices. This is the step that is easiest to forget because
+                nothing tells you it is missing.
+              </p>
+              <p class="step-note">
+                It reports <span class="mono">ok</span> per switch when the switch answers
+                through NetBox &mdash; the same path the plugin uses, so a pass here means
+                the pages will work.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="p4" class="step-tick" data-step="p4">
+            <label for="p4">
+              <span class="step-title">Start the ITSM stack, if you are showing tickets</span>
+            </label>
+            <div class="step-body">
+              <pre class="cmd"><code>.\run.ps1 itsm</code></pre>
+              <p class="step-note">
+                Zammad, on <span class="mono">{{itsm}}</span>. This is the one command that
+                is easy to get wrong if you type it by hand, so use the wrapper:
+              </p>
+              <pre class="cmd"><code>docker compose -f docker-compose.yml -f docker-compose.itsm.yml --profile itsm up -d</code></pre>
+              <p class="step-note">
+                <strong>Both files, in that order.</strong> Zammad lives in its own compose
+                file, so <span class="mono">--profile itsm</span> against the main file
+                starts nothing; and starting it with the ITSM file <em>alone</em> puts
+                Zammad on a different Docker network from NetBox, where the plugin cannot
+                reach it. The ticket tab then says ITSM is not configured while Zammad is
+                plainly running at <span class="mono">{{itsm}}</span>. First start takes
+                several minutes because it runs its migrations.
+              </p>
+              <p class="step-note">
+                Log in as <span class="mono">admin@example.com / admin</span>. If you are
+                not showing the ticket story, skip this &mdash; the demo works without it,
+                and the page says so rather than showing an empty list.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="p5" class="step-tick" data-step="p5">
+            <label for="p5">
+              <span class="step-title">Rehearse: the readiness check</span>
+            </label>
+            <div class="step-body">
+              <pre class="cmd"><code>.\run.ps1 workbench-check</code></pre>
+              <p class="step-class-good">
+                <strong>Good:</strong> the last line says <span class="mono">READY</span>.
+              </p>
+              <p class="step-class-fail">
+                <strong>Not good:</strong> <span class="mono">NOT READY</span>. It names the
+                failing step and the command that fixes it. Fix it and run it again. Never
+                open the meeting on a NOT READY.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="p6" class="step-tick" data-step="p6">
+            <label for="p6">
+              <span class="step-title">Rehearse: the real thing, against real switches</span>
+            </label>
+            <div class="step-body">
+              <pre class="cmd"><code>.\run.ps1 workbench-live</code></pre>
+              <p class="step-note">
+                This breaks a switch on purpose and puts it back, so it is the only check
+                that proves the demo will work rather than that the page loads. Idempotent
+                &mdash; run it as often as you like.
+              </p>
+              <p class="step-class-good">
+                <strong>Good:</strong> <span class="mono">PASS &mdash; 14 steps verified
+                against real switches.</span>
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="p7" class="step-tick" data-step="p7">
+            <label for="p7">
+              <span class="step-title">Open the deck, then the page</span>
+            </label>
+            <div class="step-body">
+              <pre class="cmd"><code>.\run.ps1 deck-show
+.\run.ps1 workbench</code></pre>
+              <p class="step-note">
+                Leave the workbench on the <strong>Fabric</strong> tab. Test screen-share
+                with both windows, then close everything you do not need &mdash; including
+                notifications.
+              </p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <!-- ==================================================== SHAPE -->
+      <section id="shape" class="guide-section">
+        <h2>The shape of the 90 minutes</h2>
+
+        <table class="guide-table">
+          <thead>
+            <tr><th>Time</th><th>Who</th><th>What</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="mono">0:00&ndash;0:05</td><td>Brian Bradley</td><td>Open, intros, set the room up</td></tr>
+            <tr><td class="mono">0:05&ndash;0:25</td><td>NetBox Labs</td><td>The platform, at exec altitude &mdash; no device screens</td></tr>
+            <tr><td class="mono">0:25&ndash;0:40</td><td>Brian Nelson</td><td>The framework, and why the value is in day two</td></tr>
+            <tr class="guide-table-hot"><td class="mono">0:40&ndash;0:55</td><td>Brian Nelson</td><td><strong>The live demo &mdash; the steps below</strong></td></tr>
+            <tr><td class="mono">0:55&ndash;1:05</td><td>Brian Nelson</td><td>Six weeks to value, what we would ask for</td></tr>
+            <tr><td class="mono">1:05&ndash;1:30</td><td>All</td><td>Q&amp;A</td></tr>
+          </tbody>
+        </table>
+
+        <p class="step-note">
+          The disclaimer goes early, not as an afterthought:
+        </p>
+        <blockquote class="say">
+          What we're going to show you is running in a lab, not in your environment.
+          We're showing the method and the art of the possible. The real work starts when
+          we have your data.
+        </blockquote>
+      </section>
+
+      <!-- ===================================================== DEMO -->
+      <section id="demo" class="guide-section">
+        <h2>The demo, click by click <span class="guide-minutes">15 minutes</span></h2>
+
+        <p>
+          Everything here is the workbench page at <span class="mono">{{workbench}}</span>,
+          five tabs. No terminal on screen. The buttons apply real changes to real
+          switches.
+        </p>
+
+        <ol class="steps">
+
+          <li class="step">
+            <input type="checkbox" id="d1" class="step-tick" data-step="d1">
+            <label for="d1">
+              <span class="step-title">Fabric &mdash; "this is your network, as data"</span>
+              <span class="guide-minutes">2 min</span>
+            </label>
+            <div class="step-body">
+              <p class="step-do">
+                <strong>Do:</strong> open the <strong>Fabric</strong> tab. Six cards, all
+                green. Point at one and read the software version row &mdash; you come back
+                to it in step 5.
+              </p>
+              <blockquote class="say">
+                Everything you see here comes from two places: NetBox, which is what we
+                <em>said</em> the network should be, and the switches themselves, which is
+                what it <em>is</em>. Green means they agree. This is the whole idea &mdash;
+                one place that knows what your network is meant to look like, and can prove
+                it.
+              </blockquote>
+              <p class="step-class-good">
+                <strong>Good:</strong> <span class="mono">all compliant</span> in the top
+                right, six devices, six green cards.
+              </p>
+              <p class="step-class-fail">
+                <strong>Red cards:</strong> see <a href="#breaks">If something breaks</a>.
+                Do not debug it in front of the room.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="d2" class="step-tick" data-step="d2">
+            <label for="d2">
+              <span class="step-title">Day-two change &mdash; the Philips VLAN, previewed</span>
+              <span class="guide-minutes">2 min</span>
+            </label>
+            <div class="step-body">
+              <p class="step-do">
+                <strong>Do:</strong> <strong>Day-two change</strong> tab. Switch
+                <span class="mono">leaf-01</span>, VLAN <span class="mono">150</span>.
+                Click <strong>Preview change</strong>.
+              </p>
+              <p class="step-note">
+                Nothing has happened yet. Read the diff aloud: one VLAN created, and the
+                allow-list added on <span class="mono">Ethernet5</span>.
+              </p>
+              <blockquote class="say">
+                This is the answer to the thing you said in our last conversation. Today
+                that is a change request, a maintenance window, and someone typing on four
+                switches and hoping they got all of them. Here it is one object in the
+                source of truth, and the tools work out the rest.
+              </blockquote>
+              <p class="step-class-good">
+                <strong>Good:</strong> a small diff &mdash; <span class="mono">vlan 150</span>,
+                a name, and one or two <span class="mono">switchport trunk allowed vlan</span>
+                lines.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="d3" class="step-tick" data-step="d3">
+            <label for="d3">
+              <span class="step-title">Day-two change &mdash; approve it by name</span>
+              <span class="guide-minutes">1 min</span>
+            </label>
+            <div class="step-body">
+              <p class="step-do">
+                <strong>Do:</strong> type your name in <strong>Approved by</strong>. Click
+                <strong>Approve and apply</strong>.
+              </p>
+              <p class="step-note">
+                The approve control only appears after a preview, and it will not send
+                anything without a name. Say that out loud &mdash; it is the CISO's
+                question answered before she asks it.
+              </p>
+              <p class="step-class-good">
+                <strong>Good:</strong> "Applied by <em>your name</em>" and a green result.
+              </p>
+              <p class="step-class-fail">
+                <strong>"Nothing was sent":</strong> the switch already matched. Usually
+                means a previous run left VLAN 150 in place. Fine to talk over, or reset
+                and restart.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="d4" class="step-tick" data-step="d4">
+            <label for="d4">
+              <span class="step-title">Fabric &mdash; one switch changed, not the estate</span>
+              <span class="guide-minutes">1 min</span>
+            </label>
+            <div class="step-body">
+              <p class="step-do">
+                <strong>Do:</strong> back to <strong>Fabric</strong>. <span class="mono">leaf-01</span>
+                is green; the other three leaves show the change as pending.
+              </p>
+              <blockquote class="say">
+                The other leaves still need it. That is deliberate: I approved one switch,
+                not the estate. When you want all of them, that is a policy decision you
+                make, not a side effect of a button.
+              </blockquote>
+              <p class="step-note">
+                This is the most important honesty beat in the demo. Do not skip it, and do
+                not be tempted to click through all four leaves quickly to make it look
+                tidy.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="d5" class="step-tick" data-step="d5">
+            <label for="d5">
+              <span class="step-title">Break it on purpose, catch it, fix it</span>
+              <span class="guide-minutes">3 min</span>
+            </label>
+            <div class="step-body">
+              <p class="step-do">
+                <strong>Do:</strong> still on <strong>Day-two change</strong>, click
+                <strong>Inject drift</strong>. Then <strong>Fabric</strong> &mdash;
+                <span class="mono">leaf-01</span> is red with the exact port and the exact
+                missing VLAN. Then back and <strong>Remediate drift</strong>, type your
+                name, approve.
+              </p>
+              <blockquote class="say">
+                Nobody told the system. It found it.
+              </blockquote>
+              <p class="step-note">
+                That change was made on a real switch, outside the tool. That is what makes
+                this a demonstration rather than a mock-up.
+              </p>
+              <p class="step-class-good">
+                <strong>Good:</strong> red card with a specific finding, then green after the
+                approval.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="d6" class="step-tick" data-step="d6">
+            <label for="d6">
+              <span class="step-title">Lifecycle &mdash; the CVE conversation</span>
+              <span class="guide-minutes">2 min</span>
+            </label>
+            <div class="step-body">
+              <p class="step-do">
+                <strong>Do:</strong> <strong>Lifecycle</strong> tab. Compliance and
+                operating system, per device, on one page.
+              </p>
+              <blockquote class="say">
+                Same engine, the fleet view. Which devices match what we said, and what
+                are they running. This is where your CVE problem stops being a spreadsheet
+                exercise &mdash; when you set a target version in NetBox, this becomes your
+                upgrade worklist.
+              </blockquote>
+              <p class="step-note">
+                Ties to their Q1 2027 refresh. A refresh done without a model just replaces
+                old drift with new drift.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="d7" class="step-tick" data-step="d7">
+            <label for="d7">
+              <span class="step-title">Two vendors &mdash; and the limits, stated</span>
+              <span class="guide-minutes">2 min</span>
+            </label>
+            <div class="step-body">
+              <p class="step-do">
+                <strong>Do:</strong> <strong>Two vendors</strong> tab. Same intent, same
+                gate: an Arista switch and an FRRouting router.
+              </p>
+              <blockquote class="say">
+                You said the vendor label on the box shouldn't matter. This is the same
+                source of truth, the same approval, the same record, driving two different
+                vendors. Arista is fully read, diffed and applied here. FRR is read and
+                diffed, and applied through its own reload path &mdash; I'm telling you
+                which parts are done rather than showing you a slide.
+              </blockquote>
+              <p class="step-note">
+                <strong>Do not cut the last half-sentence.</strong> It matters more than the
+                demo. Overclaiming here is how you lose a CTO who already knows the
+                difference.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="d8" class="step-tick" data-step="d8">
+            <label for="d8">
+              <span class="step-title">Audit trail &mdash; the CISO's answer</span>
+              <span class="guide-minutes">1 min</span>
+            </label>
+            <div class="step-body">
+              <p class="step-do">
+                <strong>Do:</strong> <strong>Audit trail</strong> tab, newest first, with
+                the approver on every entry. Open a "before and after" to show the switch's
+                own configuration on both sides.
+              </p>
+              <blockquote class="say">
+                Every one of those changes &mdash; including the one I broke on purpose
+                &mdash; is in an append-only record with my name on it and the switch's
+                configuration before and after. And a demo reset does not clear it.
+              </blockquote>
+              <p class="step-class-good">
+                <strong>Good:</strong> at least two applied changes, both naming you.
+              </p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <!-- =================================================== NETBOX -->
+      <section id="netbox" class="guide-section">
+        <h2>The same story inside NetBox <span class="guide-minutes">5 min, optional</span></h2>
+
+        <p>
+          Use this if somebody asks "does this live in our tool, or do we have to go and
+          live in another one?" Everything below is NetBox itself at
+          <span class="mono">{{netbox}}</span>, logged in as <span class="mono">admin / admin</span>.
+          The whole loop is <span class="mono">{{netbox}}/plugins/ops/</span>.
+        </p>
+
+        <ol class="steps">
+          <li class="step">
+            <input type="checkbox" id="n1" class="step-tick" data-step="n1">
+            <label for="n1">
+              <span class="step-title">Devices &mdash; the fabric, and Render Config</span>
+            </label>
+            <div class="step-body">
+              <p class="step-do">
+                <strong>Do:</strong> <strong>Network Ops &rarr; Devices</strong>. Six cards.
+                Then open any device and use NetBox's own <strong>Render Config</strong> tab.
+              </p>
+              <p class="step-note">
+                That is 187 lines of Arista configuration rendered from the source of truth
+                by NetBox itself, with no extra tool in the path. It is the answer to "is
+                this a product of yours or a product we own?".
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="n2" class="step-tick" data-step="n2">
+            <label for="n2">
+              <span class="step-title">Live config &mdash; read from the switch, not cached</span>
+            </label>
+            <div class="step-body">
+              <p class="step-do">
+                <strong>Do:</strong> <strong>Live config</strong> tab, pick a switch.
+              </p>
+              <p class="step-note">
+                Read live over eAPI as the page loads. Secrets are redacted. Useful right
+                after a change: reload and the new stanza is there.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="n3" class="step-tick" data-step="n3">
+            <label for="n3">
+              <span class="step-title">Day-two change &mdash; request, ticket, approve, prove</span>
+            </label>
+            <div class="step-body">
+              <p class="step-do">
+                <strong>Do, in order, on the <strong>Day-two change</strong> tab:</strong>
+              </p>
+              <ol class="substeps">
+                <li>Step 1 &mdash; <strong>Preview the change</strong>. Captures the switch's
+                  config as the before-state and shows the diff.</li>
+                <li>Step 2 &mdash; <strong>Open the ticket</strong>. A real Zammad ticket with
+                  the diff in the body.</li>
+                <li>Step 3 &mdash; type your name, <strong>select that ticket</strong> in the
+                  dropdown, then <strong>Approve &amp; push</strong>.</li>
+              </ol>
+              <p class="step-class-good">
+                <strong>Good:</strong> step 3 shows the switch's own config before and after,
+                the words <em>compliant with intent</em>, and the ticket moved to open and
+                then closed. All three are read back, not asserted.
+              </p>
+              <p class="step-note">
+                Selecting the ticket is what makes the state changes happen. Without it the
+                push still works &mdash; it just has no ticket to move, which is a quieter
+                demo than you want.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="n4" class="step-tick" data-step="n4">
+            <label for="n4">
+              <span class="step-title">ITSM tickets &mdash; the link actually opens</span>
+            </label>
+            <div class="step-body">
+              <p class="step-do">
+                <strong>Do:</strong> <strong>ITSM tickets</strong> tab, click
+                <strong>Open</strong> on a ticket.
+              </p>
+              <p class="step-note">
+                It goes to Zammad at <span class="mono">{{itsm}}</span> &mdash; a real
+                ticket in a real system, in the state the change left it.
+              </p>
+              <p class="step-class-fail">
+                <strong>Dead link:</strong> the ITSM stack is not running, or
+                <span class="mono">itsm_public_url</span> is wrong. See
+                <a href="#breaks">If something breaks</a>.
+              </p>
+            </div>
+          </li>
+
+          <li class="step">
+            <input type="checkbox" id="n5" class="step-tick" data-step="n5">
+            <label for="n5">
+              <span class="step-title">Container labs &mdash; deploy the lab from the page</span>
+            </label>
+            <div class="step-body">
+              <p class="step-do">
+                <strong>Do:</strong> <strong>Container labs</strong> tab. Eight nodes listed.
+              </p>
+              <p class="step-note">
+                You do not need to press Deploy during the meeting. The point is that it is
+                there, and that it is scoped: NetBox reaches Docker through a proxy that
+                exposes container state and start/stop and nothing else. No socket, no exec,
+                no root on the host. That sentence is worth more to this audience than the
+                button.
+              </p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <!-- ================================================ QUESTIONS -->
+      <section id="questions" class="guide-section">
+        <h2>The five questions to expect</h2>
+
+        <dl class="qa">
+          <dt>"Are you replacing ServiceNow?"</dt>
+          <dd>
+            No. It stays your change system of record. NetBox holds configuration intent
+            &mdash; what a device should be, per port. Different question, different data.
+            You saw the ticket land in an ITSM system in exactly the state your process
+            would leave it.
+          </dd>
+
+          <dt>"Are you replacing Infoblox?"</dt>
+          <dd>
+            No. Infoblox stays the IPAM authority. We integrate. Nobody is asking you to
+            move yours.
+          </dd>
+
+          <dt>"How long until we see value?"</dt>
+          <dd>
+            Six weeks to 80% of the estate modeled and one real change automated. The last
+            20% is the hard part and we won't pretend otherwise.
+          </dd>
+
+          <dt>"What about our firewalls?"</dt>
+          <dd>
+            Palo Alto fits the same pattern &mdash; intent, approval, audit. Not demoed
+            today; 90 minutes is 90 minutes.
+          </dd>
+
+          <dt>"Who owns the data?"</dt>
+          <dd>You do. In your NetBox, your Git, your change control.</dd>
+        </dl>
+
+        <h3>Two they may not ask, but you should raise</h3>
+
+        <dl class="qa">
+          <dt>"When does anything act on its own?"</dt>
+          <dd>
+            Not until you approve the gates. Read-only first, then assisted &mdash; the
+            system proposes, a human approves &mdash; and automated only inside a change
+            path you have signed off. That is deliberate, and it is the reason a CISO can
+            say yes.
+          </dd>
+
+          <dt>"We're already mid-refresh. Does this wait?"</dt>
+          <dd>
+            No &mdash; it runs alongside. Your refresh starts Q1 2027, and a refresh done
+            without a model just replaces old drift with new drift.
+          </dd>
+        </dl>
+
+        <h3>Things not to say</h3>
+        <ul class="donts">
+          <li><strong>"Single pane of glass."</strong> Nobody in that room wants another one.</li>
+          <li><strong>"Zero downtime"</strong> about anything we have not proven. That is a switching-platform property, not ours, and the CTO knows the difference.</li>
+          <li><strong>A CLI.</strong> Stay out of a terminal in this room.</li>
+          <li><strong>"It just works."</strong> Say what it does and what it doesn't.</li>
+        </ul>
+      </section>
+
+      <!-- =================================================== BREAKS -->
+      <section id="breaks" class="guide-section">
+        <h2>If something breaks</h2>
+
+        <p>
+          Fix at most one thing live, and only if it takes seconds. Otherwise say what
+          happened, move to the deck, and come back. Do not debug a container in front of a
+          CIO.
+        </p>
+
+        <table class="guide-table">
+          <thead>
+            <tr><th>Symptom</th><th>Do this</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>"Could not read intended state"</td>
+              <td><span class="mono">.\run.ps1 up</span>, wait about 90 seconds, then <strong>Refresh</strong>.</td>
+            </tr>
+            <tr>
+              <td>Every device says "did not answer"</td>
+              <td>eAPI is off. <span class="mono">.\run.ps1 eapi</span>. This is the most likely single failure.</td>
+            </tr>
+            <tr>
+              <td>A device is missing from the page</td>
+              <td><span class="mono">.\run.ps1 status</span>, then <span class="mono">.\run.ps1 workbench-lab</span>.</td>
+            </tr>
+            <tr>
+              <td>Nothing changes when you approve</td>
+              <td>Check the audit tab. If it says nothing was sent, the device already matched &mdash; that is a no-op, not a failure.</td>
+            </tr>
+            <tr>
+              <td>A preview fails</td>
+              <td><span class="mono">.\run.ps1 apply</span> to get the switches back onto the rendered config.</td>
+            </tr>
+            <tr>
+              <td>Tickets tab says ITSM is not configured</td>
+              <td>Zammad is not running, or it is running on the <em>wrong network</em>. Restart it with <span class="mono">.\run.ps1 itsm</span>, which passes both compose files.</td>
+            </tr>
+            <tr>
+              <td>Ticket links are dead</td>
+              <td>Zammad is down, or <span class="mono">itsm_public_url</span> does not point at <span class="mono">{{itsm}}</span>.</td>
+            </tr>
+            <tr>
+              <td>NetBox asks you to log in</td>
+              <td>That is correct. <span class="mono">admin / admin</span>. It is meant to be closed &mdash; it drives switches.</td>
+            </tr>
+            <tr>
+              <td>You want to start over</td>
+              <td><span class="mono">.\run.ps1 workbench-reset</span>. Puts the fabric back and <strong>keeps the audit</strong>.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p class="step-note">
+          The deck stands alone. If the lab dies mid-demo, say so, show
+          <span class="mono">.\run.ps1 workbench-walk</span> output if it helps, and move
+          to the six-week slide.
+        </p>
+      </section>
+
+      <!-- ==================================================== AGAIN -->
+      <section id="again" class="guide-section">
+        <h2>Reset and run it again</h2>
+
+        <pre class="cmd"><code>.\run.ps1 workbench-reset</code></pre>
+
+        <p>
+          Then start at the Fabric tab. The audit log keeps both runs, which is usually a
+          good thing to show &mdash; it is the record of two full change cycles.
+        </p>
+
+        <p class="step-note">
+          A reset applies real changes to real switches and is itself recorded, with
+          <span class="mono">demo reset</span> as the approver. It never clears the record. A
+          reset returns the lab to its starting state; it does not rewrite what happened.
+        </p>
+      </section>
+
+      <section class="guide-section guide-section-quiet">
+        <h2>What this is not</h2>
+        <ul class="donts">
+          <li>It does not replace ServiceNow. It reads and writes configuration intent.</li>
+          <li>It does not replace Infoblox. It is not an IPAM authority.</li>
+          <li>It does not touch firewalls today.</li>
+          <li>The trunk layer is a lab overlay &mdash; the shipped fabric has no server-facing ports, so the demo adds one real trunk per leaf.</li>
+          <li>It is a lab. Not a customer network, and it says so in the footer.</li>
+        </ul>
+      </section>
+
+    </main>
+  </div>
+
+  <footer class="footer">
+    <span>Presenter guide. Lab demo &mdash; not a live customer network.</span>
+    <span class="subtle">{{workbench}}/guide</span>
+  </footer>
+
+  <script src="/static/guide.js"></script>
+</body>
+</html>

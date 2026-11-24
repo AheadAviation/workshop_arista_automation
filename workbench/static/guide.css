@@ -1,0 +1,366 @@
+/* The presenter guide. Shares workbench.css for the palette and typography, and adds
+   only what a long-form document needs: a sticky contents rail, numbered steps, tick
+   boxes, and a clear separation between "what to say" and "what to do".
+
+   Same rule as the workbench page: no framework, no build step, nothing to break the
+   night before. */
+
+.guide-shell {
+  display: grid;
+  grid-template-columns: 17rem minmax(0, 1fr);
+  gap: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1.75rem 1.75rem 4rem;
+  align-items: start;
+}
+
+/* ------------------------------------------------------------ contents */
+
+.guide-nav {
+  position: sticky;
+  top: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+}
+
+.guide-nav-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.guide-nav-title:not(:first-child) { margin-top: 1.15rem; }
+
+.guide-nav-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.guide-nav-plain { padding-left: 0; list-style: none; }
+
+.guide-nav-list li { margin-bottom: 0.35rem; }
+
+.guide-nav-list a {
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.guide-nav-list a:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.guide-nav-list .mono { color: var(--text-dim); font-size: 0.76rem; }
+
+.guide-tip {
+  margin: 1.15rem 0 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+/* ---------------------------------------------------------------- main */
+
+.guide-main { min-width: 0; }
+
+.guide-warning {
+  margin: 0 0 1.75rem;
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius);
+  background: var(--warn-bg);
+  border: 1px solid rgba(210, 153, 34, 0.35);
+  color: #f0cf85;
+  font-size: 0.88rem;
+}
+
+.guide-section {
+  margin-bottom: 2.75rem;
+  scroll-margin-top: 1.5rem;
+}
+
+.guide-section h2 {
+  font-size: 1.35rem;
+  margin-bottom: 0.35rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.guide-section h3 {
+  margin: 1.75rem 0 0.75rem;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.guide-section > p {
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  max-width: 68ch;
+}
+
+.guide-section-quiet { opacity: 0.85; }
+
+.guide-minutes {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- steps */
+
+.steps {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  counter-reset: step;
+}
+
+.step {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem 1.1rem 3.1rem;
+  margin-bottom: 0.9rem;
+  counter-increment: step;
+  transition: border-left-color 120ms ease, opacity 120ms ease;
+}
+
+/* The number. Replaced by a tick once the step is done, so a checked step reads as done
+   at a glance rather than as a list item with a small box next to it. */
+.step::before {
+  content: counter(step);
+  position: absolute;
+  left: 0.95rem;
+  top: 1rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.step.is-done { border-left-color: var(--ok); }
+.step.is-done::before {
+  content: "\2713";
+  background: var(--ok-bg);
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+/* The checkbox is the label's control, but it is not the visible affordance — the whole
+   title is, and the state shows through the number badge. Keeping it in the accessibility
+   tree means it still works with a keyboard and a screen reader. */
+.step-tick {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.step label {
+  display: block;
+  cursor: pointer;
+  margin-bottom: 0.15rem;
+}
+
+.step-tick:focus-visible + label .step-title {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.step-title {
+  font-weight: 600;
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+}
+
+.step.is-done .step-title { color: var(--text-dim); }
+
+.step-body {
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--line);
+  margin-top: 0.6rem;
+}
+
+.step-do {
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.step-do strong { color: var(--accent); }
+
+.step-note {
+  margin: 0.55rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  line-height: 1.55;
+  max-width: 70ch;
+}
+
+.step-class-good,
+.step-class-fail {
+  margin: 0.5rem 0 0;
+  padding: 0.45rem 0.7rem;
+  border-radius: 7px;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.step-class-good {
+  background: var(--ok-bg);
+  border: 1px solid rgba(63, 185, 80, 0.28);
+  color: #8ce099;
+}
+
+.step-class-fail {
+  background: var(--bad-bg);
+  border: 1px solid rgba(248, 81, 73, 0.28);
+  color: #ffb4ae;
+}
+
+.substeps {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+}
+
+.substeps li { margin-bottom: 0.45rem; }
+.substeps strong { color: var(--text); }
+
+/* ------------------------------------------------------------- commands */
+
+.cmd {
+  margin: 0.5rem 0 0.6rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  border-radius: 7px;
+  font-family: var(--mono);
+  font-size: 0.84rem;
+  color: #cfe3ff;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.mono { font-family: var(--mono); font-size: 0.86em; }
+
+/* --------------------------------------------------------------- quote */
+
+.say {
+  margin: 0.6rem 0 0;
+  padding: 0.7rem 0 0.7rem 0.95rem;
+  border-left: 3px solid var(--accent);
+  background: rgba(77, 163, 255, 0.06);
+  border-radius: 0 7px 7px 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #d6e6f7;
+  font-style: italic;
+  max-width: 70ch;
+}
+
+/* --------------------------------------------------------------- table */
+
+.guide-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  margin-top: 1rem;
+}
+
+.guide-table th {
+  text-align: left;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.guide-table td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  color: var(--text-dim);
+}
+
+.guide-table td:first-child { color: var(--text); }
+
+.guide-table-hot td { background: rgba(77, 163, 255, 0.07); color: var(--text); }
+
+/* ------------------------------------------------------------------ qa */
+
+.qa { margin: 1rem 0 0; }
+
+.qa dt {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-top: 1.1rem;
+  color: var(--accent);
+}
+
+.qa dd {
+  margin: 0.3rem 0 0;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+  max-width: 70ch;
+}
+
+.donts {
+  margin: 0.75rem 0 0;
+  padding-left: 1.15rem;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  line-height: 1.65;
+  max-width: 70ch;
+}
+
+.donts strong { color: var(--text); }
+
+/* ------------------------------------------------------------- narrow */
+
+@media (max-width: 900px) {
+  .guide-shell {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 1rem 1rem 3rem;
+  }
+
+  .guide-nav {
+    position: static;
+    order: -1;
+  }
+}
