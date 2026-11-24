@@ -40,9 +40,16 @@ PLUGINS_CONFIG = {
         'demo_vlan_name': 'PHILIPS_MEDICAL',
         # AWX and Zammad are filled in by their bootstrap jobs when those profiles run.
         # Empty is a valid state and the page says so rather than showing an empty list.
+        # AWX was dropped: its 24.6.1 Docker image does not work (see the initiative record).
         'awx_url': '',
         'awx_token': '',
-        'itsm_url': '',
-        'itsm_token': '',
+        # Zammad, brought up with --profile itsm. The token is created by
+        # scripts/zammad_token_perms.rb.
+        'itsm_url': 'http://zammad-nginx:8080',
+        'itsm_token': '4aroyvDrKCLlDhnA0C1wPppAakjqICFRHqvCcJo1bfTS5JzxyWUW12aggHjfhqTX',
+        # Arista eAPI. The plugin reads and drives switches over HTTPS eAPI rather than
+        # through Docker, which is why NetBox needs no Docker privilege for devices at all.
+        'eapi_username': 'admin',
+        'eapi_password': 'admin',
     },
 }

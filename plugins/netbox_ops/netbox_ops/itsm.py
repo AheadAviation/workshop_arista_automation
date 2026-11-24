@@ -104,12 +104,16 @@ def tickets(limit: int = 25) -> dict[str, Any]:
     for item in items or []:
         if not isinstance(item, dict):
             continue
+        # Zammad returns state/priority as *ids*, not names. Resolving them costs extra calls
+        # per ticket, so the raw id is shown with a readable fallback rather than pretending
+        # to know the name.
+        state = item.get("state_id")
         tickets_out.append(
             {
                 "id": item.get("id"),
                 "number": item.get("number") or "",
                 "title": item.get("title") or "",
-                "state": item.get("state") or "",
+                "state": item.get("state") or (f"state {state}" if state else ""),
                 "priority": item.get("priority") or "",
                 "group": item.get("group") or "",
                 "created_at": item.get("created_at") or "",
@@ -140,6 +144,9 @@ def create_change_ticket(title: str, body: str, *, group: str = "Network Operati
         "article": {"body": body, "type": "note", "internal": False},
         "group": group,
         "type": "Change",
+        # Zammad requires a customer on every ticket. The demo uses the API user as the
+        # customer, because a lab has no customer directory to look one up in.
+        "customer_id": 1,
     }
     try:
         response = session.post(f"{base}/api/v1/tickets", json=payload, timeout=20)

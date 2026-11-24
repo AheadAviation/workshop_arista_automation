@@ -93,10 +93,15 @@ def _engine_lab() -> Any:
     """
     from workbench.scenarios import Lab
 
-    from . import devices
+    from . import devices, eapi_exec
 
     lab = Lab.real()
     lab.read_actual = devices.read_device  # type: ignore[assignment]
+    # The executor is swapped too: `docker exec` is unavailable inside NetBox, and eAPI is the
+    # transport the switches actually expose. Same session-based preview-then-commit contract,
+    # same refusal to replace a whole configuration.
+    lab.preview = eapi_exec.preview  # type: ignore[assignment]
+    lab.apply = eapi_exec.apply_change  # type: ignore[assignment]
     return lab
 
 

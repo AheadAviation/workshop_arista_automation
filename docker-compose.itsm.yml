@@ -1,0 +1,166 @@
+# =============================================================================
+# Zammad — a real ITSM stack for the NetBox Ops plugin (INIT-002/SPEC-006).
+# =============================================================================
+# Started only with `docker compose --profile itsm up -d`.
+#
+# Zammad normally ships with Elasticsearch; it is disabled here because it is the single
+# heaviest component and search is not what the demo shows. Zammad runs fine without it for
+# ticket creation and viewing.
+#
+# First start is slow — several minutes, because it runs its database migrations and seed.
+# The plugin reports "starting" rather than showing an empty ticket list, because an empty
+# list reads as "your ITSM has no tickets" which is a very different and much more alarming
+# thing to show a customer.
+#
+# Bring up:   docker compose --profile itsm up -d
+# Tear down:  docker compose --profile itsm down
+#             (note: no -v. `down -v` on this project removes NetBox's volumes too, which
+#              wipes the source of truth. That mistake cost an hour once.)
+# =============================================================================
+
+services:
+  zammad-postgres:
+    image: postgres:15-alpine
+    profiles: ["itsm"]
+    environment:
+      POSTGRES_DB: zammad_production
+      POSTGRES_USER: zammad
+      POSTGRES_PASSWORD: zammad
+    volumes:
+      - zammad-postgres:/var/lib/postgresql/data
+    networks:
+      default:
+        aliases:
+          - zammad-postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zammad"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  zammad-redis:
+    image: redis:7-alpine
+    profiles: ["itsm"]
+    networks:
+      default:
+        aliases:
+          - zammad-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
+  # Zammad's init job: creates the schema and seeds the admin user, then exits.
+  zammad-init:
+    image: ghcr.io/zammad/zammad:6.4.1
+    profiles: ["itsm"]
+    depends_on:
+      zammad-postgres:
+        condition: service_healthy
+      zammad-redis:
+        condition: service_healthy
+    command: ["zammad-init"]
+    environment:
+      POSTGRESQL_HOST: zammad-postgres
+      POSTGRESQL_USER: zammad
+      POSTGRESQL_PASS: zammad
+      POSTGRESQL_DB: zammad_production
+      REDIS_URL: redis://zammad-redis:6379
+      # Create the admin on first boot with a known password, so the demo does not depend on
+      # clicking through a setup wizard.
+      AUTOWIZARD_JSON: |
+        {
+          "admin_user": {
+            "login": "admin@example.com",
+            "firstname": "Network",
+            "lastname": "Ops",
+            "email": "admin@example.com",
+            "password": "admin"
+          },
+          "organization": { "name": "AHEAD Demo" },
+          "system": { "url": "http://localhost:8090" }
+        }
+    networks:
+      default:
+        aliases:
+          - zammad-init
+    restart: "no"
+
+  zammad-railsserver:
+    image: ghcr.io/zammad/zammad:6.4.1
+    profiles: ["itsm"]
+    depends_on:
+      zammad-postgres:
+        condition: service_healthy
+      zammad-redis:
+        condition: service_healthy
+      # Only the database and cache gate this. `service_completed_successfully` on zammad-init
+      # looked right and was not: with `restart: "no"` the init container still reports "Up"
+      # while it finishes, so the condition never resolves and railsserver never starts.
+      # Migrations are idempotent, so running this before init has fully exited is safe.
+    command: ["zammad-railsserver"]
+    environment:
+      POSTGRESQL_HOST: zammad-postgres
+      POSTGRESQL_USER: zammad
+      POSTGRESQL_PASS: zammad
+      POSTGRESQL_DB: zammad_production
+      REDIS_URL: redis://zammad-redis:6379
+      RAILS_ENV: production
+    volumes:
+      - zammad-storage:/opt/zammad/storage
+    networks:
+      default:
+        aliases:
+          - zammad-railsserver
+    restart: unless-stopped
+
+  zammad-websocket:
+    image: ghcr.io/zammad/zammad:6.4.1
+    profiles: ["itsm"]
+    depends_on:
+      - zammad-railsserver
+    command: ["zammad-websocket"]
+    environment:
+      POSTGRESQL_HOST: zammad-postgres
+      POSTGRESQL_USER: zammad
+      POSTGRESQL_PASS: zammad
+      POSTGRESQL_DB: zammad_production
+      REDIS_URL: redis://zammad-redis:6379
+      RAILS_ENV: production
+    networks:
+      default:
+        aliases:
+          - zammad-websocket
+    restart: unless-stopped
+
+  zammad-nginx:
+    image: ghcr.io/zammad/zammad:6.4.1
+    profiles: ["itsm"]
+    depends_on:
+      - zammad-railsserver
+    command: ["zammad-nginx"]
+    environment:
+      POSTGRESQL_HOST: zammad-postgres
+      POSTGRESQL_USER: zammad
+      POSTGRESQL_PASS: zammad
+      POSTGRESQL_DB: zammad_production
+      REDIS_URL: redis://zammad-redis:6379
+      RAILS_ENV: production
+      NGINX_SERVER_SCHEME: http
+      NGINX_SERVER_NAME: localhost
+      NGINX_PORT: "8080"
+    ports:
+      # Loopback only: this drives real ticket state.
+      - "127.0.0.1:8090:8080"
+    networks:
+      default:
+        aliases:
+          - zammad-nginx
+    restart: unless-stopped
+
+volumes:
+  zammad-postgres:
+  zammad-storage:
