@@ -136,8 +136,11 @@ def approve_and_push(
 
     # Approve in the ticket first, when there is one: the record of the decision belongs in
     # the customer's system of record, not only in ours.
+    ticket_result: dict[str, Any] = {}
     if ticket_id:
-        itsm.approve_ticket(int(ticket_id), f"Approved by {approver.strip()} via NetBox Ops")
+        ticket_result = itsm.approve_ticket(
+            int(ticket_id), f"Approved by {approver.strip()} via NetBox Ops"
+        )
 
     # The push itself.
     applied = engine.approve_vlan(
@@ -159,6 +162,19 @@ def approve_and_push(
                 device_state = (card.get("verdict") or {}).get("state", "")
                 break
 
+    verified = device_state == "compliant"
+
+    # Close the ticket only once the change is actually on the device and verified. Closing on
+    # approval alone would claim success before there is any evidence of it, which is the exact
+    # thing the rest of this flow exists to avoid.
+    closed = False
+    if ticket_id and verified and applied.ok:
+        close_result = itsm.close_ticket(
+            int(ticket_id),
+            f"Change applied to {device} and verified: VLAN {vlan or conf.demo_vlan()}",
+        )
+        closed = bool(close_result.get("ok"))
+
     return {
         "ok": applied.ok,
         "applied": bool((applied.data or {}).get("applied")),
@@ -169,7 +185,10 @@ def approve_and_push(
         "config_diff": diff.get("diff") or "",
         "config_changed_lines": diff.get("changed_lines") or 0,
         "verified_state": device_state,
-        "verified": device_state == "compliant",
+        "verified": verified,
+        "ticket_state_changed": bool(ticket_result.get("state_changed")),
+        "ticket_closed": closed,
+        "ticket_note": ticket_result.get("headline", ""),
     }
 
 

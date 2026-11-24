@@ -54,6 +54,13 @@
           Re-read afterwards: <strong>{{ result.verified_state|default:"unknown" }}</strong>.
         {% endif %}
       </div>
+      {% if result.ticket_state_changed or result.ticket_closed %}
+        <div class="small mt-1">
+          Ticket:
+          {% if result.ticket_state_changed %}moved to <strong>open</strong> on approval{% endif %}
+          {% if result.ticket_closed %}{% if result.ticket_state_changed %}, then {% endif %}closed after the change verified{% endif %}.
+        </div>
+      {% endif %}
     </div>
 
     {% if result.config_diff %}

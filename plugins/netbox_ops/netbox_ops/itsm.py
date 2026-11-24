@@ -195,34 +195,145 @@ def create_change_ticket(
     }
 
 
-def approve_ticket(ticket_id: int, note: str = "Approved via NetBox Ops") -> dict[str, Any]:
-    """Add an approval note to a ticket.
+def _state_id(session, base: str, name: str) -> int | None:
+    """Resolve a ticket state's id by name, or None if this install has no such state.
 
-    Deliberately a note rather than a state change: Zammad's states are site-configurable and
-    guessing at a state name is how you silently fail to approve something. The note is the
-    record of the human decision; the state is the customer's own process.
+    Resolved rather than hardcoded because state ids are per-install: a stock Zammad happens to
+    use 1/2/4 for new/open/closed, but a site that has added states will not, and posting the
+    wrong id moves a ticket somewhere unexpected. Looking it up by name is the only way to be
+    right on an install we have not seen.
     """
     import requests
 
     try:
-        session, base = _session_or_error()
+        response = session.get(f"{base}/api/v1/ticket_states", timeout=15)
+    except requests.RequestException:
+        return None
+    if response.status_code != 200:
+        return None
+    try:
+        states = response.json()
+    except ValueError:
+        return None
+    for state in states if isinstance(states, list) else []:
+        if str(state.get("name", "")).strip().lower() == name.lower():
+            return int(state["id"]) if state.get("id") is not None else None
+    return None
+
+
+def approve_ticket(ticket_id: int, note: str = "Approved via NetBox Ops") -> dict[str, Any]:
+    """Record the approval on the ticket **and move it to `open`**.
+
+    The earlier version only added a note, on the reasoning that Zammad's states are
+    site-configurable and guessing could silently fail. That caution was right about *guessing*
+    and wrong about the conclusion: leaving the ticket in `new` after a human approved it and the
+    change was pushed makes the ticket a lie, which is worse than a state that might not match a
+    site's exact workflow.
+
+    So the state is resolved **by name** from the install's own `/api/v1/ticket_states`, not
+    hardcoded. If the install has no `open` state the note is still recorded and the result says
+    the state could not be changed — a visible partial success, never a silent one.
+    """
+    import requests
+
+    try:
+        session, base = _session_and_base()
     except ItsmError as exc:
         return {"ok": False, "headline": "ITSM is not available", "detail": str(exc)}
 
+    # 1. The note is the record of the decision, and it matters on its own.
     payload = {"ticket_id": int(ticket_id), "body": note, "type": "note", "internal": False}
     try:
         response = session.post(f"{base}/api/v1/ticket_articles", json=payload, timeout=20)
     except requests.RequestException as exc:
         return {"ok": False, "headline": "Could not reach the ITSM system", "detail": str(exc)}
+    if response.status_code >= 400:
+        return {
+            "ok": False,
+            "headline": "ITSM refused the approval note",
+            "detail": f"{response.status_code}",
+        }
+
+    # 2. Move the ticket on, so its state agrees with what actually happened.
+    state_id = _state_id(session, base, "open")
+    if state_id is None:
+        return {
+            "ok": True,
+            "state_changed": False,
+            "headline": f"Recorded approval on ticket {ticket_id}",
+            "detail": "This install has no 'open' state, so the ticket state was left as it was.",
+        }
+
+    try:
+        updated = session.put(
+            f"{base}/api/v1/tickets/{int(ticket_id)}", json={"state_id": state_id}, timeout=20
+        )
+    except requests.RequestException as exc:
+        return {
+            "ok": True,
+            "state_changed": False,
+            "headline": f"Recorded approval on ticket {ticket_id}",
+            "detail": f"The note was added but the state could not be changed: {exc}",
+        }
+
+    if updated.status_code >= 400:
+        return {
+            "ok": True,
+            "state_changed": False,
+            "headline": f"Recorded approval on ticket {ticket_id}",
+            "detail": f"The note was added but the state could not be changed ({updated.status_code})",
+        }
+
+    return {
+        "ok": True,
+        "state_changed": True,
+        "headline": f"Approved ticket {ticket_id} — moved to open",
+        "detail": note,
+    }
+
+
+def close_ticket(ticket_id: int, note: str = "Change applied and verified") -> dict[str, Any]:
+    """Close a ticket after its change landed, so the ITSM record matches reality."""
+    import requests
+
+    try:
+        session, base = _session_and_base()
+    except ItsmError as exc:
+        return {"ok": False, "headline": "ITSM is not available", "detail": str(exc)}
+
+    state_id = _state_id(session, base, "closed")
+    if state_id is None:
+        return {
+            "ok": False,
+            "headline": "No 'closed' state on this install",
+            "detail": "The ticket was left open.",
+        }
+
+    try:
+        response = session.put(
+            f"{base}/api/v1/tickets/{int(ticket_id)}", json={"state_id": state_id}, timeout=20
+        )
+    except requests.RequestException as exc:
+        return {"ok": False, "headline": "Could not reach the ITSM system", "detail": str(exc)}
 
     if response.status_code >= 400:
-        return {"ok": False, "headline": "ITSM refused the approval note", "detail": f"{response.status_code}"}
+        return {
+            "ok": False,
+            "headline": "ITSM refused to close the ticket",
+            "detail": f"{response.status_code}",
+        }
 
-    return {"ok": True, "headline": f"Recorded approval on ticket {ticket_id}", "detail": ""}
+    # Best-effort closing note; a failure here does not undo the close.
+    try:
+        session.post(
+            f"{base}/api/v1/ticket_articles",
+            json={"ticket_id": int(ticket_id), "body": note, "type": "note", "internal": False},
+            timeout=20,
+        )
+    except requests.RequestException:
+        pass
 
-
-def _session_or_error():
-    return _session_and_base()
+    return {"ok": True, "headline": f"Closed ticket {ticket_id}", "detail": note}
 
 
 __all__ = [
@@ -230,6 +341,7 @@ __all__ = [
     "ItsmNotConfigured",
     "approve_ticket",
     "create_change_ticket",
+    "close_ticket",
     "status",
     "tickets",
 ]
