@@ -1570,7 +1570,7 @@ def clean_showcase_data() -> dict[str, int]:
         removed["racks"] = racks.count()
         racks.delete()
 
-        locs = Location.objects.filter(site=site, tags__slug=seeder.TAG_SLUG).order_by("-level")
+        locs = Location.objects.filter(site=site, tags__slug=seeder.TAG_SLUG).order_by("-path")
         removed["locations"] = locs.count()
         for loc in locs:
             loc.delete()
