@@ -12,10 +12,12 @@ which is the honest record. Views that only read never write.
 
 from __future__ import annotations
 
+import threading
 import uuid
 from typing import Any
 
 from django.contrib import messages
+from django.db import close_old_connections
 from django.db.models import Count
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -103,12 +105,13 @@ def _steps() -> list[dict[str, Any]]:
     return rows
 
 
-def _run_job(action: str, payload: dict | None = None, *, step_key: str = "") -> tuple[LabJob, str]:
-    """Create, run and finish one job. Returns the job and a human-readable message."""
-    agent = LabAgent.objects.filter(enabled=True).first()
-    job = LabJob.objects.create(
-        agent=agent, action=action, status=LabJob.Status.RUNNING, payload=payload or {}
-    )
+#: Actions whose wall time can exceed reverse-proxy (Cloudflare 100s) timeouts.
+#: Run in a background thread and redirect immediately to the auto-refreshing job page.
+ASYNC_ACTIONS: frozenset[str] = frozenset({"deploy-bare-lab"})
+
+
+def _finish_job(job_id: int, action: str, payload: dict | None, *, step_key: str = "") -> tuple[LabJob, str]:
+    job = LabJob.objects.get(pk=job_id)
     try:
         result = lab.run_action(action, payload)
     except lab.LabAgentError as exc:
@@ -124,12 +127,51 @@ def _run_job(action: str, payload: dict | None = None, *, step_key: str = "") ->
     job.summary = {
         key: value
         for key, value in result.items()
-        if key in ("devices", "results", "wiped", "mode", "scenario", "title", "configs_written")
+        if key
+        in (
+            "devices",
+            "results",
+            "wiped",
+            "mode",
+            "scenario",
+            "title",
+            "configs_written",
+            "eapi_ready",
+            "eapi_wait_seconds",
+        )
     }
     job.save(update_fields=["status", "output", "summary"])
     if step_key:
         _save_step(step_key, ok=True, detail=str(result.get("output", ""))[:120])
     return job, str(result.get("output", ""))
+
+
+def _start_async_job(action: str, payload: dict | None = None, *, step_key: str = "") -> LabJob:
+    agent = LabAgent.objects.filter(enabled=True).first()
+    job = LabJob.objects.create(
+        agent=agent, action=action, status=LabJob.Status.RUNNING, payload=payload or {}
+    )
+
+    def _worker() -> None:
+        close_old_connections()
+        try:
+            _finish_job(job.pk, action, payload, step_key=step_key)
+        except Exception as exc:  # noqa: BLE001
+            LabJob.objects.filter(pk=job.pk).update(status=LabJob.Status.FAILED, error=str(exc))
+        finally:
+            close_old_connections()
+
+    threading.Thread(target=_worker, name=f"netbox-demo-job-{job.pk}", daemon=True).start()
+    return job
+
+
+def _run_job(action: str, payload: dict | None = None, *, step_key: str = "") -> tuple[LabJob, str]:
+    """Create, run and finish one job. Returns the job and a human-readable message."""
+    agent = LabAgent.objects.filter(enabled=True).first()
+    job = LabJob.objects.create(
+        agent=agent, action=action, status=LabJob.Status.RUNNING, payload=payload or {}
+    )
+    return _finish_job(job.pk, action, payload, step_key=step_key)
 
 
 # --------------------------------------------------------------------------- #
@@ -196,6 +238,14 @@ def run_step(request: HttpRequest, key: str) -> HttpResponse:
     if key == "assurance":
         # Nothing to run: Assurance does its own analysis. Send the operator to it.
         return redirect(conf.assurance_deviations_url())
+
+    if step["action"] in ASYNC_ACTIONS:
+        job = _start_async_job(step["action"], step_key=key)
+        messages.info(
+            request,
+            f"{step['label']} started in background (Job #{job.pk}). This page refreshes automatically.",
+        )
+        return redirect(f"/plugins/demo/jobs/{job.pk}/")
 
     job, output = _run_job(step["action"], step_key=key)
     if job.status == LabJob.Status.FAILED:

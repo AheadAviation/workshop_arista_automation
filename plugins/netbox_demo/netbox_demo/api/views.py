@@ -18,7 +18,7 @@ from rest_framework.views import APIView
 
 from netbox.api.viewsets import NetBoxModelViewSet
 
-from .. import assurance, conf, day2, design, intent, lab, renderer, seeder
+from .. import assurance, conf, day2, design, intent, lab, renderer, seeder, views as ui_views
 from ..models import LabAgent, LabJob, StagedChange
 from .serializers import LabAgentSerializer, LabJobSerializer, StagedChangeSerializer
 
@@ -276,6 +276,18 @@ class LabActionView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             payload["configs"] = configs
+
+        if action in ui_views.ASYNC_ACTIONS and not payload.get("sync"):
+            job = ui_views._start_async_job(action, payload)
+            return Response(
+                {
+                    "job": job.pk,
+                    "status": job.status,
+                    "async": True,
+                    "poll_url": f"/api/plugins/demo/lab-jobs/{job.pk}/",
+                },
+                status=status.HTTP_202_ACCEPTED,
+            )
 
         job = LabJob.objects.create(
             agent=LabAgent.objects.filter(enabled=True).first(),

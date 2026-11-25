@@ -24,6 +24,16 @@
           {% endif %}
         </dl>
 
+        {% if job.status == 'running' %}
+          <div class="alert alert-info mt-3 mb-0 d-flex align-items-center gap-2">
+            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+            <span>Running in background &mdash; this page refreshes automatically every 5 seconds.</span>
+          </div>
+          <script>
+            setTimeout(function() { window.location.reload(); }, 5000);
+          </script>
+        {% endif %}
+
         {% if job.error %}
           <div class="alert alert-danger mt-3 mb-0">
             <strong>This action failed.</strong>

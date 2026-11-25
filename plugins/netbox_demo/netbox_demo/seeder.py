@@ -32,7 +32,7 @@ from dcim.models import (
     Site,
 )
 from extras.models import ConfigContext
-from ipam.models import VLAN, VRF, Prefix
+from ipam.models import VLAN, VRF, Prefix, VLANGroup
 from tenancy.models import Tenant
 
 from . import design
@@ -242,21 +242,47 @@ def ensure_devices() -> list[str]:
     return touched
 
 
+def _ensure_vlan_group() -> VLANGroup:
+    existing = (
+        VLANGroup.objects.filter(slug=design.SITE_SLUG).first()
+        or VLANGroup.objects.filter(name__iexact=design.SITE_SLUG).first()
+    )
+    if existing is not None:
+        return existing
+    group, _ = VLANGroup.objects.get_or_create(
+        slug=design.SITE_SLUG,
+        defaults={"name": design.SITE_SLUG, "description": "netbox-demo fabric VLANs"},
+    )
+    return group
+
+
 def ensure_vlans() -> list[int]:
-    """Seed the tenant VLANs, keeping an operator's edits intact."""
+    """Seed the tenant VLANs in the `netbox-demo` VLANGroup, safe with existing VLANs."""
     tenant_core = Tenant.objects.get(slug="core")
+    vlan_group = _ensure_vlan_group()
     tag = _tag()
     vids: list[int] = []
     for seed in design.SEED_VLANS:
-        vlan, _ = VLAN.objects.update_or_create(
-            vid=seed.vlan_id,
-            defaults={
-                "name": seed.name,
-                "description": seed.description,
-                "tenant": tenant_core,
-                "status": "active",
-            },
+        vlan = (
+            VLAN.objects.filter(vid=seed.vlan_id, group=vlan_group).first()
+            or VLAN.objects.filter(vid=seed.vlan_id, group__isnull=True).first()
         )
+        if vlan is None:
+            vlan = VLAN.objects.create(
+                vid=seed.vlan_id,
+                group=vlan_group,
+                name=seed.name,
+                description=seed.description,
+                tenant=tenant_core,
+                status="active",
+            )
+        else:
+            vlan.group = vlan_group
+            vlan.name = seed.name
+            vlan.description = seed.description
+            vlan.tenant = tenant_core
+            vlan.status = "active"
+            vlan.save()
         vlan.tags.add(tag)
         vids.append(vlan.vid)
     return vids

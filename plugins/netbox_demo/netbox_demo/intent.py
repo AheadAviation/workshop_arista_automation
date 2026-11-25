@@ -87,7 +87,14 @@ def tenant_vlans() -> list[TenantVlan]:
     vlans: list[TenantVlan] = []
     seeded = {seed.vlan_id: seed for seed in design.SEED_VLANS}
 
-    for vlan in VLAN.objects.filter(vid__in=seeded.keys()).order_by("vid"):
+    seen_vids: set[int] = set()
+    # Prefer VLANs in the demo VLANGroup so duplicate VIDs in other groups never duplicate output.
+    demo_qs = VLAN.objects.filter(vid__in=seeded.keys(), group__slug=design.SITE_SLUG).order_by("vid")
+    fallback_qs = VLAN.objects.filter(vid__in=seeded.keys()).order_by("vid")
+    for vlan in [*demo_qs, *fallback_qs]:
+        if vlan.vid in seen_vids:
+            continue
+        seen_vids.add(vlan.vid)
         seed = seeded[vlan.vid]
         vlans.append(
             TenantVlan(
