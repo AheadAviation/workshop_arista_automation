@@ -419,8 +419,9 @@ def clean_demo_data() -> dict[str, int]:
     addresses before the interfaces they sit on.
     """
     from ipam.models import IPAddress
+    from . import showcase
 
-    removed: dict[str, int] = {}
+    removed: dict[str, int] = showcase.clean_showcase_data()
 
     site = get_site()
     devices = Device.objects.filter(name__in=design.ALL_DEVICES)

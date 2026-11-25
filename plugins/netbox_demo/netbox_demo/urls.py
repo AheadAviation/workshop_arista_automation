@@ -28,6 +28,12 @@ urlpatterns = [
     # Jobs
     path("jobs/", views.job_list, name="job_list"),
     path("jobs/<int:pk>/", views.job_detail, name="job_detail"),
+    # Source-of-Record Showcase (Racks, Power, Circuits, Topology)
+    path("showcase/", views.showcase_view, name="showcase"),
+    path("showcase/action/<str:action>/", views.showcase_action, name="showcase_action"),
+    path("showcase/add-circuit/", views.showcase_add_circuit, name="showcase_add_circuit"),
+    path("showcase/add-power/", views.showcase_add_power, name="showcase_add_power"),
+    path("showcase/add-device/", views.showcase_add_device, name="showcase_add_device"),
     # Fabric actions
     path("fabric/seed/", views.seed_fabric, name="seed_fabric"),
     path("fabric/clean/", views.clean_fabric, name="clean_fabric"),

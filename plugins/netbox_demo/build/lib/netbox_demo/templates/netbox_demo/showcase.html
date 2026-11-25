@@ -1,0 +1,498 @@
+{% extends 'base/layout.html' %}
+
+{% block title %}NetBox Demo · Source of Record Showcase{% endblock %}
+
+{% block tabs %}
+  {% include 'netbox_demo/_tabs.html' %}
+{% endblock %}
+
+{% block content %}
+<div class="row align-items-center mb-3">
+  <div class="col">
+    <h1 class="h2 mb-1">NetBox as Source of Record — Data Center Showcase</h1>
+    <p class="text-muted mb-0">
+      Model physical rack elevations, redundant A/B power distribution, WAN carrier circuits,
+      IPAM/BGP ASNs, and live topology views — all linked directly to the live Arista cEOS EVPN/VXLAN fabric.
+    </p>
+  </div>
+  <div class="col-auto d-flex flex-wrap gap-2">
+    {% if info.topology_available %}
+      <a class="btn btn-primary" href="{{ info.topology_url }}">
+        <i class="mdi mdi-sitemap me-1"></i>Open Full Topology Map
+      </a>
+      <a class="btn btn-outline-primary" href="{{ info.topology_network_url }}">
+        Network &amp; WAN Map
+      </a>
+      <a class="btn btn-outline-danger" href="{{ info.topology_power_url }}">
+        Power Map
+      </a>
+    {% else %}
+      <span class="badge bg-warning text-dark px-3 py-2">Topology Views plugin not installed</span>
+    {% endif %}
+  </div>
+</div>
+
+{# ===================== 6 Source-of-Record KPI Cards ===================== #}
+<div class="row g-3 mb-4">
+  <div class="col-md-2 col-sm-4">
+    <div class="card text-center h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small text-uppercase fw-semibold">Racks</div>
+        <div class="h2 mb-1 mt-1 {% if info.counts.racks %}text-success{% else %}text-muted{% endif %}">
+          {{ info.counts.racks }}
+        </div>
+        <a class="small" href="/dcim/racks/{% if info.site %}?site_id={{ info.site.pk }}{% endif %}">
+          Elevations &rarr;
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-2 col-sm-4">
+    <div class="card text-center h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small text-uppercase fw-semibold">Devices</div>
+        <div class="h2 mb-1 mt-1 {% if info.counts.devices >= 10 %}text-success{% else %}text-primary{% endif %}">
+          {{ info.counts.devices }}
+        </div>
+        <a class="small" href="/dcim/devices/{% if info.site %}?site_id={{ info.site.pk }}{% endif %}">
+          {{ info.counts.servers }} srv · {{ info.counts.pdus }} PDU
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-2 col-sm-4">
+    <div class="card text-center h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small text-uppercase fw-semibold">Power Feeds</div>
+        <div class="h2 mb-1 mt-1 {% if info.counts.power_feeds %}text-danger{% else %}text-muted{% endif %}">
+          {{ info.counts.power_feeds }}
+        </div>
+        <a class="small" href="/dcim/power-panels/{% if info.site %}?site_id={{ info.site.pk }}{% endif %}">
+          {{ info.counts.power_panels }} Panels &rarr;
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-2 col-sm-4">
+    <div class="card text-center h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small text-uppercase fw-semibold">WAN Circuits</div>
+        <div class="h2 mb-1 mt-1 {% if info.counts.circuits %}text-info{% else %}text-muted{% endif %}">
+          {{ info.counts.circuits }}
+        </div>
+        <a class="small" href="/circuits/circuits/?tag=netbox-demo">
+          {{ info.counts.providers }} Providers &rarr;
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-2 col-sm-4">
+    <div class="card text-center h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small text-uppercase fw-semibold">Cables</div>
+        <div class="h2 mb-1 mt-1 {% if info.counts.cables %}text-success{% else %}text-muted{% endif %}">
+          {{ info.counts.cables }}
+        </div>
+        <a class="small" href="/dcim/cables/?tag=netbox-demo">
+          Physical Paths &rarr;
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-2 col-sm-4">
+    <div class="card text-center h-100">
+      <div class="card-body py-3">
+        <div class="text-muted small text-uppercase fw-semibold">IPAM &amp; ASNs</div>
+        <div class="h2 mb-1 mt-1 {% if info.counts.prefixes %}text-primary{% else %}text-muted{% endif %}">
+          {{ info.counts.prefixes }} / {{ info.counts.asns }}
+        </div>
+        <a class="small" href="/ipam/prefixes/?tag=netbox-demo">
+          {{ info.counts.vlans }} VLANs &rarr;
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ===================== One-Click Modular Builders ===================== #}
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <strong>Build Data Center Source of Record (Idempotent — Scoped to Site "NetBox Demo")</strong>
+    <div class="d-flex flex-wrap gap-2">
+      <form method="post" action="{% url 'plugins:netbox_demo:showcase_action' 'seed-all' %}" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-success">
+          <i class="mdi mdi-rocket-launch-outline me-1"></i>Build Complete Showcase
+        </button>
+      </form>
+      <form method="post" action="{% url 'plugins:netbox_demo:showcase_action' 'clean' %}" class="d-inline"
+            onsubmit="return confirm('Remove showcase racks, servers, power, and circuits? Core 6 switches stay untouched.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline-danger">Clean Showcase Extras</button>
+      </form>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-3">
+        <div class="border rounded p-3 h-100 d-flex flex-column justify-content-between">
+          <div>
+            <h6 class="fw-semibold mb-1"><i class="mdi mdi-server me-1 text-primary"></i>1. Racks &amp; Servers</h6>
+            <p class="small text-muted mb-2">
+              Hall A &rarr; Row 01, 2&times;42U racks (<code>RACK-A01</code>, <code>RACK-A02</code>),
+              6 ToR switches mounted, 4 dual-homed servers, MLAG + server cables.
+            </p>
+          </div>
+          <form method="post" action="{% url 'plugins:netbox_demo:showcase_action' 'racks' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-primary w-100">Seed Racks &amp; Servers</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="col-md-3">
+        <div class="border rounded p-3 h-100 d-flex flex-column justify-content-between">
+          <div>
+            <h6 class="fw-semibold mb-1"><i class="mdi mdi-flash me-1 text-danger"></i>2. Power (A/B Redundant)</h6>
+            <p class="small text-muted mb-2">
+              <code>PANEL-A</code> &amp; <code>PANEL-B</code>, 4&times;208V/30A 3-phase feeds,
+              4 switched PDUs, dual PSU1/PSU2 cables + watt draw on every device.
+            </p>
+          </div>
+          <form method="post" action="{% url 'plugins:netbox_demo:showcase_action' 'power' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger w-100">Seed Power Infrastructure</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="col-md-3">
+        <div class="border rounded p-3 h-100 d-flex flex-column justify-content-between">
+          <div>
+            <h6 class="fw-semibold mb-1"><i class="mdi mdi-transit-connection-variant me-1 text-info"></i>3. WAN Circuits &amp; IPAM</h6>
+            <p class="small text-muted mb-2">
+              Lumen &amp; Zayo providers, 3&times;10G/100G circuits terminated on spine uplinks,
+              tenant SVI prefixes, Loopback/VTEP IPs, and BGP ASNs 65000&ndash;65004.
+            </p>
+          </div>
+          <form method="post" action="{% url 'plugins:netbox_demo:showcase_action' 'circuits' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-info w-100">Seed Circuits &amp; IPAM</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="col-md-3">
+        <div class="border rounded p-3 h-100 d-flex flex-column justify-content-between">
+          <div>
+            <h6 class="fw-semibold mb-1"><i class="mdi mdi-sitemap me-1 text-success"></i>4. Topology Auto-Layout</h6>
+            <p class="small text-muted mb-2">
+              Pre-places Circuits, Spines, Leaves, Servers, PDUs, Power Feeds &amp; Panels in
+              clean hierarchical rows inside <code>Topology Views</code>.
+            </p>
+          </div>
+          <form method="post" action="{% url 'plugins:netbox_demo:showcase_action' 'topology' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-success w-100" {% if not info.topology_available %}disabled{% endif %}>
+              Auto-Layout Topology Map
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ===================== Live Interactive Demo Quick-Add Forms ===================== #}
+<div class="row g-3 mb-4">
+  {# --- Quick-Add WAN Circuit --- #}
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header">
+        <strong><i class="mdi mdi-plus-circle-outline me-1 text-info"></i>Add WAN Circuit (Live Demo)</strong>
+      </div>
+      <form method="post" action="{% url 'plugins:netbox_demo:showcase_add_circuit' %}">
+        {% csrf_token %}
+        <div class="card-body">
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">Circuit ID (CID)</label>
+            <input name="cid" class="form-control form-control-sm" placeholder="CID-ATT-10G-003" required>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-7">
+              <label class="form-label small fw-semibold mb-1">Provider</label>
+              <input name="provider" class="form-control form-control-sm" value="AT&T Business" required>
+            </div>
+            <div class="col-5">
+              <label class="form-label small fw-semibold mb-1">Commit (Mbps)</label>
+              <input name="commit_mbps" type="number" class="form-control form-control-sm" value="10000" min="10" max="400000" required>
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">Circuit Type</label>
+            <select name="circuit_type" class="form-select form-select-sm">
+              <option value="IP Transit">IP Transit</option>
+              <option value="DCI Wavelength">DCI Wavelength</option>
+              <option value="Dark Fiber">Dark Fiber</option>
+              <option value="Cloud Direct Connect">Cloud Direct Connect</option>
+            </select>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-7">
+              <label class="form-label small fw-semibold mb-1">Terminate on Switch</label>
+              <select name="device" class="form-select form-select-sm">
+                {% for d in all_devices %}
+                  <option value="{{ d }}" {% if d == 'demo-spine-02' %}selected{% endif %}>{{ d }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-5">
+              <label class="form-label small fw-semibold mb-1">Interface</label>
+              <input name="interface" class="form-control form-control-sm" value="Ethernet6" required>
+            </div>
+          </div>
+          <div class="mb-0">
+            <label class="form-label small fw-semibold mb-1">Description</label>
+            <input name="description" class="form-control form-control-sm" placeholder="Tertiary Carrier / AWS Direct Connect">
+          </div>
+        </div>
+        <div class="card-footer">
+          <button type="submit" class="btn btn-sm btn-info text-white w-100">Create &amp; Cable Circuit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# --- Quick-Add Power Feed --- #}
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header">
+        <strong><i class="mdi mdi-plus-circle-outline me-1 text-danger"></i>Add Power Feed (Live Demo)</strong>
+      </div>
+      <form method="post" action="{% url 'plugins:netbox_demo:showcase_add_power' %}">
+        {% csrf_token %}
+        <div class="card-body">
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">Feed Name</label>
+            <input name="name" class="form-control form-control-sm" placeholder="FEED-A01-GPU-A" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold mb-1">Power Panel</label>
+            <select name="panel" class="form-select form-select-sm">
+              <option value="PANEL-A (Utility A)">PANEL-A (Utility A)</option>
+              <option value="PANEL-B (Utility B)">PANEL-B (Utility B)</option>
+            </select>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label class="form-label small fw-semibold mb-1">Target Rack</label>
+              <select name="rack" class="form-select form-select-sm">
+                <option value="RACK-A01">RACK-A01</option>
+                <option value="RACK-A02">RACK-A02</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-semibold mb-1">Redundancy</label>
+              <select name="feed_type" class="form-select form-select-sm">
+                <option value="primary">Primary (A)</option>
+                <option value="redundant">Redundant (B)</option>
+              </select>
+            </div>
+          </div>
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label small fw-semibold mb-1">Voltage (V)</label>
+              <input name="voltage" type="number" class="form-control form-control-sm" value="208" min="100" max="600" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-semibold mb-1">Amperage (A)</label>
+              <input name="amperage" type="number" class="form-control form-control-sm" value="60" min="10" max="200" required>
+            </div>
+          </div>
+        </div>
+        <div class="card-footer">
+          <button type="submit" class="btn btn-sm btn-danger w-100">Add Power Feed to Rack</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# --- Quick-Add Rack Device --- #}
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header">
+        <strong><i class="mdi mdi-plus-circle-outline me-1 text-primary"></i>Rack New Device (Auto-PSU + Uplink)</strong>
+      </div>
+      <form method="post" action="{% url 'plugins:netbox_demo:showcase_add_device' %}">
+        {% csrf_token %}
+        <div class="card-body">
+          <div class="row g-2 mb-2">
+            <div class="col-7">
+              <label class="form-label small fw-semibold mb-1">Hostname</label>
+              <input name="name" class="form-control form-control-sm" placeholder="demo-fw-01" required>
+            </div>
+            <div class="col-5">
+              <label class="form-label small fw-semibold mb-1">Role</label>
+              <select name="role" class="form-select form-select-sm">
+                <option value="Server">Server (Dell R660)</option>
+                <option value="Firewall">Firewall (PA-3420)</option>
+                <option value="Storage">Storage (NetApp)</option>
+                <option value="Router">Router (Arista 7280)</option>
+              </select>
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-5">
+              <label class="form-label small fw-semibold mb-1">Rack</label>
+              <select name="rack" class="form-select form-select-sm">
+                <option value="RACK-A01">RACK-A01</option>
+                <option value="RACK-A02">RACK-A02</option>
+              </select>
+            </div>
+            <div class="col-4">
+              <label class="form-label small fw-semibold mb-1">Position (U)</label>
+              <input name="position" type="number" class="form-control form-control-sm" value="12" min="3" max="36" required>
+            </div>
+            <div class="col-3">
+              <label class="form-label small fw-semibold mb-1">Height</label>
+              <input name="u_height" type="number" class="form-control form-control-sm" value="2" min="1" max="8" required>
+            </div>
+          </div>
+          <div class="row g-2">
+            <div class="col-7">
+              <label class="form-label small fw-semibold mb-1">Uplink Leaf</label>
+              <select name="uplink_leaf" class="form-select form-select-sm">
+                {% for leaf in leaves %}
+                  <option value="{{ leaf }}">{{ leaf }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-5">
+              <label class="form-label small fw-semibold mb-1">Leaf Port</label>
+              <input name="uplink_port" class="form-control form-control-sm" value="Ethernet8" required>
+            </div>
+          </div>
+        </div>
+        <div class="card-footer">
+          <button type="submit" class="btn btn-sm btn-primary w-100">Mount in Rack + Wire Power &amp; Link</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# ===================== Live Source-of-Record Explorer Tables ===================== #}
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Rack Elevations</strong>
+        <a class="btn btn-sm btn-outline-secondary" href="/dcim/racks/{% if info.site %}?site_id={{ info.site.pk }}{% endif %}">All Racks</a>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Rack</th>
+              <th>Location</th>
+              <th>Devices</th>
+              <th>Space</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in info.racks %}
+              <tr>
+                <td><a href="{{ r.url }}" class="fw-semibold">{{ r.name }}</a> <span class="text-muted small">{{ r.facility_id }}</span></td>
+                <td class="small">{{ r.location }}</td>
+                <td>{{ r.device_count }}</td>
+                <td class="small font-monospace">{{ r.used_u }}U / {{ r.u_height }}U</td>
+                <td class="text-end"><a href="{{ r.url }}" class="btn btn-sm btn-outline-primary">Elevation</a></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="text-muted text-center py-3">Click <strong>Seed Racks &amp; Servers</strong> above to create rack elevations.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>WAN Circuits</strong>
+        <a class="btn btn-sm btn-outline-secondary" href="/circuits/circuits/?tag=netbox-demo">All Circuits</a>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-hover mb-0">
+          <thead>
+            <tr>
+              <th>CID</th>
+              <th>Provider</th>
+              <th>Type</th>
+              <th>Commit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in info.circuits %}
+              <tr>
+                <td><a href="{{ c.url }}" class="fw-semibold font-monospace">{{ c.cid }}</a></td>
+                <td class="small">{{ c.provider }}</td>
+                <td><span class="badge bg-azure-lt">{{ c.type }}</span></td>
+                <td class="small font-monospace">{{ c.commit }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="text-muted text-center py-3">Click <strong>Seed Circuits &amp; IPAM</strong> above to create carrier circuits.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Redundant Power Feeds &amp; Panels</strong>
+        <a class="btn btn-sm btn-outline-secondary" href="/dcim/power-panels/{% if info.site %}?site_id={{ info.site.pk }}{% endif %}">Power Panels</a>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Feed</th>
+              <th>Panel</th>
+              <th>Rack</th>
+              <th>Spec</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in info.power_feeds %}
+              <tr>
+                <td><a href="{{ f.url }}" class="fw-semibold font-monospace">{{ f.name }}</a></td>
+                <td class="small"><a href="{{ f.panel_url }}">{{ f.panel }}</a></td>
+                <td class="small">{% if f.rack %}<a href="{{ f.rack_url }}">{{ f.rack }}</a>{% else %}&mdash;{% endif %}</td>
+                <td class="small font-monospace">{{ f.spec }}</td>
+                <td>
+                  {% if f.cabled %}
+                    <span class="badge bg-green text-white">Cabled to PDU</span>
+                  {% else %}
+                    <span class="badge bg-secondary text-white">Available</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="text-muted text-center py-3">Click <strong>Seed Power Infrastructure</strong> above to build A/B power.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

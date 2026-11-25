@@ -5,6 +5,10 @@
        href="{% url 'plugins:netbox_demo:runbook' %}">Runbook</a>
   </li>
   <li class="nav-item" role="presentation">
+    <a class="nav-link{% if active == 'showcase' %} active{% endif %}"
+       href="{% url 'plugins:netbox_demo:showcase' %}">Source of Record</a>
+  </li>
+  <li class="nav-item" role="presentation">
     <a class="nav-link{% if active == 'drift' %} active{% endif %}"
        href="{% url 'plugins:netbox_demo:drift' %}">Drift</a>
   </li>

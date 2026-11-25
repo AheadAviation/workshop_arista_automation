@@ -1,0 +1,67 @@
+<div class="card border-primary">
+  <h5 class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="mdi mdi-flask-outline me-1"></i>NetBox Demo &middot; Source of Record</span>
+    <a href="{% url 'plugins:netbox_demo:showcase' %}" class="btn btn-sm btn-outline-primary">Showcase</a>
+  </h5>
+  <div class="card-body">
+    {% if is_demo_switch %}
+      <table class="table table-sm table-hover attr-table mb-3">
+        <tr>
+          <th scope="row">Fabric Role</th>
+          <td><span class="badge bg-blue text-white">{{ role_name }}</span></td>
+        </tr>
+        <tr>
+          <th scope="row">BGP ASN</th>
+          <td><code>AS{{ asn }}</code></td>
+        </tr>
+        <tr>
+          <th scope="row">Router ID (Lo0)</th>
+          <td><code>{{ router_id }}</code></td>
+        </tr>
+        {% if vtep_ip %}
+        <tr>
+          <th scope="row">VXLAN VTEP (Lo1)</th>
+          <td><code>{{ vtep_ip }}</code></td>
+        </tr>
+        {% endif %}
+      </table>
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-sm btn-primary"
+           href="{% url 'plugins:netbox_demo:preview' %}?device={{ device.name }}">
+          <i class="mdi mdi-file-code-outline me-1"></i>Rendered EOS Config
+        </a>
+        <a class="btn btn-sm btn-outline-primary"
+           href="{% url 'plugins:netbox_demo:live' %}?device={{ device.name }}">
+          <i class="mdi mdi-console me-1"></i>Live Config
+        </a>
+        <a class="btn btn-sm btn-outline-warning"
+           href="{% url 'plugins:netbox_demo:drift' %}?device={{ device.name }}">
+          <i class="mdi mdi-compare-horizontal me-1"></i>Check Drift
+        </a>
+        {% if topology_available and site_id %}
+          <a class="btn btn-sm btn-outline-info"
+             href="/plugins/netbox_topology_views/topology/?site_id={{ site_id }}&show_cables=true&show_circuit=true&show_power=true">
+            <i class="mdi mdi-sitemap me-1"></i>Topology Map
+          </a>
+        {% endif %}
+      </div>
+    {% else %}
+      <p class="text-muted small mb-2">
+        Managed as part of the <strong>NetBox Demo</strong> data center Source of Record.
+      </p>
+      <div class="d-flex flex-wrap gap-2">
+        {% if device.rack %}
+          <a class="btn btn-sm btn-outline-primary" href="{{ device.rack.get_absolute_url }}">
+            <i class="mdi mdi-server me-1"></i>Rack Elevation ({{ device.rack.name }})
+          </a>
+        {% endif %}
+        {% if topology_available and site_id %}
+          <a class="btn btn-sm btn-outline-info"
+             href="/plugins/netbox_topology_views/topology/?site_id={{ site_id }}&show_cables=true&show_circuit=true&show_power=true">
+            <i class="mdi mdi-sitemap me-1"></i>Topology Map
+          </a>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>

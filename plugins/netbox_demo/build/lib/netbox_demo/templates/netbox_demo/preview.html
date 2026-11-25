@@ -1,0 +1,63 @@
+{% extends 'base/layout.html' %}
+
+{% block title %}Config preview — NetBox Demo{% endblock %}
+
+{% block tabs %}
+  {% include 'netbox_demo/_tabs.html' %}
+{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+  <div class="col-12">
+    <div class="card">
+      <h2 class="card-header">Rendered configuration from NetBox intent</h2>
+      <div class="card-body">
+        <p class="text-muted small">
+          Exactly what a push would send. Rendered from what NetBox documents, not from the switch.
+        </p>
+        <div class="row g-2 align-items-end mb-3">
+          <div class="col-auto">
+            <form method="get" class="row g-2 align-items-end">
+              <div class="col-auto">
+                <label class="form-label" for="device">Switch</label>
+                <select name="device" id="device" class="form-select">
+                  {% for device in devices %}
+                    <option value="{{ device }}" {% if device == selected %}selected{% endif %}>{{ device }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-auto">
+                <button type="submit" class="btn btn-primary">Render</button>
+              </div>
+            </form>
+          </div>
+          <div class="col-auto ms-auto">
+            <form method="post" action="{% url 'plugins:netbox_demo:push_configs' %}"
+                  onsubmit="return confirm('Push rendered configuration to all six switches?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-warning">Push to all switches</button>
+            </form>
+          </div>
+        </div>
+
+        {% if problems %}
+          <div class="alert alert-danger">
+            <strong>This configuration would not be pushed.</strong>
+            <ul class="mb-0 mt-2 small">
+              {% for problem in problems %}
+                <li>{{ problem }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+      </div>
+
+      {% if config_text %}
+        <div class="card-body border-top p-0">
+          <pre class="mb-0 p-3 small" style="max-height: 34rem; overflow: auto;">{{ config_text }}</pre>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

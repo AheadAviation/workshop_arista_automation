@@ -1,0 +1,56 @@
+{% extends 'base/layout.html' %}
+
+{% block title %}Live config — NetBox Demo{% endblock %}
+
+{% block tabs %}
+  {% include 'netbox_demo/_tabs.html' %}
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <h2 class="card-header d-flex justify-content-between">
+        <span>Live running configuration</span>
+        {% if config_text %}
+          <span class="badge bg-green">read from the switch</span>
+        {% elif error %}
+          <span class="badge bg-red">unreachable</span>
+        {% endif %}
+      </h2>
+      <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+          <div class="col-auto">
+            <label class="form-label" for="device">Switch</label>
+            <select name="device" id="device" class="form-select">
+              {% for device in devices %}
+                <option value="{{ device }}" {% if device == selected %}selected{% endif %}>{{ device }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-auto">
+            <button type="submit" class="btn btn-primary">Read from switch</button>
+          </div>
+        </form>
+
+        {% if error %}
+          <div class="alert alert-warning mt-3 mb-0">
+            <strong>{{ selected }} could not be read.</strong>
+            <div class="mt-1 small"><code>{{ error }}</code></div>
+            <div class="mt-2 small text-muted">
+              A switch that is still booting has no eAPI yet. This reads directly from the device,
+              so an unreachable switch is reported as unreachable rather than showing stale text.
+            </div>
+          </div>
+        {% endif %}
+      </div>
+
+      {% if config_text %}
+        <div class="card-body border-top p-0">
+          <pre class="mb-0 p-3 small" style="max-height: 38rem; overflow: auto;">{{ config_text }}</pre>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

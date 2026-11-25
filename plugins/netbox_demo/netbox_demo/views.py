@@ -24,7 +24,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from . import assurance, conf, day2, design, intent, lab, renderer, seeder
+from . import assurance, conf, day2, design, intent, lab, renderer, seeder, showcase
 from .models import DemoStep, LabAgent, LabJob, StagedChange
 
 #: The runbook, in order. `key` is stable; `action` is a lab-agent action.
@@ -698,3 +698,111 @@ def agent_health(request: HttpRequest) -> JsonResponse:
             status=503,
         )
     return JsonResponse({"reachable": True, **health})
+
+
+# --------------------------------------------------------------------------- #
+# Source-of-Record Showcase (Racks, Power, Circuits, Topology Views)
+# --------------------------------------------------------------------------- #
+
+
+@require_GET
+def showcase_view(request: HttpRequest) -> HttpResponse:
+    """Data Center Source-of-Record showcase: Racks, Power, Circuits, and Topology."""
+    return render(
+        request,
+        "netbox_demo/showcase.html",
+        {
+            "info": showcase.showcase_summary(),
+            "all_devices": design.ALL_DEVICES,
+            "leaves": design.LEAVES,
+            "tab": "showcase",
+        },
+    )
+
+
+@require_POST
+def showcase_action(request: HttpRequest, action: str) -> HttpResponse:
+    """Run one idempotent showcase builder (seed-all, racks, power, circuits, topology, clean)."""
+    handlers = {
+        "seed-all": ("Built complete Source-of-Record showcase (racks, power, circuits, IPAM, topology).", showcase.seed_full_showcase),
+        "racks": ("Seeded locations, 2×42U racks, 6 mounted switches, 4 dual-homed servers, and cables.", showcase.seed_racks_and_servers),
+        "power": ("Seeded Utility A/B power panels, 4 feeds, 4 switched PDUs, and dual-PSU cabling.", showcase.seed_power),
+        "circuits": ("Seeded Lumen & Zayo WAN/DCI circuits, spine uplinks, tenant prefixes, and BGP ASNs.", showcase.seed_circuits_and_ipam),
+        "topology": ("Applied hierarchical Topology Views coordinates for devices, circuits, and power.", showcase.seed_topology_coordinates),
+        "clean": ("Cleaned showcase racks, servers, power, and circuits.", showcase.clean_showcase_data),
+    }
+    entry = handlers.get(action)
+    if entry is None:
+        messages.error(request, f"Unknown showcase action {action!r}.")
+        return redirect("plugins:netbox_demo:showcase")
+    label, fn = entry
+    try:
+        fn()
+    except Exception as exc:  # noqa: BLE001
+        messages.error(request, f"Showcase action '{action}' failed: {exc}")
+    else:
+        messages.success(request, label)
+    return redirect("plugins:netbox_demo:showcase")
+
+
+@require_POST
+def showcase_add_circuit(request: HttpRequest) -> HttpResponse:
+    """Live demo form: create a WAN circuit and cable it directly to a demo switch."""
+    try:
+        res = showcase.quick_add_circuit(
+            cid=request.POST.get("cid", ""),
+            provider=request.POST.get("provider", ""),
+            circuit_type=request.POST.get("circuit_type", "IP Transit"),
+            commit_mbps=request.POST.get("commit_mbps", 10000),
+            device=request.POST.get("device", "demo-spine-02"),
+            interface=request.POST.get("interface", "Ethernet6"),
+            description=request.POST.get("description", ""),
+        )
+    except Exception as exc:  # noqa: BLE001
+        messages.error(request, f"Could not create circuit: {exc}")
+    else:
+        suffix = " and cabled to switch" if res["cabled"] else ""
+        messages.success(request, f"Circuit {res['cid']} created{suffix}.")
+    return redirect("plugins:netbox_demo:showcase")
+
+
+@require_POST
+def showcase_add_power(request: HttpRequest) -> HttpResponse:
+    """Live demo form: add a Power Feed to a panel and rack."""
+    try:
+        res = showcase.quick_add_power_feed(
+            name=request.POST.get("name", ""),
+            panel=request.POST.get("panel", ""),
+            rack=request.POST.get("rack", ""),
+            feed_type=request.POST.get("feed_type", "primary"),
+            voltage=request.POST.get("voltage", 208),
+            amperage=request.POST.get("amperage", 30),
+        )
+    except Exception as exc:  # noqa: BLE001
+        messages.error(request, f"Could not create power feed: {exc}")
+    else:
+        messages.success(request, f"Power feed {res['name']} added.")
+    return redirect("plugins:netbox_demo:showcase")
+
+
+@require_POST
+def showcase_add_device(request: HttpRequest) -> HttpResponse:
+    """Live demo form: mount a new server/firewall/storage node with auto-PSU & uplink."""
+    try:
+        res = showcase.quick_add_rack_device(
+            name=request.POST.get("name", ""),
+            role=request.POST.get("role", "Server"),
+            rack=request.POST.get("rack", "RACK-A01"),
+            position=request.POST.get("position", 12),
+            u_height=request.POST.get("u_height", 2),
+            uplink_leaf=request.POST.get("uplink_leaf", "demo-leaf-01"),
+            uplink_port=request.POST.get("uplink_port", "Ethernet8"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        messages.error(request, f"Could not rack device: {exc}")
+    else:
+        messages.success(
+            request,
+            f"Mounted {res['name']} (uplink cabled: {res['cabled_uplink']}, PSUs wired: {res['power_wired']}).",
+        )
+    return redirect("plugins:netbox_demo:showcase")

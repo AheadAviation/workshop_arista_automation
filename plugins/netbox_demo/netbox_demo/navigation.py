@@ -19,6 +19,11 @@ menu = PluginMenu(
                     permissions=["netbox_demo.view_labjob"],
                 ),
                 PluginMenuItem(
+                    link="plugins:netbox_demo:showcase",
+                    link_text="Source of Record",
+                    permissions=["netbox_demo.view_labjob"],
+                ),
+                PluginMenuItem(
                     link="plugins:netbox_demo:drift",
                     link_text="Drift",
                     permissions=["netbox_demo.view_labjob"],

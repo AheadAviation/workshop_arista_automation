@@ -18,7 +18,7 @@ from rest_framework.views import APIView
 
 from netbox.api.viewsets import NetBoxModelViewSet
 
-from .. import assurance, conf, day2, design, intent, lab, renderer, seeder, views as ui_views
+from .. import assurance, conf, day2, design, intent, lab, renderer, seeder, showcase, views as ui_views
 from ..models import LabAgent, LabJob, StagedChange
 from .serializers import LabAgentSerializer, LabJobSerializer, StagedChangeSerializer
 
@@ -306,3 +306,87 @@ class LabActionView(APIView):
         job.output = str(result.get("output", ""))[:20000]
         job.save(update_fields=["status", "output"])
         return Response({"job": job.pk, "status": job.status, "result": result})
+
+
+class ShowcaseSummaryView(APIView):
+    """Live Source-of-Record showcase counts, racks, power feeds, circuits, and Topology links."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        data = showcase.showcase_summary()
+        site = data.pop("site", None)
+        data["site"] = {"id": site.pk, "name": site.name, "slug": site.slug} if site else None
+        return Response(data)
+
+
+class ShowcaseActionView(APIView):
+    """Run one Source-of-Record showcase seed/add/clean action."""
+
+    permission_classes = [IsAuthenticated, CanOperateDemo]
+    ALLOWED = {
+        "seed-all",
+        "racks",
+        "power",
+        "circuits",
+        "topology",
+        "clean",
+        "add-circuit",
+        "add-power",
+        "add-device",
+    }
+
+    def post(self, request, action: str):
+        if action not in self.ALLOWED:
+            return Response(
+                {"error": f"unknown showcase action {action!r}", "allowed": sorted(self.ALLOWED)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        body = request.data if isinstance(request.data, dict) else {}
+        try:
+            if action == "seed-all":
+                result = showcase.seed_full_showcase()
+            elif action == "racks":
+                result = showcase.seed_racks_and_servers()
+            elif action == "power":
+                result = showcase.seed_power()
+            elif action == "circuits":
+                result = showcase.seed_circuits_and_ipam()
+            elif action == "topology":
+                result = showcase.seed_topology_coordinates()
+            elif action == "clean":
+                result = showcase.clean_showcase_data()
+            elif action == "add-circuit":
+                result = showcase.quick_add_circuit(
+                    cid=body.get("cid", ""),
+                    provider=body.get("provider", ""),
+                    circuit_type=body.get("circuit_type", "IP Transit"),
+                    commit_mbps=body.get("commit_mbps", 10000),
+                    device=body.get("device", "demo-spine-02"),
+                    interface=body.get("interface", "Ethernet6"),
+                    description=body.get("description", ""),
+                )
+            elif action == "add-power":
+                result = showcase.quick_add_power_feed(
+                    name=body.get("name", ""),
+                    panel=body.get("panel", ""),
+                    rack=body.get("rack", ""),
+                    feed_type=body.get("feed_type", "primary"),
+                    voltage=body.get("voltage", 208),
+                    amperage=body.get("amperage", 30),
+                )
+            elif action == "add-device":
+                result = showcase.quick_add_rack_device(
+                    name=body.get("name", ""),
+                    role=body.get("role", "Server"),
+                    rack=body.get("rack", "RACK-A01"),
+                    position=body.get("position", 12),
+                    u_height=body.get("u_height", 2),
+                    uplink_leaf=body.get("uplink_leaf", "demo-leaf-01"),
+                    uplink_port=body.get("uplink_port", "Ethernet8"),
+                )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:  # noqa: BLE001
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"action": action, "result": result})
