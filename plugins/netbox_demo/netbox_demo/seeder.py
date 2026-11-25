@@ -1,7 +1,7 @@
 """NetBox writes: seed the demo fabric, and clean it up again (INIT-001/SPEC-005).
 
 Two rules govern everything here, both because this runs against a real NetBox
-Cloud instance that holds other people's data:
+instance that may hold other people's data:
 
 1. Every write is scoped to the `netbox-demo` site or to an object already
    tagged `netbox-demo`. No unfiltered `delete()`.
@@ -9,12 +9,11 @@ Cloud instance that holds other people's data:
    reference each other. A partial delete leaves objects that make the next
    seed fail with a confusing uniqueness error.
 
-`seed` is idempotent: it may be run any number of times and converges.
-
-The interface-type constants are looked up by name with a fallback, because
-NetBox renamed them between 4.5 and 4.6 (`TYPE_1000BASE_T` became `TYPE_1GE_SFP`,
-and so on). A missing constant would otherwise break seeding on one version and
-not the other, which is exactly the kind of failure that shows up mid-demo.
+`seed` is idempotent and Discovery-aligned (INIT-035/SPEC-002): it reuses
+`Site("NetBox Demo")`, `Manufacturer("Arista")`, `DeviceType(model="cEOSLab")`,
+`Platform(name="Arista")`, and `DeviceRole("Spine"/"Leaf")` whether Discovery
+ran first or Seed ran first, avoiding duplicate objects and perpetual
+Assurance attribute drift.
 """
 
 from __future__ import annotations
@@ -41,6 +40,12 @@ from . import design
 #: Tag applied to everything this plugin creates, so cleanup can find it.
 TAG_SLUG = "netbox-demo"
 TAG_NAME = "netbox-demo"
+
+#: Model and platform strings reported by Arista cEOS via Orb NAPALM discovery.
+CEOS_DEVICE_TYPE_MODEL = "cEOSLab"
+CEOS_DEVICE_TYPE_SLUG = "arista-ceoslab"
+ARISTA_PLATFORM_NAME = "Arista"
+ARISTA_PLATFORM_SLUG = "arista"
 
 
 def document_management_interface() -> bool:
@@ -80,10 +85,15 @@ def _tag():
 
 
 def get_site() -> Site | None:
-    return Site.objects.filter(slug=design.SITE_SLUG).first()
+    return Site.objects.filter(slug=design.SITE_SLUG).first() or Site.objects.filter(
+        name=design.SITE_NAME
+    ).first()
 
 
 def ensure_site() -> Site:
+    existing = get_site()
+    if existing is not None:
+        return existing
     site, _ = Site.objects.get_or_create(
         slug=design.SITE_SLUG,
         defaults={"name": design.SITE_NAME, "status": "active", "description": "netbox-demo fabric"},
@@ -91,38 +101,83 @@ def ensure_site() -> Site:
     return site
 
 
-def ensure_prerequisites() -> dict[str, Any]:
-    """Create the manufacturer, platform, device type and roles the fabric needs."""
-    created: dict[str, Any] = {}
-
-    manufacturer, _ = Manufacturer.objects.get_or_create(
-        slug="arista", defaults={"name": "Arista"}
+def _ensure_manufacturer() -> Manufacturer:
+    existing = (
+        Manufacturer.objects.filter(slug="arista").first()
+        or Manufacturer.objects.filter(name__iexact="Arista").first()
     )
-    created["manufacturer"] = manufacturer.slug
+    if existing is not None:
+        return existing
+    manufacturer, _ = Manufacturer.objects.get_or_create(slug="arista", defaults={"name": "Arista"})
+    return manufacturer
 
+
+def _ensure_platform(manufacturer: Manufacturer) -> Platform:
+    existing = (
+        Platform.objects.filter(name__iexact=ARISTA_PLATFORM_NAME).first()
+        or Platform.objects.filter(slug=ARISTA_PLATFORM_SLUG).first()
+    )
+    if existing is not None:
+        return existing
     platform, _ = Platform.objects.get_or_create(
-        slug="arista-eos",
-        defaults={"name": "Arista EOS", "manufacturer": manufacturer},
+        slug=ARISTA_PLATFORM_SLUG,
+        defaults={"name": ARISTA_PLATFORM_NAME, "manufacturer": manufacturer},
     )
-    created["platform"] = platform.slug
+    return platform
 
+
+def _ensure_device_type(manufacturer: Manufacturer) -> DeviceType:
+    existing = (
+        DeviceType.objects.filter(manufacturer=manufacturer, model=CEOS_DEVICE_TYPE_MODEL).first()
+        or DeviceType.objects.filter(slug=CEOS_DEVICE_TYPE_SLUG).first()
+    )
+    if existing is not None:
+        return existing
     device_type, _ = DeviceType.objects.get_or_create(
-        slug="arista-ceos-lab",
+        slug=CEOS_DEVICE_TYPE_SLUG,
         defaults={
-            "model": "cEOS-lab",
+            "model": CEOS_DEVICE_TYPE_MODEL,
             "manufacturer": manufacturer,
             "u_height": 1,
             "is_full_depth": False,
         },
     )
+    return device_type
+
+
+def _ensure_role(role_name: str) -> DeviceRole:
+    role_slug = design.ROLE_SLUGS[role_name]
+    display_name = role_name.capitalize()
+    existing = (
+        DeviceRole.objects.filter(name__iexact=display_name).first()
+        or DeviceRole.objects.filter(slug=role_slug).first()
+    )
+    if existing is not None:
+        return existing
+    role, _ = DeviceRole.objects.get_or_create(
+        slug=role_slug,
+        defaults={"name": display_name, "color": "9e9e9e"},
+    )
+    return role
+
+
+def ensure_prerequisites() -> dict[str, Any]:
+    """Create or reuse the manufacturer, platform, device type and roles."""
+    created: dict[str, Any] = {}
+
+    manufacturer = _ensure_manufacturer()
+    created["manufacturer"] = manufacturer.slug
+
+    platform = _ensure_platform(manufacturer)
+    created["platform"] = platform.slug
+
+    device_type = _ensure_device_type(manufacturer)
     created["device_type"] = device_type.slug
 
-    for role_name, role_slug in design.ROLE_SLUGS.items():
-        DeviceRole.objects.get_or_create(
-            slug=role_slug,
-            defaults={"name": role_name.capitalize(), "color": "9e9e9e"},
-        )
-    created["roles"] = list(design.ROLE_SLUGS.values())
+    roles = []
+    for role_name in design.ROLE_SLUGS:
+        roles.append(_ensure_role(role_name).slug)
+    created["roles"] = roles
 
     for tenant_name in ("CORE", "TENANT-A"):
         Tenant.objects.get_or_create(slug=tenant_name.lower(), defaults={"name": tenant_name})
@@ -132,16 +187,16 @@ def ensure_prerequisites() -> dict[str, Any]:
 
 
 def ensure_devices() -> list[str]:
-    """Create or update the six demo devices, with management addresses."""
+    """Create or update the six demo devices, with optional management addresses."""
     site = ensure_site()
-    manufacturer = Manufacturer.objects.get(slug="arista")
-    platform = Platform.objects.get(slug="arista-eos")
-    device_type = DeviceType.objects.get(slug="arista-ceos-lab")
+    manufacturer = _ensure_manufacturer()
+    platform = _ensure_platform(manufacturer)
+    device_type = _ensure_device_type(manufacturer)
     tag = _tag()
 
     touched: list[str] = []
     for name in design.ALL_DEVICES:
-        role = DeviceRole.objects.get(slug=design.ROLE_SLUGS[design.role_for(name)])
+        role = _ensure_role(design.role_for(name))
         device, _ = Device.objects.update_or_create(
             name=name,
             defaults={
@@ -156,15 +211,8 @@ def ensure_devices() -> list[str]:
         device.tags.add(tag)
         touched.append(device.name)
 
-        # The management interface and address, so discovery has something to
-        # reconcile — but only where EOS actually owns the interface.
-        #
-        # On c9s, cEOS binds eth0 (MGMT_INTF=eth0) and never adopts Management0,
-        # so documenting a Management0 with 172.31.30.x creates drift that can
-        # never clear: the switch will never report that interface or address, so
-        # Assurance keeps flagging it and the "zero drift" claim becomes false for
-        # a reason that looks like a fabric fault. The address still exists; it is
-        # just supplied by the platform, so it is not NetBox's to document here.
+        # Management0 is only documented where EOS actually owns it (local Docker
+        # ContainerLab). On c9s, cEOS binds eth0 and never adopts Management0.
         if not document_management_interface():
             continue
 
@@ -354,9 +402,7 @@ def clean_demo_data() -> dict[str, int]:
         devices = Device.objects.filter(site=site) | devices
     devices = devices.distinct()
 
-    # 1. Cables first, or interface deletion is refused. NetBox 4.6 replaced the
-    #    a_terminations/b_terminations fields with a single `terminations` relation,
-    #    so match on the termination's interface rather than on a side.
+    # 1. Cables first, or interface deletion is refused.
     from dcim.models import CableTermination
 
     cable_ids = CableTermination.objects.filter(

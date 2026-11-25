@@ -21,7 +21,7 @@
             </div>
           </div>
         {% else %}
-          <div class="d-flex align-items-center gap-3">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
             {% if assurance.open %}
               <span class="badge bg-yellow fs-5">{{ assurance.open }} open</span>
             {% else %}
@@ -32,11 +32,24 @@
                 {% if status != 'total' %}{{ status }}: {{ count }}{% if not forloop.last %} &middot; {% endif %}{% endif %}
               {% endfor %}
             </div>
-            <a href="{{ assurance.url }}" class="btn btn-sm btn-primary ms-auto">Review in Assurance</a>
+            <div class="ms-auto d-flex gap-2 flex-wrap">
+              {% if assurance.open %}
+                <form method="post" action="{% url 'plugins:netbox_demo:assurance_rediff' %}" class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-secondary">Re-diff Demo Deviations</button>
+                </form>
+                <form method="post" action="{% url 'plugins:netbox_demo:assurance_apply' %}" class="d-inline"
+                      onsubmit="return confirm('Apply all open demo-scoped deviations into NetBox?');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-success">Apply Demo Deviations</button>
+                </form>
+              {% endif %}
+              <a href="{{ assurance.url }}" class="btn btn-sm btn-primary">Review in Assurance</a>
+            </div>
           </div>
           <div class="mt-3 small text-muted">
-            Assurance compares what discovery observed against what NetBox documents. Approving a
-            change there is what updates NetBox — this plugin only reads it.
+            Assurance compares what Orb Discovery observed against what NetBox documents (via Diode gRPC).
+            Demo actions above are strictly scoped to <code>netbox-demo</code> entities.
           </div>
         {% endif %}
       </div>

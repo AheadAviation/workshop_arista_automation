@@ -2,8 +2,8 @@
 # Runs in-cluster alongside the c9s cEOS fabric and persistent Orb Agent.
 FROM python:3.12-alpine
 
-ARG KUBECTL_VERSION=v1.31.4
-ARG CLAB_VERSION=0.68.0
+ARG KUBECTL_VERSION=v1.34.1
+ARG CLAB_VERSION=0.83.0
 ARG TARGETARCH=amd64
 
 RUN apk add --no-cache ca-certificates curl bash \

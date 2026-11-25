@@ -14,6 +14,8 @@ urlpatterns = [
     path("health/", views.HealthView.as_view(), name="health"),
     path("intent/", views.FabricIntentView.as_view(), name="intent"),
     path("drift/", views.DriftView.as_view(), name="drift"),
+    path("assurance/", views.AssuranceSummaryView.as_view(), name="assurance"),
+    path("assurance/<str:action>/", views.AssuranceActionView.as_view(), name="assurance_action"),
     path("actions/<str:action>/", views.LabActionView.as_view(), name="action"),
     *router.urls,
 ]

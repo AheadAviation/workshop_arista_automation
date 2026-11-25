@@ -190,6 +190,9 @@ def run_step(request: HttpRequest, key: str) -> HttpResponse:
         )
         return redirect("plugins:netbox_demo:runbook")
 
+    if key == "push":
+        return push_configs(request)
+
     if key == "assurance":
         # Nothing to run: Assurance does its own analysis. Send the operator to it.
         return redirect(conf.assurance_deviations_url())
@@ -310,6 +313,36 @@ def remediate_drift(request: HttpRequest) -> HttpResponse:
     else:
         messages.success(request, "Drift removed. Run discovery again to see it clear.")
     return redirect(f"/plugins/demo/jobs/{job.pk}/")
+
+
+@require_POST
+def assurance_apply(request: HttpRequest) -> HttpResponse:
+    """Apply all open demo-scoped deviations in NetBox Assurance."""
+    result = assurance.apply_deviations(None, demo_only=True)
+    if not result.get("ok"):
+        messages.error(request, result.get("error", "Applying deviations failed."))
+    else:
+        count = result.get("count", 0)
+        _save_step("assurance", ok=True, detail=f"Applied {count} demo deviation(s)")
+        messages.success(
+            request,
+            f"Submitted {count} demo deviation(s) to NetBox Assurance for apply.",
+        )
+    return redirect("plugins:netbox_demo:drift")
+
+
+@require_POST
+def assurance_rediff(request: HttpRequest) -> HttpResponse:
+    """Re-diff all open demo-scoped deviations in NetBox Assurance."""
+    result = assurance.rediff_deviations(None, demo_only=True)
+    if not result.get("ok"):
+        messages.error(request, result.get("error", "Re-diffing deviations failed."))
+    else:
+        messages.success(
+            request,
+            f"Queued {result.get('count', 0)} demo deviation(s) for re-diff in NetBox Assurance.",
+        )
+    return redirect("plugins:netbox_demo:drift")
 
 
 # --------------------------------------------------------------------------- #

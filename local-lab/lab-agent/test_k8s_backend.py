@@ -95,6 +95,7 @@ def test_k8s_destroy_and_deploy_custom_commands(monkeypatch: pytest.MonkeyPatch)
         return {"ok": True, "action": kwargs.get("action", ""), "returncode": 0, "output": "done"}
 
     monkeypatch.setattr(agent, "_run", fake_run)
+    monkeypatch.setattr(agent, "_wait_fabric_eapi_ready", lambda: (True, [], 1.2))
 
     destroy_res = agent.action_destroy_lab()
     deploy_res = agent.action_deploy_bare_lab()
@@ -103,10 +104,36 @@ def test_k8s_destroy_and_deploy_custom_commands(monkeypatch: pytest.MonkeyPatch)
     assert destroy_res["backend"] == "k8s"
     assert deploy_res["ok"] is True
     assert deploy_res["backend"] == "k8s"
+    assert deploy_res["eapi_ready"] is True
     assert seen == [
         ["sh", "-lc", "/scripts/destroy.sh"],
         ["sh", "-lc", "/scripts/deploy.sh"],
     ]
+
+
+def test_wait_fabric_eapi_ready_succeeds_after_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict[str, int] = {d: 0 for d in FABRIC_DEVICES}
+
+    def fake_eapi(device: str, cmds: list[str], **kwargs):
+        calls[device] += 1
+        # Simulate switches coming online on the second poll
+        return {"ok": calls[device] >= 2, "device": device}
+
+    monkeypatch.setattr(agent, "call_eapi", fake_eapi)
+    ready, not_ready, _ = agent._wait_fabric_eapi_ready(timeout=5, poll_interval=0.01)
+    assert ready is True
+    assert not_ready == []
+    assert all(c >= 2 for c in calls.values())
+
+
+def test_wait_fabric_eapi_ready_reports_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_eapi(device: str, cmds: list[str], **kwargs):
+        return {"ok": device != "demo-leaf-04", "device": device}
+
+    monkeypatch.setattr(agent, "call_eapi", fake_eapi)
+    ready, not_ready, _ = agent._wait_fabric_eapi_ready(timeout=0.05, poll_interval=0.01)
+    assert ready is False
+    assert not_ready == ["demo-leaf-04"]
 
 
 def test_k8s_run_discovery_restarts_persistent_orb(monkeypatch: pytest.MonkeyPatch) -> None:

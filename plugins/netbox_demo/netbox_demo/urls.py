@@ -18,6 +18,8 @@ urlpatterns = [
     path("drift/", views.drift, name="drift"),
     path("drift/inject/", views.inject_drift, name="inject_drift"),
     path("drift/remediate/", views.remediate_drift, name="remediate_drift"),
+    path("assurance/apply/", views.assurance_apply, name="assurance_apply"),
+    path("assurance/rediff/", views.assurance_rediff, name="assurance_rediff"),
     # Day 2
     path("day2/", views.day2_view, name="day2"),
     path("day2/preview/", views.day2_preview, name="day2_preview"),

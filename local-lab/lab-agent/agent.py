@@ -26,6 +26,7 @@ import os
 import shutil
 import socket
 import subprocess
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -58,14 +59,16 @@ BIND_PORT = int(os.environ.get("LAB_AGENT_PORT", "8085"))
 AGENT_TOKEN = os.environ.get("LAB_AGENT_TOKEN", "")
 REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "900"))
 
-#: Repo folder mounted at /local-lab inside this container.
+LAB_BACKEND = os.environ.get("LAB_BACKEND", "docker").strip().lower()
+#: Repo folder mounted at /local-lab inside this container (Docker mode).
 LAB_DIR = Path(os.environ.get("LAB_COMPOSE_DIR", "/local-lab"))
 CLAB_DIR = LAB_DIR / "clab"
 BARE_CONFIGS_DIR = CLAB_DIR / "bare-configs"
-GENERATED_CONFIGS_DIR = CLAB_DIR / "generated-configs"
+_DEFAULT_GEN_DIR = (
+    "/tmp/generated-configs" if LAB_BACKEND == "k8s" else str(CLAB_DIR / "generated-configs")
+)
+GENERATED_CONFIGS_DIR = Path(os.environ.get("GENERATED_CONFIGS_DIR", _DEFAULT_GEN_DIR))
 TOPOLOGY_FILE = CLAB_DIR / "topology-generated.clab.yml"
-
-LAB_BACKEND = os.environ.get("LAB_BACKEND", "docker").strip().lower()
 K8S_NAMESPACE = os.environ.get("K8S_NAMESPACE", TOPOLOGY_NAME).strip()
 K8S_ORB_NAMESPACE = os.environ.get("K8S_ORB_NAMESPACE", K8S_NAMESPACE).strip()
 K8S_ORB_DEPLOYMENT = os.environ.get("K8S_ORB_DEPLOYMENT", "orb-agent").strip()
@@ -76,6 +79,8 @@ K8S_TOPO_FILE = os.environ.get("K8S_TOPO_FILE", "/lab/topology.clab.yml").strip(
 K8S_DEPLOY_CMD = os.environ.get("K8S_DEPLOY_CMD", "").strip()
 K8S_DESTROY_CMD = os.environ.get("K8S_DESTROY_CMD", "").strip()
 K8S_DISCOVERY_CMD = os.environ.get("K8S_DISCOVERY_CMD", "").strip()
+K8S_READY_TIMEOUT = int(os.environ.get("K8S_READY_TIMEOUT", "240"))
+K8S_READY_POLL_INTERVAL = float(os.environ.get("K8S_READY_POLL_INTERVAL", "5"))
 DEVICE_EAPI_HOSTS_RAW = os.environ.get("DEVICE_EAPI_HOSTS", "").strip()
 
 CONTAINER_PREFIX = f"clab-{TOPOLOGY_NAME}-"
@@ -667,22 +672,78 @@ def _restart_nodes(devices: list[str]) -> None:
         pass
 
 
+def _wait_fabric_eapi_ready(
+    timeout: int | None = None, *, poll_interval: float | None = None
+) -> tuple[bool, list[str], float]:
+    """Poll eAPI `show hostname` in parallel until all 6 switches answer or timeout expires."""
+    limit = K8S_READY_TIMEOUT if timeout is None else timeout
+    interval = K8S_READY_POLL_INTERVAL if poll_interval is None else poll_interval
+    started = time.monotonic()
+    if limit <= 0:
+        return True, [], 0.0
+
+    pending = set(FABRIC_DEVICES)
+    while pending:
+        with ThreadPoolExecutor(max_workers=len(pending)) as pool:
+            futures = {
+                pool.submit(call_eapi, dev, ["enable", "show hostname"], fmt="json", timeout=10): dev
+                for dev in sorted(pending)
+            }
+            for fut in as_completed(futures):
+                dev = futures[fut]
+                try:
+                    res = fut.result()
+                except Exception:  # noqa: BLE001
+                    res = {"ok": False}
+                if res.get("ok"):
+                    pending.discard(dev)
+
+        elapsed = time.monotonic() - started
+        if not pending:
+            return True, [], round(elapsed, 1)
+        if elapsed >= limit:
+            return False, sorted(pending), round(elapsed, 1)
+        time.sleep(min(interval, max(0.1, limit - elapsed)))
+
+    return True, [], round(time.monotonic() - started, 1)
+
+
 def _action_deploy_bare_lab_k8s() -> dict[str, Any]:
-    """Deploy the bare c9s fabric in Kubernetes."""
+    """Deploy the bare c9s fabric in Kubernetes and wait until all 6 cEOS eAPI endpoints answer."""
     cmd = (
         ["sh", "-lc", K8S_DEPLOY_CMD]
         if K8S_DEPLOY_CMD
         else ["containerlab", "--runtime", "c9s", "deploy", "--topo", K8S_TOPO_FILE]
     )
     res = _run(cmd, action="deploy-bare-lab", timeout=REQUEST_TIMEOUT)
+    if not res["ok"]:
+        return {
+            "ok": False,
+            "action": "deploy-bare-lab",
+            "backend": "k8s",
+            "devices": list(FABRIC_DEVICES),
+            "configs_written": [],
+            "output": res.get("output", ""),
+            "error": res.get("error", ""),
+        }
+
+    ready, not_ready, waited = _wait_fabric_eapi_ready()
+    note = (
+        f"All {len(FABRIC_DEVICES)} switches answered eAPI in {waited}s."
+        if ready
+        else f"Timed out after {waited}s waiting for eAPI on: {', '.join(not_ready)}"
+    )
     return {
-        "ok": res["ok"],
+        "ok": ready,
         "action": "deploy-bare-lab",
         "backend": "k8s",
         "devices": list(FABRIC_DEVICES),
         "configs_written": [],
-        "output": res.get("output", ""),
-        "error": res.get("error", ""),
+        "eapi_ready": ready,
+        "eapi_wait_seconds": waited,
+        "not_ready": not_ready,
+        "output": "\n".join(filter(None, [res.get("output", ""), note])),
+        "error": "" if ready else note,
     }
 
 

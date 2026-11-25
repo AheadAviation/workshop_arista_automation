@@ -31,9 +31,9 @@ def lab_agent_token() -> str:
 
 def lab_agent_timeout() -> int:
     try:
-        return int(_get("lab_agent_timeout", 120))
+        return int(_get("lab_agent_timeout", 300))
     except (TypeError, ValueError):
-        return 120
+        return 300
 
 
 def site_slug() -> str:
