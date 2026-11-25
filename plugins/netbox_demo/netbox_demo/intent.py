@@ -163,6 +163,15 @@ def _peers(device_name: str) -> list[Peer]:
                         peer_group="LEAF_IPV4",
                     )
                 )
+        for leaf in design.LEAVES:
+            peers.append(
+                Peer(
+                    address=design.ROUTER_IDS[leaf],
+                    remote_as=design.asn_for(leaf),
+                    description=f"EVPN to {leaf}",
+                    peer_group="LEAF_EVPN",
+                )
+            )
     elif device_name in design.LEAVES:
         for link in design.FABRIC_LINKS:
             if link.right == device_name:
@@ -289,15 +298,20 @@ def render_kwargs() -> dict[str, Any]:
 
 def tenant_summary() -> list[dict[str, Any]]:
     """Small table for the UI: tenant VLANs currently in NetBox."""
+    by_vid: dict[int, Any] = {}
+    for vlan in VLAN.objects.filter(
+        vid__in=[seed.vlan_id for seed in design.SEED_VLANS]
+    ).order_by("vid", "pk"):
+        existing = by_vid.get(vlan.vid)
+        if existing is None or getattr(getattr(vlan, "group", None), "slug", None) == design.SITE_SLUG:
+            by_vid[vlan.vid] = vlan
     return [
         {
             "vid": vlan.vid,
             "name": vlan.name,
             "tenant": getattr(vlan.tenant, "name", "") if vlan.tenant else "",
         }
-        for vlan in VLAN.objects.filter(
-            vid__in=[seed.vlan_id for seed in design.SEED_VLANS]
-        ).order_by("vid")
+        for _, vlan in sorted(by_vid.items())
     ]
 
 

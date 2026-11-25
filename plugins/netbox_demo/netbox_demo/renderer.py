@@ -37,7 +37,7 @@ def _services(i: DeviceIntent) -> str:
     lines += [f"ip name-server vrf MGMT {server}" for server in s.dns_servers]
     lines += [
         "!",
-        f"ip domain-name {s.domain_name}",
+        f"dns domain {s.domain_name}",
         "!",
         f"logging host {s.syslog_host} {s.syslog_port}",
         f"logging vrf MGMT host {s.syslog_host}",
@@ -58,7 +58,7 @@ def _services(i: DeviceIntent) -> str:
         "!",
         "management ssh",
         f"   idle-timeout {s.ssh_idle_timeout}",
-        "   connection-limit 10",
+        "   connection limit 10",
         "   vrf MGMT",
         "      no shutdown",
         "!",
@@ -171,10 +171,9 @@ def _vlans(i: DeviceIntent) -> str:
             f"interface Vlan{vlan.vlan_id}",
             f"   description {vlan.name} anycast gateway",
             f"   mtu {vlan.mtu}",
-            f"   ip address {vlan.svi_address}",
             "   no autostate",
             *[f"   ip helper-address {helper}" for helper in vlan.ip_helpers],
-            "   ip virtual-router address " + vlan.svi_address.split("/")[0],
+            f"   ip address virtual {vlan.svi_address}",
             "!",
         ]
     return "\n".join(lines)
@@ -306,19 +305,26 @@ def _bgp(i: DeviceIntent) -> str:
         groups.setdefault(peer.peer_group, []).append(peer)
 
     for group, peers in groups.items():
-        lines.append(f"   peer group {group}")
-        lines.append(f"      remote-as {peers[0].remote_as}")
-        lines.append("      send-community extended")
+        lines.append(f"   neighbor {group} peer group")
+        distinct_asns = {p.remote_as for p in peers}
+        if len(distinct_asns) == 1:
+            lines.append(f"   neighbor {group} remote-as {peers[0].remote_as}")
+        lines.append(f"   neighbor {group} send-community extended")
         if "EVPN" in group:
-            lines += ["      multihop 3", "      update-source Loopback0"]
+            lines += [
+                f"   neighbor {group} ebgp-multihop 3",
+                f"   neighbor {group} update-source Loopback0",
+            ]
+            if i.role == "spine":
+                lines.append(f"   neighbor {group} next-hop-unchanged")
         lines.append("!")
 
     for peer in i.peers:
-        lines += [
-            f"   neighbor {peer.address} peer group {peer.peer_group}",
-            f"   neighbor {peer.address} description {peer.description}",
-            "!",
-        ]
+        lines.append(f"   neighbor {peer.address} peer group {peer.peer_group}")
+        if len({p.remote_as for p in groups[peer.peer_group]}) > 1:
+            lines.append(f"   neighbor {peer.address} remote-as {peer.remote_as}")
+        lines.append(f"   neighbor {peer.address} description {peer.description}")
+        lines.append("!")
 
     lines += ["   address-family ipv4", "      redistribute connected"]
     for group in groups:
@@ -326,12 +332,14 @@ def _bgp(i: DeviceIntent) -> str:
             lines.append(f"      neighbor {group} activate")
     lines.append("!")
 
-    if i.is_leaf:
+    evpn_groups = [group for group in groups if "EVPN" in group]
+    if i.is_leaf or evpn_groups:
         lines.append("   address-family evpn")
-        for group in groups:
-            if "EVPN" in group:
-                lines.append(f"      neighbor {group} activate")
+        for group in evpn_groups:
+            lines.append(f"      neighbor {group} activate")
         lines.append("!")
+
+    if i.is_leaf:
         for vlan in i.vlans:
             lines += [
                 f"   vlan {vlan.vlan_id}",

@@ -251,7 +251,7 @@ def test_leaf_has_vxlan_with_every_vlan(leaf_config):
 def test_leaf_has_anycast_gateway_on_each_svi(leaf_config):
     for seed in design.SEED_VLANS:
         assert f"interface Vlan{seed.vlan_id}" in leaf_config
-        assert f"ip virtual-router address {seed.svi.split('/')[0]}" in leaf_config
+        assert f"ip address virtual {seed.svi}" in leaf_config
     assert f"ip virtual-router mac-address {design.ANYCAST_GATEWAY_MAC}" in leaf_config
 
 

@@ -476,17 +476,43 @@ def call_eapi(device: str, commands: list[str], *, fmt: str = "json", timeout: i
     return {"ok": True, "device": dev, "state": "online", "result": body.get("result", [])}
 
 
+def _parse_config_commands(config_text: str) -> list[Any]:
+    """Convert an EOS config block into eAPI JSON-RPC commands.
+
+    Multi-line ``banner <type> ... EOF`` blocks must be sent as eAPI
+    ``{"cmd": "banner ...", "input": "...\\nEOF\\n"}`` objects; flat strings
+    cause EOS eAPI to reject the banner body line as an invalid CLI command.
+    """
+    cmds: list[Any] = []
+    raw_lines = config_text.splitlines()
+    idx = 0
+    while idx < len(raw_lines):
+        line = raw_lines[idx].rstrip()
+        stripped = line.strip()
+        idx += 1
+        if not stripped or stripped.startswith("!") or stripped == "end":
+            continue
+        if stripped.startswith("banner ") and len(stripped.split()) == 2:
+            body: list[str] = []
+            while idx < len(raw_lines):
+                bline = raw_lines[idx].rstrip()
+                idx += 1
+                if bline.strip() == "EOF":
+                    break
+                body.append(bline)
+            cmds.append({"cmd": stripped, "input": "\n".join(body) + "\nEOF\n"})
+            continue
+        cmds.append(line)
+    return cmds
+
+
 def _push_one(device: str, config_text: str) -> dict[str, Any]:
     """Write the rendered config locally and apply it to one switch."""
     dev = validate_device(device)
     GENERATED_CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
     (GENERATED_CONFIGS_DIR / f"{dev}.cfg").write_text(config_text, encoding="utf-8")
 
-    lines = [
-        line.rstrip()
-        for line in config_text.splitlines()
-        if line.strip() and not line.strip().startswith("!") and line.strip() != "end"
-    ]
+    lines = _parse_config_commands(config_text)
     cmds = ["enable", "configure terminal", *lines, "end", "write memory"]
     res = call_eapi(dev, cmds, fmt="text", timeout=60)
     if res["ok"]:
