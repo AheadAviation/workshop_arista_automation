@@ -126,10 +126,7 @@ class DriftView(APIView):
         except lab.LabAgentError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-        rows = live.get("result") or []
-        running = ""
-        if rows and isinstance(rows, list) and isinstance(rows[0], dict):
-            running = rows[0].get("output", "")
+        running = lab.extract_eapi_text(live)
 
         rendered = renderer.render_device(intent.intent_for(device), **intent.render_kwargs())
         items = day2.detect_drift(device, rendered, running or "")

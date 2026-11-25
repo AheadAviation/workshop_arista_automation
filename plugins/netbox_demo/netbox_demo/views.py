@@ -312,11 +312,7 @@ def drift(request: HttpRequest) -> HttpResponse:
         else:
             try:
                 live = lab.eapi_show(device, list(day2.DRIFT_READ_COMMANDS))
-                results = live.get("result") or []
-                running = ""
-                if results and isinstance(results, list):
-                    first = results[0]
-                    running = first.get("output", "") if isinstance(first, dict) else str(first)
+                running = lab.extract_eapi_text(live)
                 running_excerpt = running
                 rendered = renderer.render_device(intent.intent_for(device), **intent.render_kwargs())
                 items = day2.detect_drift(device, rendered, running or "")
@@ -591,10 +587,7 @@ def live_config(request: HttpRequest) -> HttpResponse:
     else:
         try:
             result = lab.eapi_show(device, ["show running-config"])
-            rows = result.get("result") or []
-            if rows and isinstance(rows, list):
-                first = rows[0]
-                config_text = first.get("output", "") if isinstance(first, dict) else str(first)
+            config_text = lab.extract_eapi_text(result)
         except lab.LabAgentError as exc:
             error = str(exc)
 

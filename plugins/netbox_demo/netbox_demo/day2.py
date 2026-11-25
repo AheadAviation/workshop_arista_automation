@@ -345,7 +345,11 @@ def _parse_running_config(text: str) -> dict[str, Any]:
     interfaces: dict[str, dict[str, Any]] = {}
     vxlan_vnis: dict[int, int] = {}
     mlag: dict[str, Any] = {"enabled": False}
-    services: dict[str, Any] = {"syslog_hosts": [], "ntp_servers": [], "lldp": False}
+    # EOS omits default-enabled `lldp run` from `show running-config` and only
+    # emits `no lldp run` when disabled. Detect real EOS running-config output
+    # by its standard header so clean switches don't report phantom LLDP drift.
+    is_eos_running = "! Command: show running-config" in text
+    services: dict[str, Any] = {"syslog_hosts": [], "ntp_servers": [], "lldp": is_eos_running}
 
     kind: str | None = None
     current: str | None = None
@@ -429,6 +433,8 @@ def _parse_running_config(text: str) -> dict[str, Any]:
             services["ntp_servers"].append(line.split()[-1])
         elif line == "lldp run":
             services["lldp"] = True
+        elif line == "no lldp run":
+            services["lldp"] = False
 
     return {
         "vlans": vlans,

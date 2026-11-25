@@ -120,6 +120,26 @@ def eapi_show(device: str, commands: list[str]) -> dict[str, Any]:
     return run_action("eapi", {"device": device, "mode": "show", "commands": commands, "format": "text"})
 
 
+def extract_eapi_text(response: dict[str, Any]) -> str:
+    """Return the text output from an `eapi_show` response.
+
+    The lab agent prepends ``enable`` before the requested show command(s), so
+    ``result[0]`` is ``{"output": ""}`` and the actual command output is in the
+    subsequent entry (usually ``result[-1]``).
+    """
+    rows = response.get("result") or []
+    if not isinstance(rows, list):
+        return ""
+    for row in reversed(rows):
+        if isinstance(row, dict):
+            text = row.get("output", "")
+            if text:
+                return str(text)
+        elif row:
+            return str(row)
+    return ""
+
+
 def eapi_config(device: str, commands: list[str]) -> dict[str, Any]:
     """Change a device, used only by an approved Day 2 apply."""
     return run_action("eapi", {"device": device, "mode": "config", "commands": commands})
